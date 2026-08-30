@@ -1,8 +1,7 @@
-pkg599 - Invoice Finance: rebuilt on Bibby's actual Disapproved Breakdown
-==========================================================================
+pkg600 - Invoice Finance: High Involvement calculated at 35%
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg598. Deploy BOTH files. ***
-pkg596 is already live (the saves work). This replaces the model on top of it.
+*** SUPERSEDES pkg591 - pkg599. Deploy BOTH files. ***
 
 
 CHANGED FILES (replace)
@@ -11,77 +10,67 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-THEIR THREE CATEGORIES, ALL NOW MODELLED
-----------------------------------------
-  Contract Funding Disapproval   39,264.32
-  Credit Limit exceeded          88,583.46
-  Age disapproval                17,449.62
-                                ----------
-                                145,297.40   = their Non-Funded Debt, exactly
+HIGH INVOLVEMENT - SOLVED FROM THEIR OWN FIGURES
+------------------------------------------------
+Their guide, page 12: "your debtors will be funded up to a high involvement
+percentage of the approved sales ledger" - each debtor capped at a share of the
+APPROVED ledger, the excess deducted before the advance rate. Their illustration
+uses 50%. Yours is 35%:
+
+    approved debt      323,029.46
+    x 35%              113,060.31   cap per debtor
+    Wates              148,129.62
+    over by             35,069.31   = their High Involvement, to the penny
+
+At 50% it would be zero, at 25% it would be 67,372. Only 35% reproduces their
+figure, and Wates is the debtor - 26.7% of your ledger on its own.
+
+NOW CALCULATED, NOT TYPED. Everything it needs is already on the page, so it
+recalculates itself and cannot go stale between statements.
+
+The percentage is editable next to it, as you asked, with the resulting money
+beside it. Underneath: "GBP 35,069.31 - Wates over by GBP 35,069.31. Cap
+GBP 113,060.31 per debtor." So the figure is traceable to a name rather than
+being a number with nowhere to go.
+
+OVERRIDE. Leave the value box BLANK to use the calculation. Type a figure only
+when Bibby's view differs - the box goes amber and says what the calculation
+would have been, so an override never looks like the normal state.
+
+'' is preserved as '' through the save. Number('') || 0 would have turned "use
+the calculation" into a deliberate zero and silently killed the figure.
+
+0% disables the deduction entirely rather than capping every debtor at nil.
 
 
-1. AGE DISAPPROVAL - 90 DAYS, CONFIRMED BY THEIR OWN FIGURES
-------------------------------------------------------------
-Not modelled at all before. Applying a 90-day-past-due rule to their three items
-reproduces 17,449.62 TO THE PENNY:
+VARIATIONS LEFT AT 25%, AS YOU SAID
+-----------------------------------
+Their guide says 10%; Holly said 25% about YOUR facility, and page 6 of the same
+guide says "Refer to your agreement for specific details". Left at 25%.
 
-  Hollis Croft-06   118d past due   13,172.71
-  J229-05           153d past due    1,881.46
-  BCS/1130/LN/-07    99d past due    2,395.45
-                                    17,449.62
-
-120 days would give 1,881.46, so it is 90 rather than a longer term. Still worth
-confirming against the agreement - it is an editable setting.
+Worth one line back to her, since it is worth real money:
+  "Your guide says variations are automatically funded to 10% of contract value;
+   you told us 25%. Which applies to our agreement?"
 
 
-2. CREDIT LIMIT APPLIES TO THE DEBT, NOT THE ADVANCE
-----------------------------------------------------
-Was:  advance = hasLimit ? min(debt x 60%, limit) : 0
-Now:  overLimitDebt = max(0, debt - limit); advance = (debt - over) x 60%
-
-Bibby fund UP TO the limit and disapprove only the excess. The old rule capped
-the ADVANCE at the limit and ZEROED a customer entirely when no limit was
-recorded - which is why the app disapproved 160,832 where Bibby disapproved
-88,583.
-
-  Torsion Projects   debt 71,838  limit fully used  -> 0, matches their 71,871
-  Selsdon            debt 32,626  limit 25,000      -> was 0, now funds 15,000
-  Wates              debt 148,130 limit 300,000     -> unchanged at 88,878
-
-Selsdon is the case that proves it: Bibby disapprove 30,569 of theirs and fund
-the rest. The app funded none of it.
-
-
-3. THE DEBT IS THE APPLICATION AGAIN
-------------------------------------
-Every row of their export reads Document Type: Application, with application
-references - "Russell Hill-12", "J229-10", "P27 - 300045-04". Bibby assign
-applications. pkg592 switched this to invoices on my reading of "they fund either
-apps or invoices"; their own data says otherwise, so it is switched back.
-
-Invoices are still read - to decide what has been PAID, and to show retention
-separately.
-
-
-4. A DATA FAULT THAT WAS INFLATING THE DEBT
+TWO OTHER THINGS THE GUIDE CONFIRMS OR ADDS
 -------------------------------------------
-An application entered GROSS with "Previously certified" BLANK computes its
-this-cert as the FULL cumulative value. On this page that presents a whole account
-as one period's debt.
+90 DAYS IS CONFIRMED. Page 6 defines the "agreed approval period (90 days)",
+which independently confirms the age threshold I derived from their three age
+disapprovals.
 
-Any such application is now flagged red on the row - "N app(s) missing prev cert"
-- so it reads as the data fault it is rather than a large application. J240
-Application 4 is in exactly this state.
+CASH CONVERSION RATE - NOT BUILT. Page 12: the CCR on every contract is 90%,
+measured on whether the customer actually PAYS at least 90% of what you apply
+for. Below that, NEW applications on that contract are not funded, though
+existing debt keeps its funding. That is a per-contract switch driven by payment
+history and is likely part of the 39,264.32 Contract Funding Disapproval. It
+needs a decision on how it is measured before I code it - say the word.
 
 
-WHAT TO DO
-----------
-1. Deploy. Set Age disapproval to 90 (it defaults there).
-2. Enter High involvement 35,069.31 and the drawn balance 122,711.31 dated
-   29/08/2026 - drawn is now entered WITH ITS DATE and the most recent is used.
-3. Get the insured limits for Selsdon and BOTH Torsion entities. Their export
-   shows two separate debtors - TOR001 "Torsion Projects Limited" and TORSION
-   "Torsion Construction Limited" - and your app has one "Torsion Projects Ltd".
-   If your Xero names do not distinguish them the limits can never match.
-4. Then export and compare Approved Debt / Approved Funding / Availability line
-   by line against their summary.
+ONE THING THAT DOES NOT RECONCILE
+---------------------------------
+Your Xero sales invoice export totals 555,064.10 across 31 debtors. Bibby's Sales
+Ledger is 468,326.86 - 86,737 apart, far wider than the 2,249 on the earlier
+comparison. Different export, wider net; likely retention invoices and items
+never assigned. Worth knowing, because High Involvement is a percentage OF the
+approved ledger, so which total is used changes the deduction.

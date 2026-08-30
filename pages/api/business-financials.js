@@ -587,7 +587,8 @@ export default async function handler(req, res) {
         mosCapPct: ifConfig.mosCapPct != null ? ifConfig.mosCapPct : 25,
         varCapPct: ifConfig.varCapPct != null ? ifConfig.varCapPct : 25,
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
-        highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : 0,
+        highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : '',
+        highInvolvementPct: ifConfig.highInvolvementPct != null ? ifConfig.highInvolvementPct : 35,
         ageDays: ifConfig.ageDays != null ? ifConfig.ageDays : 90,
       },
       // Which build of THIS FILE is answering. Two files changed in pkg596 and the API
@@ -629,7 +630,10 @@ export default async function handler(req, res) {
         mosCapPct: Number(s.mosCapPct ?? 25),
         varCapPct: Number(s.varCapPct ?? 25),
         certCeilingPct: Number(s.certCeilingPct ?? 90),
-        highInvolvement: Number(s.highInvolvement) || 0,
+        // '' must survive as '' - it means "use the calculation". Number('')||0 would
+        // turn it into a deliberate zero override and kill the calculated figure.
+        highInvolvement: (s.highInvolvement === '' || s.highInvolvement == null) ? '' : Number(s.highInvolvement),
+        highInvolvementPct: Number(s.highInvolvementPct ?? 35),
         ageDays: Number(s.ageDays ?? 90),
       }
       await redis.set('config:if-settings', cfg)

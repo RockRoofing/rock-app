@@ -135,7 +135,7 @@ export default function InvoiceFinance() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0, ageDays: 90 })
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: '', highInvolvementPct: 35, ageDays: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [apiVersion, setApiVersion] = useState(null)
@@ -172,7 +172,9 @@ export default function InvoiceFinance() {
         mosCapPct: d.settings?.mosCapPct ?? 25,
         varCapPct: d.settings?.varCapPct ?? 25,
         certCeilingPct: d.settings?.certCeilingPct ?? 90,
-        highInvolvement: d.settings?.highInvolvement ?? 0,
+        // '' = follow the calculation. A number is a deliberate override.
+        highInvolvement: d.settings?.highInvolvement ?? '',
+        highInvolvementPct: d.settings?.highInvolvementPct ?? 35,
         ageDays: d.settings?.ageDays ?? 90,
       })
       setLimits(d.debtorLimits || {})
@@ -258,7 +260,32 @@ export default function InvoiceFinance() {
     //   (323,029.46 - 35,069.31) x 60% = 172,776.09   exactly.
     // It is not derivable from anything we hold - it depends on their view of debtor
     // concentration - so it is entered from their screen rather than calculated.
-    const highInv = Number(settings.highInvolvement) || 0
+    // HIGH INVOLVEMENT - now CALCULATED, not typed.
+    //
+    // Their guide, page 12: "your debtors will be funded up to a high involvement
+    // percentage of the approved sales ledger". So each debtor is capped at a share of
+    // the APPROVED ledger, and anything above that is deducted before the advance rate.
+    //
+    // Solved from their own figures at 35%:
+    //   approved debt 323,029.46 x 35% = 113,060.31 cap per debtor
+    //   Wates          148,129.62 - 113,060.31 =  35,069.31   their High Involvement,
+    //                                                          to the penny.
+    //
+    // Everything needed is already here, so it recalculates itself instead of going
+    // stale between statements. The override below is for when their view differs.
+    const hiPct = Number(settings.highInvolvementPct ?? 35)
+    const hiCap = fundable * (hiPct / 100)
+    const hiCalc = hiPct > 0
+      ? customers.reduce((t, c) => t + Math.max(0, (c.insurable != null ? c.insurable : c.fundable) - hiCap), 0)
+      : 0
+    // Blank means "use the calculation". A typed 0 is a real instruction and is honoured.
+    const hiOverride = settings.highInvolvement
+    const highInv = (hiOverride === '' || hiOverride == null) ? hiCalc : (Number(hiOverride) || 0)
+    // Who is over, so the figure is traceable rather than a number with nowhere to go.
+    const hiWho = hiPct > 0
+      ? customers.filter(c => ((c.insurable != null ? c.insurable : c.fundable) - hiCap) > 1)
+          .map(c => ({ name: c.customer, debt: (c.insurable != null ? c.insurable : c.fundable), over: (c.insurable != null ? c.insurable : c.fundable) - hiCap }))
+      : []
     const grossAdvance = Math.max(0, customers.reduce((s, c) => s + c.advance, 0) - highInv * ((Number(settings.advanceRate) || 0) / 100))
     const cap = Number(settings.facilityCap) || 0
     const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
@@ -270,9 +297,9 @@ export default function InvoiceFinance() {
     const drawnAsAt = latest ? latest.date : null
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv,
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden: !(hiOverride === '' || hiOverride == null),
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
-  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.advanceRate, drawnHistory])
+  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.highInvolvementPct, settings.advanceRate, drawnHistory])
 
   // RECONCILIATION EXPORT, laid out in BIBBY'S OWN ORDER so the two can be read side by
   // side rather than eyeballed. Their Finance Agreement Summary goes:
@@ -316,7 +343,8 @@ export default function InvoiceFinance() {
     rows.push(['  less credit limit exceeded (incl customers with no limit set)', money(overLimitDebt)])
     rows.push(['    of which customers with NO limit recorded', money(noLimitDebt)])
     rows.push(['= Insurable Approved Debt', money(Math.max(0, totals.fundable - overLimitDebt))])
-    rows.push(['High involvement (entered from Bibby)', money(totals.highInv)])
+    rows.push([`High involvement @ ${totals.hiPct}% of approved ledger (cap ${money(totals.hiCap)} per debtor)${totals.hiOverridden ? ' - OVERRIDDEN' : ''}`, money(totals.highInv)])
+    for (const w of (totals.hiWho || [])) rows.push([`    ${w.name} - debt ${money(w.debt)}, over by`, money(w.over)])
     rows.push([`Advance rate`, `${settings.advanceRate}%`])
     rows.push(['= Approved Funding', money(totals.grossAdvance)])
     rows.push(['Funds in use / drawn', money(totals.drawn)])
@@ -511,7 +539,27 @@ export default function InvoiceFinance() {
                   </div>
                 )}
               </div>
-              <div><div style={lbl} title="Bibby's concentration deduction, taken off approved debt BEFORE the advance rate. Read it off their Finance Agreement Summary - it cannot be derived from anything we hold.">High involvement</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.highInvolvement} onChange={e => setSettings(s => ({ ...s, highInvolvement: e.target.value }))} style={{ ...inp, width: 110 }} /></div></div>
+              {/* HIGH INVOLVEMENT. The % is the facility term; the value beside it is
+                  calculated from it and only needs typing over when Bibby's view
+                  differs. Blank = use the calculation. */}
+              <div>
+                <div style={lbl} title="Each debtor is funded up to this share of the APPROVED sales ledger; anything above is deducted before the advance rate. Their guide illustrates 50%; yours solves to 35% exactly against their own figures.">High involvement %</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="number" value={settings.highInvolvementPct} onChange={e => setSettings(s => ({ ...s, highInvolvementPct: e.target.value }))} style={{ ...inp, width: 62 }} />
+                  <span style={{ color: '#bbb', fontSize: 11 }}>=</span>
+                  <input type="number" value={settings.highInvolvement} placeholder={Math.round(totals.hiCalc).toString()}
+                    title="Leave blank to use the calculated figure. Type a value only to override it."
+                    onChange={e => setSettings(s => ({ ...s, highInvolvement: e.target.value }))}
+                    style={{ ...inp, width: 110, borderColor: totals.hiOverridden ? '#b45309' : undefined }} />
+                </div>
+                <div style={{ fontSize: 10.5, color: totals.hiOverridden ? '#b45309' : '#8a857c', marginTop: 3, maxWidth: 300 }}>
+                  {totals.hiOverridden
+                    ? `Overridden - calculated is ${gbp(totals.hiCalc)}. Clear the box to go back.`
+                    : (totals.hiWho.length
+                        ? `${gbp(totals.hiCalc)} - ${totals.hiWho.map(w => `${w.name.split(' ')[0]} over by ${gbp(w.over)}`).join(', ')}. Cap ${gbp(totals.hiCap)} per debtor.`
+                        : `Nothing over the ${gbp(totals.hiCap)} per-debtor cap.`)}
+                </div>
+              </div>
               <div><div style={lbl} title="Bibby disapprove an application once it is this many days past its due date. Three of theirs were 99, 118 and 153 days past due - confirm the exact threshold in the agreement.">Age disapproval (days)</div><input type="number" value={settings.ageDays} onChange={e => setSettings(s => ({ ...s, ageDays: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Approved materials on site are funded up to this share of contract value.">Materials cap %</div><input type="number" value={settings.mosCapPct} onChange={e => setSettings(s => ({ ...s, mosCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Variations are funded up to this share of contract value. Beyond it, Bibby need written instruction.">Variations cap %</div><input type="number" value={settings.varCapPct} onChange={e => setSettings(s => ({ ...s, varCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
