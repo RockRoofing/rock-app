@@ -660,6 +660,48 @@ export default function CashFlow() {
                     )
                   })()}
 
+                  {/* DIAGNOSTIC. Sales come through and costs do not; rather than guess
+                      at field names again, this shows what the saved forecasts actually
+                      contain. Remove once the cost columns are right. */}
+                  <details style={{ marginBottom: 14 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                      Forecast data check - what the saved records contain ({(data.projForecasts || []).length} forecasts)
+                    </summary>
+                    <div style={{ marginTop: 8, maxHeight: 320, overflow: 'auto', border: '1px solid #eee', borderRadius: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                        <thead><tr style={{ background: '#faf9f7', color: '#888' }}>
+                          <th style={{ textAlign: 'left', padding: '4px 6px' }}>Project</th>
+                          <th style={{ textAlign: 'left', padding: '4px 6px' }}>Period</th>
+                          <th style={{ textAlign: 'right', padding: '4px 6px' }}>matItems</th>
+                          <th style={{ textAlign: 'left', padding: '4px 6px' }}>1st mat line</th>
+                          <th style={{ textAlign: 'left', padding: '4px 6px' }}>matDeliverDay</th>
+                          <th style={{ textAlign: 'right', padding: '4px 6px' }}>materialsThisPeriod</th>
+                          <th style={{ textAlign: 'right', padding: '4px 6px' }}>labourSched</th>
+                          <th style={{ textAlign: 'left', padding: '4px 6px' }}>cost-ish keys</th>
+                        </tr></thead>
+                        <tbody>
+                          {(data.projForecasts || []).slice(0, 40).map((f, k) => (
+                            <tr key={k} style={{ borderTop: '1px solid #f2f2f2' }}>
+                              <td style={{ padding: '3px 6px' }}>{f.projectName || f.projectKey}</td>
+                              <td style={{ padding: '3px 6px', color: '#999' }}>{f.from ? `${fmtDMY(f.from)}-${fmtDMY(f.to)}` : '-'}</td>
+                              <td style={{ padding: '3px 6px', textAlign: 'right', color: f.diag?.matItems ? '#16a34a' : '#dc2626' }}>{f.diag?.matItems ?? 'absent'}</td>
+                              <td style={{ padding: '3px 6px', fontFamily: 'monospace', fontSize: 10 }}>
+                                {f.diag?.matItemFirst ? `pay:${f.diag.matItemFirst.payDate || 'NONE'} amt:${f.diag.matItemFirst.amount ?? 'null'} val:${f.diag.matItemFirst.value ?? 'null'} mode:${f.diag.matItemFirst.mode || '-'} del:${f.diag.matItemFirst.deliverDay || 'NONE'}` : '-'}
+                              </td>
+                              <td style={{ padding: '3px 6px' }}>{f.diag?.matDeliverDay || '-'}</td>
+                              <td style={{ padding: '3px 6px', textAlign: 'right' }}>{f.diag?.materialsThisPeriod ?? '-'}</td>
+                              <td style={{ padding: '3px 6px', textAlign: 'right' }}>{f.diag?.labourSchedule ?? 'absent'}</td>
+                              <td style={{ padding: '3px 6px', fontFamily: 'monospace', fontSize: 9.5, color: '#888' }}>{(f.diag?.keys || []).join(' ')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 5 }}>
+                      Open this, screenshot a few rows and send them over. "pay:NONE" means the line has no payment date, so it can never land in a week. "matItems absent" with a matDeliverDay means it is a legacy record. The last column lists every cost-related field actually saved.
+                    </div>
+                  </details>
+
                   {/* MANUAL BALANCES - the primary source. Each carries its own as-at
                       date, because a balance without one cannot be judged. */}
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18 }}>

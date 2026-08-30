@@ -1,55 +1,63 @@
-pkg620 - Materials payment terms: the line's own, not a hard-coded 30
-======================================================================
+pkg621 - A data check panel, because I have guessed wrong too many times
+=========================================================================
 
-*** SUPERSEDES pkg591 - pkg619. Five files. ***
+*** SUPERSEDES pkg591 - pkg620. Five files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js
   pages/business-financials/cashflow.js
+  pages/api/business-financials.js
   pages/api/dashboard.js
   pages/business-financials/invoice-finance.js
   pages/connect.js
 
 
-GOOD CATCH - AND THERE ARE TWO CASES
-------------------------------------
-WHERE THE FORECAST HAS matItems, the line's own term is ALREADY honoured and
-always has been. payDate was computed at save from that line's term, so a 60-day
-line pays at 60 days. The +30 path never runs for these.
+NOTHING FOR YOU TO DO DIFFERENTLY - I HAVE BEEN GUESSING
+--------------------------------------------------------
+You have refreshed both pages; that is not the problem. I have now assumed the
+shape of these forecast records four times - matItems, then amount vs value, then
+the bill suppression, then the legacy fields - and been wrong each time. The
+honest thing is to stop assuming and look.
 
-WHERE IT DOES NOT - the legacy records - the term is NOT RECOVERABLE. Only
-matDeliverDay and materialsThisPeriod were saved; the line items that carried the
-terms were not. There is no materials term at forecast level either - only
-salesTerm and labourTerm are stored.
+This package adds a panel at the top of the Cash Flow page:
 
-So for legacy forecasts any figure is a guess. Rather than bury 30 in the code it
-is now a SETTING - "Legacy materials, eom + days" beside the VAT rate:
+    Forecast data check - what the saved records contain (N forecasts)
 
-    legacy delivery 25/09, materials 70,000
-      eom + 0   pays 30/09
-      eom +30   pays 30/10
-      eom +60   pays 29/11
+Click it. For each saved forecast it shows, straight from Redis:
 
-Set it to whatever your usual supplier terms were when those forecasts were built.
+    matItems              how many material lines, or "absent"
+    1st mat line          pay:  amt:  val:  mode:  del:
+    matDeliverDay         the legacy delivery date, if any
+    materialsThisPeriod   the legacy total, if any
+    labourSched           how many labour lines, or "absent"
+    cost-ish keys         EVERY cost-related field name actually saved
 
-AND THE ESTIMATE IS FLAGGED. In the Project sales drill-down a materials figure
-derived this way carries a small amber "est", hovering to say the payment date was
-estimated rather than taken from the line's own term. So you can tell a real date
-from a guessed one at a glance.
+That last column is the one that matters - it lists what is really in the record,
+so we stop arguing about field names.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg619 - the API had NO fallback for labour or materials on older forecasts, only
-for sales. So sales came through and costs did not, which is the whole "income
-with no spend" problem. Labour now falls back to labourDate + labourThisPeriod
-exactly as the project page does, and materials are rebuilt from matDeliverDay +
-materialsThisPeriod.
+WHAT TO SEND ME
+---------------
+Open it, screenshot four or five rows for projects you KNOW have materials, and
+send them over. From that I can tell in one look which of these it is:
 
-pkg618 - ONE bill on a project was discarding EVERY forecast cost for that project
-that week. Now netted off instead, labour first.
+  pay:NONE            the line has no payment date, so it can never land in a week
+  amt:null val:0      the figure was never resolved
+  matItems absent     legacy record - the fallback should be catching it
+  a field name I have not accounted for at all
 
-payFromDeliver was declared inside the invoice-finance branch and used in the
-cashflow branch - moved to module scope before it could throw.
+I would rather take one more round trip and fix it properly than ship a fifth
+guess.
+
+
+EVERYTHING ELSE IS STILL IN
+---------------------------
+pkg620 - legacy materials payment term is a setting, not a hard-coded 30, and
+estimated dates are flagged "est" in the drill-down. Lines that DO have their own
+term were always honoured.
+
+pkg619 - labour and materials fallbacks for older forecasts, matching what the
+project cash flow page already did.
+
+pkg618 - one bill no longer discards an entire project's forecast costs.

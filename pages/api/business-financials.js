@@ -968,6 +968,20 @@ export default async function handler(req, res) {
               raw: Number(m.amount != null && m.amount !== '' ? m.amount : m.value) || 0,
             })),
             from: fc.from, to: fc.to,
+            // WHAT THE RECORD ACTUALLY CONTAINS. Sales come through and costs do not, so
+            // rather than guess at the field names again, report them. Keys only and a
+            // few figures - no payload bloat.
+            diag: {
+              keys: Object.keys(fc || {}).filter(k => /mat|labour|sales|deliver|cost/i.test(k)).sort(),
+              matItems: Array.isArray(fc.matItems) ? fc.matItems.length : null,
+              matItemSample: Array.isArray(fc.matItems) && fc.matItems[0] ? Object.keys(fc.matItems[0]).sort().join(',') : '',
+              matItemFirst: Array.isArray(fc.matItems) && fc.matItems[0] ? { payDate: fc.matItems[0].payDate || '', amount: fc.matItems[0].amount ?? null, value: fc.matItems[0].value ?? null, mode: fc.matItems[0].mode || '', deliverDay: fc.matItems[0].deliverDay || '' } : null,
+              matDeliverDay: fc.matDeliverDay || '',
+              materialsThisPeriod: fc.materialsThisPeriod ?? null,
+              labourSchedule: Array.isArray(fc.labourSchedule) ? fc.labourSchedule.length : null,
+              labourDate: fc.labourDate || '',
+              labourThisPeriod: fc.labourThisPeriod ?? null,
+            },
             // Latest APPLICATION valuation date on this project. A forecast whose period
             // has already been applied for is history - the money is now a real invoice,
             // and counting both is the double-count.
