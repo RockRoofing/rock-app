@@ -463,10 +463,11 @@ export default async function handler(req, res) {
   //
   // The save handlers are further down the file, so ordering alone decided this.
   if (view === 'invoice-finance' && req.method !== 'POST') {
-    const [ifConfig, ifLimits, ifLimitsMeta, dashCache, appPaidOverrides] = await Promise.all([
+    const [ifConfig, ifLimits, ifLimitsMeta, ifDrawnHistory, dashCache, appPaidOverrides] = await Promise.all([
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-limits-meta').then(v => v || null).catch(() => null),
+      redis.get('config:if-drawn-history').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('dashboard:cache').then(v => v || null).catch(() => null),
       redis.get('config:if-app-paid').then(v => v || {}).catch(() => ({})),  // { appId: true/false }
     ])
@@ -580,6 +581,13 @@ export default async function handler(req, res) {
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
         highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : 0,
       },
+      // Which build of THIS FILE is answering. Two files changed in pkg596 and the API
+      // one is the one that carries the fix - if only the page was deployed the symptom
+      // is identical to nothing being deployed at all, and there is no way to tell them
+      // apart from the screen.
+      apiVersion: 'pkg598',
+      // Sorted oldest first; the LAST entry is the current drawn balance.
+      drawnHistory: ifDrawnHistory,
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
       limitsMeta: ifLimitsMeta,      // { importedAt, count, matched, unmatched, fileName }
     })
@@ -616,6 +624,29 @@ export default async function handler(req, res) {
       }
       await redis.set('config:if-settings', cfg)
       return res.json({ ok: true, settings: cfg })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
+  // DRAWN BALANCE HISTORY. Drawn is a point-in-time figure read off a Bibby statement,
+  // not something the app can know - so it is recorded WITH THE DATE IT APPLIES TO and
+  // the most recent one is used. A single overwritten number goes stale silently and
+  // there is no way to tell a figure entered this morning from one entered in March.
+  if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-drawn') {
+    try {
+      const { date, amount, remove } = req.body || {}
+      const list = await redis.get('config:if-drawn-history').then(v => Array.isArray(v) ? v : []).catch(() => ([]))
+      let next
+      if (remove) {
+        next = list.filter(e => e.date !== remove)
+      } else {
+        if (!date) return res.status(400).json({ ok: false, error: 'A date is required.' })
+        // One entry per date - re-entering a date corrects it rather than stacking two
+        // readings for the same day, which would make "most recent" ambiguous.
+        next = [...list.filter(e => e.date !== date), { date, amount: Number(amount) || 0, at: new Date().toISOString() }]
+      }
+      next.sort((a, b) => String(a.date).localeCompare(String(b.date)))
+      await redis.set('config:if-drawn-history', next)
+      return res.json({ ok: true, drawnHistory: next })
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 

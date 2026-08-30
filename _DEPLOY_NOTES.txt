@@ -1,68 +1,70 @@
-pkg596 - FIX: invoice-finance saves were never reaching the server
-===================================================================
+pkg598 - Invoice Finance: drawn balance recorded BY DATE
+=========================================================
 
-*** SUPERSEDES pkg591 - pkg595. ***
-pages/api/business-financials.js is COMPLETE and carries pkg582 + pkg589 too.
+*** SUPERSEDES pkg597 (not deployed). Deploy BOTH files. ***
+pkg596 is already in and working - the limits save. This builds on it.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js       <- the real bug
+  pages/api/business-financials.js
   pages/business-financials/invoice-finance.js
 
 
-WHY NOTHING SAVED
------------------
-Line 456:
+WHY YOU COULD NOT TYPE IN IT
+----------------------------
+    <input type="number" value={settings.drawn} ... />
 
-    if (view === 'invoice-finance') {          // no method check
-      ...
-      return res.json({ ... })                 // always returns
-    }
-
-`view` is read from the POST BODY as well as the query string. So every
-invoice-finance POST fell into that GET block, was answered with the GET payload,
-and RETURNED - before ever reaching the save handlers, which sit ~130 lines
-further down the file.
-
-The client got a 200 with sensible-looking JSON and reported success. Nothing was
-ever written: not the insured limits, not the advance rate, not the caps, not the
-import date. Pure handler ordering.
-
-THE SAME FAULT WAS ON CASHFLOW. `if (view === 'cashflow')` at line 644, also with
-no method check, shadowing FIVE POST handlers - save-lumps, refresh-balances,
-save-finance, save-bill-paydate, save-bill-cis. None of them have ever persisted
-either. Fixed, and I scanned every view block in the file: those two were the
-only ones and all POST handlers are now reachable.
+settings.drawn is the NUMBER 0, so the box renders a literal "0" that cannot be
+cleared - you end up appending digits after it. The new box starts EMPTY with a
+"0.00" placeholder.
 
 
-NO MORE SAVE BUTTON FOR LIMITS
-------------------------------
-  - The Bibby CSV import writes immediately on upload.
-  - Typing a limit in the table saves when you leave the cell.
-  - If a save fails it says so - "Limit did NOT save" - rather than reporting
-    success.
+DRAWN IS NOW A DATED SERIES
+---------------------------
+A drawn balance is a point-in-time reading off a Bibby statement, not something
+the app can know. Overwriting one number meant it went stale silently, and a
+figure typed in March looked identical to one typed this morning.
 
-The blur handler reads a ref rather than the state variable: onBlur can fire in
-the same tick as the change, and the state closure would still hold the PREVIOUS
-value, so it would post the figure you just typed over.
+Now: pick the date it applies to, enter the amount, press Add. Every reading is
+kept and THE MOST RECENT BY DATE is the one used.
 
-The button is now "Save settings" and covers only the advance rate, drawn, caps
-and high involvement.
+Underneath: "Using GBP 122,711.31 as at 29/08/26 - 3 readings", with the last few
+listed and an x to remove any of them.
+
+Checked:
+  add 30/06 98,000            -> uses 30/06
+  add 29/08 122,711.31        -> uses 29/08
+  add 31/07 110,500 (back-dated, out of order) -> still uses 29/08, correct
+  re-enter 29/08 125,000      -> REPLACES it, does not stack two readings for
+                                 one day, which would make "most recent" ambiguous
+  remove 29/08                -> falls back to 31/07
+
+Stored in its own key, config:if-drawn-history. The old single `drawn` setting is
+still read as a fallback so nothing entered before this is lost.
 
 
-THE IMPORT DATE
----------------
-Shown beside the Import button - "List imported 29/08/26 14:07" - hovering for
-the counts and file name. Stored in its own Redis key, not folded into the limits
-map, which is a flat { customerName: {...} } that every screen walks.
+THIS SHOULD CLOSE THE AVAILABILITY GAP
+--------------------------------------
+Your last export had BOTH of these at zero:
 
+    High involvement    0.00   should be  35,069.31
+    Funds in use/drawn  0.00   should be 122,711.31
 
-WHAT THIS MEANS FOR YESTERDAY'S RECONCILIATION
-----------------------------------------------
-The 160,831.50 of debt with NO INSURED LIMIT is very likely because the limits
-you imported never saved. Re-import after deploying and it should drop
-substantially.
+The app computes availability = approved funding - drawn. With drawn at zero the
+app's "Availability" was really just approved funding, so it could never match
+Bibby's, which is after the 122,711.31 you have already drawn.
 
-Then enter High involvement 35,069.31 and Funds in use 122,711.31 - those are
-settings, so they were not saving either.
+    172,776.09 - 122,711.31 = 50,064.78    exactly Bibby's Availability
+
+Enter the drawn balance dated 29/08/2026, and High involvement 35,069.31 under
+Save settings. Then compare line by line rather than on one number:
+
+    Approved Debt      vs  323,029.46
+    Approved Funding   vs  172,776.09
+    Availability now   vs   50,064.78
+
+Tell me WHICH line is out and by how much. If Approved Funding matches and only
+Availability is out, it is just the drawn figure. If Approved Funding is out, it
+is still the eligibility side and the BY CUSTOMER block in the export will show
+whether anyone remains on "NO LIMIT SET".

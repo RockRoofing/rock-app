@@ -53,6 +53,10 @@ function splitCsvLine(line) {
 // declaration reads like a bug and invites one.
 // Module scope, and defined here rather than borrowed - this file has no date formatter
 // and reaching for one that lives on another page compiles cleanly then throws on render.
+// Date only. This file has fmtDateTime but no fmtD, and fmtD lives on OTHER pages -
+// reaching for it here compiles cleanly then throws ReferenceError on render.
+const fmtD = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+
 const fmtDateTime = (iso) => {
   if (!iso) return ''
   const d = new Date(iso)
@@ -119,6 +123,10 @@ export default function InvoiceFinance() {
   const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
+  const [apiVersion, setApiVersion] = useState(null)
+  const [drawnHistory, setDrawnHistory] = useState([])
+  const [drawnDate, setDrawnDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [drawnAmt, setDrawnAmt] = useState('')
   const limitsRef = useRef(limits)
   useEffect(() => { limitsRef.current = limits }, [limits])
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
@@ -153,6 +161,8 @@ export default function InvoiceFinance() {
       })
       setLimits(d.debtorLimits || {})
       setLimitsMeta(d.limitsMeta || null)
+      setApiVersion(d.apiVersion || null)
+      setDrawnHistory(Array.isArray(d.drawnHistory) ? d.drawnHistory : [])
       const po = {}
       for (const p of (d.projects || [])) for (const a of p.applications) if (a.paidOverride != null) po[a.id] = a.paidOverride
       setPaidOverrides(po)
@@ -242,12 +252,16 @@ export default function InvoiceFinance() {
     const cap = Number(settings.facilityCap) || 0
     const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
     const cappedByFacility = cap > 0 && grossAdvance > cap
-    const drawn = Number(settings.drawn) || 0
+    // The most recent DATED reading wins. Falls back to the old single `drawn` setting so
+    // anything entered before this existed is not lost.
+    const latest = drawnHistory.length ? drawnHistory[drawnHistory.length - 1] : null
+    const drawn = latest ? (Number(latest.amount) || 0) : (Number(settings.drawn) || 0)
+    const drawnAsAt = latest ? latest.date : null
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability, highInv,
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv,
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
-  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.advanceRate])
+  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.advanceRate, drawnHistory])
 
   // RECONCILIATION EXPORT, laid out in BIBBY'S OWN ORDER so the two can be read side by
   // side rather than eyeballed. Their Finance Agreement Summary goes:
@@ -330,6 +344,21 @@ export default function InvoiceFinance() {
   // Limits save on their own - on import, and on leaving a cell. Reads limitsRef rather
   // than the state variable: onBlur can fire in the same tick as the change, and the
   // state closure would still hold the PREVIOUS value.
+  async function saveDrawn(remove) {
+    const body = remove
+      ? { view: 'invoice-finance', action: 'save-drawn', remove }
+      : { view: 'invoice-finance', action: 'save-drawn', date: drawnDate, amount: Number(drawnAmt) || 0 }
+    if (!remove && !drawnDate) { setImportMsg('Pick the date the balance applies to.'); return }
+    try {
+      const res = await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || d.ok === false) { setImportMsg(d.error || 'Drawn balance did NOT save.'); return }
+      setDrawnHistory(Array.isArray(d.drawnHistory) ? d.drawnHistory : [])
+      if (!remove) setDrawnAmt('')
+      setImportMsg('')
+    } catch { setImportMsg('Drawn balance did NOT save.') }
+  }
+
   async function saveLimitsNow(next) {
     const payload = next || limitsRef.current
     try {
@@ -444,13 +473,47 @@ export default function InvoiceFinance() {
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div><div style={lbl}>Advance rate %</div><input type="number" value={settings.advanceRate} onChange={e => setSettings(s => ({ ...s, advanceRate: e.target.value }))} style={{ ...inp, width: 90 }} /></div>
               <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} /></div></div>
-              <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
+              {/* DRAWN, DATED. Was a single number you overwrote - which went stale
+                  silently, and a figure typed in March looked identical to one typed
+                  this morning. Now every reading is kept with the date it applies to and
+                  the most recent one is used. */}
+              <div>
+                <div style={lbl}>Drawn balance (from Bibby statement)</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="date" value={drawnDate} onChange={e => setDrawnDate(e.target.value)} style={{ ...inp, width: 132 }} />
+                  <span style={{ color: '#999' }}>&pound;</span>
+                  {/* Empty rather than a literal 0, so the box can actually be typed into
+                      instead of leaving you appending digits after a zero. */}
+                  <input type="number" value={drawnAmt} placeholder="0.00" onChange={e => setDrawnAmt(e.target.value)} style={{ ...inp, width: 120 }} />
+                  <button onClick={() => saveDrawn()} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Add</button>
+                </div>
+                {drawnHistory.length > 0 && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#8a857c' }}>
+                    Using {gbp(totals.drawn)} as at {fmtD(totals.drawnAsAt)}
+                    {drawnHistory.length > 1 ? ` - ${drawnHistory.length} readings` : ''}
+                    <span style={{ marginLeft: 6 }}>
+                      {[...drawnHistory].slice(-4).reverse().map(e => (
+                        <span key={e.date} title={`Recorded ${e.at ? String(e.at).slice(0, 10) : ''}`} style={{ marginRight: 6, whiteSpace: 'nowrap' }}>
+                          {fmtD(e.date)} {gbp(e.amount)}
+                          <button onClick={() => saveDrawn(e.date)} title="Remove this reading" style={{ border: 'none', background: 'none', color: '#c66', cursor: 'pointer', padding: '0 2px' }}>&times;</button>
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                )}
+              </div>
               <div><div style={lbl} title="Bibby's concentration deduction, taken off approved debt BEFORE the advance rate. Read it off their Finance Agreement Summary - it cannot be derived from anything we hold.">High involvement</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.highInvolvement} onChange={e => setSettings(s => ({ ...s, highInvolvement: e.target.value }))} style={{ ...inp, width: 110 }} /></div></div>
               <div><div style={lbl} title="Approved materials on site are funded up to this share of contract value.">Materials cap %</div><input type="number" value={settings.mosCapPct} onChange={e => setSettings(s => ({ ...s, mosCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Variations are funded up to this share of contract value. Beyond it, Bibby need written instruction.">Variations cap %</div><input type="number" value={settings.varCapPct} onChange={e => setSettings(s => ({ ...s, varCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
+                <span title={apiVersion === 'pkg597'
+                  ? 'The API file carrying the save fix IS deployed.'
+                  : 'The API file is NOT the pkg597 one. pages/api/business-financials.js has not been deployed - saves will silently do nothing.'}
+                  style={{ fontSize: 11, fontWeight: 700, cursor: 'help', whiteSpace: 'nowrap', color: apiVersion === 'pkg597' ? '#16a34a' : '#dc2626' }}>
+                  {apiVersion === 'pkg597' ? 'API pkg597' : 'API OLD - not deployed'}
+                </span>
                 {limitsMeta && limitsMeta.importedAt && (
                   <span title={`${limitsMeta.count || 0} limits imported${limitsMeta.matched != null ? `, ${limitsMeta.matched} matched a customer, ${limitsMeta.unmatched} did not` : ''}${limitsMeta.fileName ? ` - ${limitsMeta.fileName}` : ''}`}
                     style={{ fontSize: 11, color: '#8a857c', cursor: 'help', whiteSpace: 'nowrap' }}>
