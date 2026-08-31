@@ -1832,7 +1832,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Payment terms (sales received, labour paid) */}
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" cycles
+                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" periodMonths={periodMonths} cycles
                   calendar={appCalendar} calendarUsable={appCalendarUsable} previewDates={salesSchedule} />
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
@@ -2105,7 +2105,7 @@ function LabourTermEditor({ term, setTerm, schedule }) {
   )
 }
 
-function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar, calendarUsable, previewDates }) {
+function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar, calendarUsable, periodMonths = [], previewDates }) {
   const cycle = (term && term.cycle) || 'applications'
   const cycling = cycles && (cycle === 'weekly' || cycle === 'fortnightly')
   const usingProject = cycles && cycle === 'project'
@@ -2156,7 +2156,9 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
               // calendar exists, it just has a gap.
               ? (() => {
                   const missing = periodMonths.filter(mk => {
-                    const o = (appCalendar && appCalendar.dateOverrides && appCalendar.dateOverrides[mk]) || null
+                    // `calendar`, the prop - appCalendar is HypAppModal's name for the same
+                    // object and is not in scope here.
+                    const o = (calendar && calendar.dateOverrides && calendar.dateOverrides[mk]) || null
                     return !(o && o.paymentDate && (o.valuationDate || o.applicationDate))
                   })
                   return missing.length && missing.length < periodMonths.length

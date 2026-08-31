@@ -1,7 +1,7 @@
-pkg651 - The monthly date table IS an application calendar
-===========================================================
+pkg652 - FIX: periodMonths is not defined
+==========================================
 
-*** SUPERSEDES pkg591 - pkg650. ***
+*** SUPERSEDES pkg591 - pkg651. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -14,7 +14,7 @@ pkg651 - The monthly date table IS an application calendar
 CHANGED FILES (replace)
 -----------------------
   pages/project-cashflow.js       <- the fix
-  pages/applications.js           <- NEW in this set, the same fix
+  pages/applications.js
   pages/business-financials/cashflow.js
   pages/api/business-financials.js
   pages/api/project-cashflow.js
@@ -27,44 +27,34 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-YOU WERE RIGHT AND IT IS ONE FAULT IN TWO PLACES
--------------------------------------------------
-    appCalendarUsable = paymentDay && (valuationDay || applicationDay)
+MY BUG, AND THE SAME SHAPE AS THE LAST ONE
+-------------------------------------------
+The "names the missing months" message I added in pkg651 sits in TermEditor - a
+SEPARATE component. periodMonths lives in HypAppModal and is invisible there.
+Passed in as a prop.
 
-It only ever looked at the three DEFAULT DAY fields. J190 has those blank and the
-monthly override table completely filled in - fifteen months of application,
-valuation and payment dates - and still read as having NO CALENDAR.
+AND A SECOND ONE BEHIND IT. The same message also used appCalendar, which is
+HypAppModal's name for an object TermEditor already receives as `calendar`. It
+would have thrown the moment the missing-months branch ran - so fixing only the
+first would have bought one more round trip.
 
-Which caused both things you saw:
-
-  the FORECAST fell back to period end plus terms, giving ONE date at the end
-  instead of one per month;
-  the APPLICATIONS screen told you to set days you had deliberately overridden,
-  while displaying the correct dates immediately above the warning.
-
-resolveAppDates has always preferred an override over the default day. Only the
-test for whether a calendar EXISTS was wrong.
-
-Now a calendar counts as usable when every month of the period has a payment date
-and a valuation or application date in the override table:
-
-    J190, no default days, full override table
-      before  usable false -> one date at period end
-      after   usable true  -> Sep val 30/09 cash 23/10
-                              Oct val 31/10 cash 27/11
-                              Nov val 30/11 cash 25/12
-
-So your one-application-spread-over-several-months case now produces one
-application date per month at that month's percentage, which is what you were
-expecting.
+That is now FIVE times this session that a component has reached for a value
+belonging to another scope. My per-component scan only compared each component
+against module scope; it did not check whether an identifier belonged to a
+DIFFERENT component. It does now - that cross-component check is what found the
+appCalendar one, and it comes up clean on this file.
 
 
-AND THE WARNINGS NOW MEAN SOMETHING
------------------------------------
-Applications screen: only warns when the dates for THAT month are genuinely
-unknown, rather than whenever the default days are blank.
+ALSO IN THIS PACKAGE (pkg651)
+-----------------------------
+THE MONTHLY DATE TABLE COUNTS AS AN APPLICATION CALENDAR. appCalendarUsable only
+looked at the three default day fields, so J190 - blank defaults, fifteen months
+of overrides filled in - read as having no calendar. The forecast fell back to one
+date at period end and the applications screen warned about days you had
+deliberately overridden.
 
-Forecast: names the months actually missing - "No dates for 2026-11 - fill those
-months in" - instead of claiming there is no calendar on a project where fourteen
-of fifteen rows are complete. And it says it is using period end plus terms
-meanwhile, rather than leaving you to work that out from the dates.
+    before  usable false -> one date at period end
+    after   Sep val 30/09 cash 23/10, Oct 31/10 cash 27/11, Nov 30/11 cash 25/12
+
+So one application spread over several months now gives one application date per
+month at that month's percentage.
