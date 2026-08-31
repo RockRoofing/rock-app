@@ -343,7 +343,14 @@ export default function ApplicationsPage() {
                     <div style={{ fontSize: 12, color: '#666' }}>
                       <div>App date: <strong>{fmtDate(newDates.appDate)}</strong> · Val: <strong>{fmtDate(newDates.valDate)}</strong></div>
                       <div>Payment due: <strong>{fmtDate(newDates.paymentDate)}</strong> · Final: <strong>{fmtDate(newDates.finalDate)}</strong></div>
-                      {(!settings.applicationDay && !settings.valuationDay) && <div style={{ color: '#b45309' }}>⚠ Set application/valuation/payment days in Project Details for auto dates.</div>}
+                      {/* Only warn when the dates for THIS month are genuinely unknown.
+                          Checking the default days alone told projects driven entirely by
+                          the monthly override table to set days they had deliberately
+                          overridden - and the dates were already right on screen above. */}
+                      {(!settings.applicationDay && !settings.valuationDay
+                        && !((settings.dateOverrides || {})[newMonth] || {}).applicationDate
+                        && !((settings.dateOverrides || {})[newMonth] || {}).valuationDate)
+                        && <div style={{ color: '#b45309' }}>&#9888; Set application/valuation/payment days in Project Details for auto dates.</div>}
                     </div>
                     <div style={{ flex: 1 }} />
                     <button onClick={createApp} disabled={creating} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: creating ? 'default' : 'pointer', opacity: creating ? 0.6 : 1 }}>{creating ? 'Creating…' : 'Create application'}</button>

@@ -1,7 +1,7 @@
-pkg650 - One invoice was wiping out a project's whole forecast sales
-=====================================================================
+pkg651 - The monthly date table IS an application calendar
+===========================================================
 
-*** SUPERSEDES pkg591 - pkg649. ***
+*** SUPERSEDES pkg591 - pkg650. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -13,8 +13,9 @@ pkg650 - One invoice was wiping out a project's whole forecast sales
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js        <- the fix
-  pages/project-cashflow.js
+  pages/project-cashflow.js       <- the fix
+  pages/applications.js           <- NEW in this set, the same fix
+  pages/business-financials/cashflow.js
   pages/api/business-financials.js
   pages/api/project-cashflow.js
   components/BizNav.js
@@ -26,49 +27,44 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-THE PATTERN IN YOUR SCREENSHOT GAVE IT AWAY
---------------------------------------------
-Six projects showing labour and materials with NO sales at all - J242, J190, J244,
-J240, J241, J230. Cost with no income against it, which is why the table read as
-if half the jobs were pure expense.
+YOU WERE RIGHT AND IT IS ONE FAULT IN TWO PLACES
+-------------------------------------------------
+    appCalendarUsable = paymentDay && (valuationDay || applicationDay)
 
-    const hasInvoice = projNosWithInvoiceThisWk.has(String(fc.projectNo))
-    const sIn = (hasInvoice || salesSpent(fc)) ? 0 : ...
+It only ever looked at the three DEFAULT DAY fields. J190 has those blank and the
+monthly override table completely filled in - fifteen months of application,
+valuation and payment dates - and still read as having NO CALENDAR.
 
-ALL OR NOTHING. One unpaid invoice on a project in a week wiped out that project's
-ENTIRE forecast sales for the week - any invoice, any amount.
+Which caused both things you saw:
 
-This is EXACTLY the fault I fixed for BILLS in pkg618 and never applied to
-invoices. I fixed one side of the same guard and left the other.
+  the FORECAST fell back to period end plus terms, giving ONE date at the end
+  instead of one per month;
+  the APPLICATIONS screen told you to set days you had deliberately overridden,
+  while displaying the correct dates immediately above the warning.
 
-NOW NETTED, like the bills:
+resolveAppDates has always preferred an override over the default day. Only the
+test for whether a calendar EXISTS was wrong.
 
-    forecast sales 20,859, real invoice 12,000  ->  forecast sales 8,859
+Now a calendar counts as usable when every month of the period has a payment date
+and a valuation or application date in the override table:
 
-The invoice is already counted in Invoices in, so only the part of the forecast it
-covers comes out. Anything above it is work still to be billed. The allowance is
-consumed, so one invoice cannot net against two different weeks.
+    J190, no default days, full override table
+      before  usable false -> one date at period end
+      after   usable true  -> Sep val 30/09 cash 23/10
+                              Oct val 31/10 cash 27/11
+                              Nov val 30/11 cash 25/12
 
-Excluded invoices no longer suppress anything either - if you have taken an
-invoice out of the forecast it should not be displacing forecast sales.
-
-
-EXPECT
-------
-Sales to appear against those six projects, and Cost % to become meaningful for
-them - at the moment they show "-" because there is no revenue to divide by. The
-96% total should drop toward the 75-85% range, and your 28% margin should hold up.
+So your one-application-spread-over-several-months case now produces one
+application date per month at that month's percentage, which is what you were
+expecting.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-wkMonth is read by the new invoice netting but was declared BELOW it - a const is
-not hoisted, so that is a temporal dead zone and would have thrown on first render.
-Moved above both netting blocks.
+AND THE WARNINGS NOW MEAN SOMETHING
+-----------------------------------
+Applications screen: only warns when the dates for THAT month are genuinely
+unknown, rather than whenever the default days are blank.
 
-
-ALSO IN THIS PACKAGE
---------------------
-pkg649 - the Cash Flow lists forecasts NOT in the figures and why. Worth keeping
-an eye on after this: 8335 falling outside the 13 weeks is correct - its period
-runs 01/02/27 to 10/05/27.
+Forecast: names the months actually missing - "No dates for 2026-11 - fill those
+months in" - instead of claiming there is no calendar on a project where fourteen
+of fifteen rows are complete. And it says it is using period end plus terms
+meanwhile, rather than leaving you to work that out from the dates.

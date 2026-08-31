@@ -1325,7 +1325,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // The project calendar is only usable if it can actually produce a cash date. A
   // valuation day with no payment day gives an application date and no payment, which
   // would drop the money out of the forecast silently.
-  const appCalendarUsable = !!(appCalendar && appCalendar.paymentDay && (appCalendar.valuationDay || appCalendar.applicationDay))
+
 
   const priorLabel = !prior ? 'the start'
     : prior.kind === 'application' ? `App ${(latestApp && (latestApp.appNumber || latestApp.seq)) || ''}`.trim()
@@ -1412,6 +1412,27 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
   // Calendar months this period spans, and keep the sales/labour spreads in step.
   const periodMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
+
+  // A CALENDAR CAN BE THE MONTHLY OVERRIDE TABLE, not just the three default days.
+  //
+  // This only looked at applicationDay / valuationDay / paymentDay. A project driven
+  // entirely by the monthly override table - every row filled in, which is how several
+  // of yours are set up - read as having NO calendar at all. The forecast then fell back
+  // to period end plus terms and produced one date at the end instead of one per month,
+  // and the applications screen showed a warning telling you to set days that you had
+  // deliberately overridden anyway.
+  //
+  // resolveAppDates already prefers an override over the default day, so if the months in
+  // this period have overrides the calendar is perfectly usable.
+  const overridesFor = (mk) => (appCalendar && appCalendar.dateOverrides && appCalendar.dateOverrides[mk]) || null
+  const appCalendarUsable = !!(appCalendar && (
+    (appCalendar.paymentDay && (appCalendar.valuationDay || appCalendar.applicationDay)) ||
+    // Every month of this period has a payment date typed against it.
+    (periodMonths.length > 0 && periodMonths.every(mk => {
+      const o = overridesFor(mk)
+      return !!(o && o.paymentDate && (o.valuationDate || o.applicationDate))
+    }))
+  ))
   useEffect(() => {
     if (!periodMonths.length) return
     const fix = (spread) => {
@@ -2130,7 +2151,18 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
       <div style={{ fontSize: 10.5, color: usingProject && !calendarUsable ? '#b45309' : '#0f766e', marginTop: 3, maxWidth: 300 }}>
         {usingProject
           ? (!calendarUsable
-              ? 'No application calendar on this project - set the valuation and payment days on Edit Project Details.'
+              // Names the months that are actually missing. "No application calendar"
+              // was misleading on a project with most of the table filled in - the
+              // calendar exists, it just has a gap.
+              ? (() => {
+                  const missing = periodMonths.filter(mk => {
+                    const o = (appCalendar && appCalendar.dateOverrides && appCalendar.dateOverrides[mk]) || null
+                    return !(o && o.paymentDate && (o.valuationDate || o.applicationDate))
+                  })
+                  return missing.length && missing.length < periodMonths.length
+                    ? `No dates for ${missing.join(', ')} - fill those months in on Edit Project Details, or set default application/valuation/payment days. Using period end plus terms until then.`
+                    : 'No application calendar on this project - set the valuation and payment days on Edit Project Details, or fill in the monthly date table. Using period end plus terms until then.'
+                })()
               : (first
                   ? `val ${fmtD(first.appDate)} -> cash ${fmtD(first.date)}${previewDates.length > 1 ? `, then ${previewDates.length - 1} more` : ''}`
                   : 'From Edit Project Details.'))
