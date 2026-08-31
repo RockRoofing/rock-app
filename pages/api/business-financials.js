@@ -1186,7 +1186,8 @@ export default async function handler(req, res) {
           const nt = await refreshXeroToken(tokens.refresh_token)
           if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) }
         } catch {}
-        const r = await fetchBalanceSheetAccounts(tokens.access_token, tokens.tenant_id)
+        // 11 prior months plus the current one - a full year of REAL month ends.
+        const r = await fetchBalanceSheetAccounts(tokens.access_token, tokens.tenant_id, null, 11)
         if (!r.ok) return res.status(200).json({ ok: false, error: r.error })
         await redis.set('bs:accounts', { ...r, fetchedAt: new Date().toISOString() })
         return res.json({ ok: true, ...r })

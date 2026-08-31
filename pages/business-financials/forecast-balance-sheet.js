@@ -72,9 +72,27 @@ export default function ForecastBalanceSheet() {
     const months = fyMonths(fyEnd)
     const actualSet = new Set(oh.actualMonths || [])
 
-    // ---- OPENING POSITION, from Xero's own balance sheet ------------------------------
-    // Grouped by whatever sections that tenant's report produces, so nothing here assumes
-    // Rock Roofing's chart of accounts.
+    // ---- ACTUAL MONTH ENDS, STRAIGHT FROM XERO ---------------------------------------
+    //
+    // Twelve real month-end positions, with Xero's OWN "Net Assets" total rather than one
+    // I have summed. That distinction is the whole fix: Xero returns liabilities as
+    // POSITIVE figures under their own headings, so adding every row up gives assets PLUS
+    // liabilities. On 31 Jul that put net assets at 991,136 against a real 56,460 - and
+    // because the error sat in the opening figures it showed as the SAME 952,337 in every
+    // single month, which is what gave it away.
+    //
+    // Actual months now come from Xero and tie by definition. Only forecast months are
+    // rolled forward, and they roll from the LAST ACTUAL rather than from January.
+    const cols = bs.columns || []                       // e.g. ["31 Jul 2026","30 Jun 2026",...]
+    const netAssetsRow = Object.entries(bs.totals || {}).find(([k]) => /^net assets/i.test(k))
+    const actualNet = {}
+    if (netAssetsRow) {
+      const vals = netAssetsRow[1] || []
+      cols.forEach((c, i) => {
+        const d = new Date(c)
+        if (!isNaN(d)) actualNet[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`] = vals[i] || 0
+      })
+    }
     const accounts = bs.accounts || []
     const sum = (test) => accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase())).reduce((t, x) => t + (x.balance || 0), 0)
     const openBank = sum(s => s.includes('bank') && !/credit card|visa|mastercard|amex/.test(s))
@@ -177,13 +195,22 @@ export default function ForecastBalanceSheet() {
 
       const assets = bank + debtors + retention
       const liabs = cards + creditors + financing
+      // A CLOSED MONTH USES XERO'S FIGURE, not the model's. It is fact, so there is
+      // nothing to forecast and nothing that can disagree - and the roll-forward is
+      // re-based onto it so the first forecast month starts from the truth rather than
+      // from an accumulated drift.
+      const xeroNet = actualNet[mo]
+      const useXero = isActual && xeroNet != null
+      if (useXero) { reserves = xeroNet }
       rows.push({
-        mo, isActual, revenue, cos, overheads, net,
+        mo, isActual, fromXero: useXero, revenue, cos, overheads, net,
         bank, debtors, retention, cards, creditors, financing,
-        assets, liabs, netAssets: assets + liabs, reserves,
+        assets, liabs, netAssets: useXero ? xeroNet : (assets + liabs), reserves,
         // The whole point of the third statement. If this is not ~0 the model does not
         // tie, and saying so is more useful than a balance sheet that quietly does not.
-        check: (assets + liabs) - reserves,
+        // Only meaningful on FORECAST months. On an actual month both sides are Xero's
+        // own figure, so a tie there would prove nothing.
+        check: useXero ? 0 : (assets + liabs) - reserves,
       })
     })
     return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, hasOpening: accounts.length > 0 }
@@ -248,6 +275,9 @@ export default function ForecastBalanceSheet() {
                   <Row label="Net assets" rows={model.rows} pick={r => r.netAssets} bold band />
                   <Row label="Reserves (opening + profit)" rows={model.rows} pick={r => r.reserves} />
                   <Row label="Out by" rows={model.rows} pick={r => r.check} check />
+                  <tr><td colSpan={model.rows.length + 1} style={{ padding: '6px 8px', fontSize: 10.5, color: '#8a857c' }}>
+                    Months marked ACTUAL take Xero&apos;s own <strong>Net Assets</strong> figure, so they are fact and cannot disagree. The forecast is re-based onto the last actual, so it starts from the truth rather than from twelve months of accumulated drift.
+                  </td></tr>
                 </tbody>
               </table>
               <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 8, lineHeight: 1.45 }}>

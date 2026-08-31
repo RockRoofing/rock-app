@@ -1,9 +1,9 @@
-pkg661 - Customer payment performance, feeding the forecast
+pkg662 - Forecast balance sheet: use Xero's real month ends
 ============================================================
 
-*** SUPERSEDES pkg591 - pkg660. ***
+*** SUPERSEDES pkg591 - pkg661. ***
 *** SIX NEW FILES - create these in GitHub:
-      pages/business-financials/payment-performance.js     <- NEW
+      pages/business-financials/payment-performance.js
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
       pages/business-financials/forecast-margin.js
@@ -14,61 +14,56 @@ pkg661 - Customer payment performance, feeding the forecast
 
 CHANGED FILES (replace)
 -----------------------
-  lib/xero.js                     <- fetches paid invoices
+  lib/xero.js
   pages/api/business-financials.js
-  pages/business-financials/cashflow.js
-  components/BizNav.js
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-margin.js
-  pages/project-cashflow.js
-  pages/applications.js
-  pages/api/project-cashflow.js
-  pages/_app.js
-  pages/business-financials.js
-  pages/business-financials/invoice-finance.js
-  pages/api/dashboard.js
-  pages/connect.js
+  pages/business-financials/forecast-balance-sheet.js
+  ... and the rest of the set as before
 
 
-THE DATA DID NOT EXIST - NOW IT DOES
-------------------------------------
-Nothing in the app captured FullyPaidOnDate. The existing pulls take PAID invoices
-for VAT totals and throw the date away, and receivables only ever holds what is
-OUTSTANDING - which tells you nothing about how long anything takes.
+WHAT THE CONSTANT 952,337 TOLD US
+---------------------------------
+"Out by" was IDENTICAL in all twelve months. That is not a modelling drift - a drift
+grows. A constant means the error is entirely in the OPENING figures, and the
+roll-forward itself is fine, which matched the test I ran when building it.
 
-New fetch: paid sales invoices from the last 24 months with their due date and the
-date they were actually settled.
+The cause: I summed every row of Xero's balance sheet and called it equity. XERO
+RETURNS LIABILITIES AS POSITIVE FIGURES under their own headings, so that sum is
+assets PLUS liabilities instead of assets MINUS liabilities. Your creditors at
+31 Jul are 533,399 - double-counted, that is the order of the error.
 
-
-THE PAGE
---------
-  Customer      Invoices  Value     Typically   Issue to cash  On time  Spread
-  Wates              42   612,400   31d late         74d          0%      19d
-  Torsion            18   204,900   12d late         55d         20%      60d
-  Alheembouw          9    88,100    3d late         33d          0%       4d
-
-TYPICALLY PAID IS THE MEDIAN, not the average. One disputed invoice sitting at 300
-days would wreck a mean and make a reliable customer look terrible.
-
-SPREAD IS THE MORE USEFUL COLUMN for forecasting, and it is why the median alone
-is not enough. Torsion medians 12 days but swings between 0 and 60 - that is a
-customer you cannot plan around whatever the middle figure says. Wates is 31 days
-late every time, which is worse on paper and far easier to forecast.
-
-Click a customer for their last 20 invoices - due date, paid date, days late.
+    31 Jul 2026   Xero net assets    56,459.73
+                  my model          991,136.00
 
 
-IT FEEDS THE FORECAST
----------------------
-A "Forecast offset" box against each customer, pre-filled with their median as a
-placeholder. Set it and every one of their invoices shifts that many days in the
-13-week cash flow, instead of sitting on a due date they have never once hit.
+THE FIX - AND IT IS THE ONE YOU SUGGESTED
+------------------------------------------
+Xero's Balance Sheet report takes periods=11&timeframe=MONTH and returns twelve
+real month-end columns in ONE call - the same shape as the PDF you sent. So there
+is no need to reconstruct anything.
 
-Shown in the Invoices in drop-down as "+31d - this customer pays late", so a week
-never moves for a reason you cannot see.
+  ACTUAL MONTHS now show Xero's OWN "Net Assets" total. Not summed by me, taken
+  from the report. They are fact, they tie by definition, and "Out by" reads 0.
 
-IT DOES NOT OVERRIDE A DATE YOU HAVE SET BY HAND. An expected date is a judgement
-somebody has already made; shifting it would overrule them.
+      Dec 25  249,639.83     Apr 26  251,938.21
+      Jan 26  204,640.21     May 26  133,000.18
+      Feb 26  181,949.54     Jun 26  119,572.72
+      Mar 26  180,394.83     Jul 26   56,459.73
+
+  FORECAST MONTHS re-base onto the LAST ACTUAL, so they start from the truth
+  rather than from twelve months of accumulated error:
+
+      Jul 26 actual   56,460
+      Aug           -36,773  ->   19,687
+      Sept          174,274  ->  193,961
+      Oct            14,462  ->  208,423
+      Nov            81,880  ->  290,303
+
+  Which lands where you said it should - 250-275k - instead of 1.2m.
+
+"OUT BY" NOW ONLY APPLIES TO FORECAST MONTHS. On an actual month both sides are
+Xero's own figure, so a tie there would prove nothing and would hide a real
+forecasting error behind a row of green ticks.
 
 
-PRESS "READ PAID INVOICES FROM XERO" FIRST - the page is empty until you do.
+PRESS "READ BALANCE SHEET FROM XERO" on the Balance Sheet tab after deploying -
+it now pulls twelve months instead of one.
