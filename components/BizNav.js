@@ -13,6 +13,7 @@ const TABS = [
   ['Summary', '/business-financials'],
   ['Sales', '/business-financials/sales'],
   ['Margin', '/business-financials/margin'],
+  ['Forecast Margin', '/business-financials/forecast-margin'],
   ['Bills to Pay', '/business-financials/bills'],
   ['Invoices Owed', '/business-financials/invoices'],
   ['Retentions Due', '/business-financials/retentions-due'],

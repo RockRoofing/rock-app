@@ -956,6 +956,42 @@ export default async function handler(req, res) {
             // line items that carried the terms were never saved. So the days are a guess,
             // made VISIBLE rather than buried, and flagged so the row can say the date is
             // estimated.
+            // ACCRUAL DATES, for the forecast P&L. The cash flow needs payment dates;
+            // the P&L needs when the cost was INCURRED and when the work was VALUED.
+            // Both are already stored, so this is a second read of the same record, not
+            // new data:
+            //   revenue   valued at the period end (or each sales line's own month)
+            //   materials DELIVERED, not paid - deliverDay
+            //   labour    the END of each instalment's window, not its pay date
+            //
+            // On legacy forecasts this is MORE reliable than the cash side: matDeliverDay
+            // is a stored fact, whereas payDate had to be rebuilt from an assumed term.
+            accrual: {
+              // REVENUE SPREAD ACROSS THE PERIOD'S MONTHS, not dumped on the period end.
+              //
+              // Every sales line already carries the `month` it belongs to - that is the
+              // "Spread across the period's calendar months" grid on the forecast, and it
+              // is exactly the accrual basis. Putting the whole period's revenue on its
+              // end date gave nonsense monthly margins: 90% one month and negative the
+              // next, because costs spread while revenue did not.
+              //
+              // Falls back to the period end only where a forecast has no schedule.
+              revenueByMonth: (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length && fc.salesSchedule.some(x => x.month))
+                ? fc.salesSchedule.filter(x => x.month).map(x => ({ month: x.month, amount: Number(x.amount) || 0 }))
+                : (fc.to ? [{ month: String(fc.to).slice(0, 7), amount: Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0 }] : []),
+              revenueTo: fc.to || '',
+              revenue: Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0,
+              materials: (Array.isArray(fc.matItems) && fc.matItems.length)
+                ? fc.matItems.map(m => ({ date: m.deliverDay || '', amount: Number(m.amount != null && m.amount !== '' ? m.amount : m.value) || 0 }))
+                : (fc.matDeliverDay ? [{ date: fc.matDeliverDay, amount: Number(fc.materialsThisPeriod) || 0 }] : []),
+              labour: (Array.isArray(fc.labourSchedule) && fc.labourSchedule.length)
+                ? fc.labourSchedule.map(l => ({
+                    // "2026-08-01..2026-08-14" - the second half is when the work was done.
+                    date: (typeof l.window === 'string' && l.window.includes('..')) ? l.window.split('..')[1] : (l.date || ''),
+                    amount: Number(l.amount) || 0,
+                  }))
+                : (fc.to ? [{ date: fc.to, amount: Number(fc.labourThisPeriod) || 0 }] : []),
+            },
             matItems: (!Array.isArray(fc.matItems) || !fc.matItems.length)
               ? (fc.matDeliverDay && (fc.materialsThisPeriod || 0) > 0
                   ? [{ date: payFromDeliver(fc.matDeliverDay, legacyMatDays), amount: Number(fc.materialsThisPeriod) || 0, undated: false, unresolved: false, estimatedTerm: true, deliverDay: fc.matDeliverDay, raw: Number(fc.materialsThisPeriod) || 0 }]

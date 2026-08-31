@@ -1,67 +1,77 @@
-pkg642 - Show the actual error instead of "a client-side exception"
-====================================================================
+pkg643 - Forecast gross margin (accrual), plus the error boundary
+==================================================================
 
-*** SUPERSEDES pkg591 - pkg641. ***
-*** TWO NEW FILES - create these in GitHub:
-      components/PageErrorBoundary.js
+*** SUPERSEDES pkg591 - pkg642. ***
+*** THREE NEW FILES - create these in GitHub:
+      pages/business-financials/forecast-margin.js
       pages/business-financials/balance-sheet.js
+      components/PageErrorBoundary.js
 ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/_app.js                           <- wraps every page
-  pages/project-cashflow.js
-  pages/business-financials/cashflow.js
-  pages/business-financials/balance-sheet.js
-  pages/api/business-financials.js
-  pages/business-financials.js
   components/BizNav.js
-  lib/xero.js
+  pages/_app.js
+  pages/api/business-financials.js
+  pages/project-cashflow.js
+  pages/business-financials.js
+  pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
   pages/api/dashboard.js
   pages/connect.js
-  pages/business-financials/invoice-finance.js
-
-NEW FILES (create)
-------------------
-  components/PageErrorBoundary.js
-  pages/business-financials/balance-sheet.js
+  lib/xero.js
 
 
-I COULD NOT FIND IT BY READING
-------------------------------
-I went through everything I changed on that page today - todayKey moved above the
-memos, needsUpdate, the focus filter, the bar click, the stale badge, the prior
-selection - and checked each identifier is declared before use and every array
-access guarded. All of it compiles and all of it reads correctly. So rather than a
-sixth theory, this makes the page tell us.
+FORECAST MARGIN - A NEW TAB
+---------------------------
+You were right that the data is already there. It needed no new inputs, only a
+second read of the same records on different dates:
 
-A production Next build replaces every render error with "a client-side exception
-has occurred". That single sentence has now cost us three round trips on three
-different pages. There is no good reason the person using the page is the only one
-who cannot see what went wrong.
+    revenue    the MONTH each sales line belongs to - the "Spread across the
+               period's calendar months" grid on the forecast
+    materials  DELIVERED (deliverDay), not paid
+    labour     the END of each instalment's window, not its pay date
 
-pages/_app.js now wraps every page in an error boundary that shows:
-
-  - the real message, e.g. "Cannot read properties of undefined (reading 'has')"
-  - which component it happened in, collapsed under "Where it happened"
-  - Try again, and Reload
-
-Deploy this, open the project cash flow, and SEND ME THE RED BOX. That names the
-fault outright and I will fix it in one go.
-
-ReportProblemButton deliberately sits OUTSIDE the boundary so it still works on a
-page that has failed.
-
-This is worth keeping permanently, not just for today - every future render error
-on any page in the portal now identifies itself.
+So the same forecast feeds both: a period paid in December for work valued in
+September sits in September here and December on the cash flow, and both are right.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg641 - "J190 - Russell Hill" instead of "L:190"; click a project in the cash
-flow table for a month-by-month breakdown.
-pkg640 - Project cash flows table; CIS marked "est" where predicted; RISK - pay me
-later, delaying receipts by N weeks while money out stays put.
-pkg639 - "CASH FLOW TO BE UPDATED" on the project timeline, and the correction that
-an elapsed period drops its SALES but keeps its COSTS.
+A REAL PROBLEM CAUGHT WHILE BUILDING IT
+---------------------------------------
+My first version put a whole period's revenue on its END DATE while costs spread
+across months. That gave 90% margin one month and negative the next - true
+arithmetic, meaningless commercially. Every sales line already carries its month,
+so revenue now spreads exactly as the forecast says.
+
+    Aug   rev 20,859   lab 17,000                margin  3,859   19%
+    Sep   rev 20,859   lab  8,585                margin 12,274   59%
+    Oct   rev 20,859   mat 42,441                margin -21,582 -103%
+    Nov   rev 20,858                             margin 20,858  100%
+    TOTAL rev 83,435   cost 68,026               margin 15,409   18%
+
+MONTHLY IS STILL LUMPY and the page says so: materials are taken when delivered,
+so one delivery lands wholly in one month. The TOTAL is the figure to judge. That
+is accrual accounting behaving normally, not a fault - and better said plainly
+than smoothed over.
+
+
+IT CALLS OUT AN IMPLAUSIBLE MARGIN
+----------------------------------
+Above 35% it says so outright, with the arithmetic: at 20% the cost on your
+revenue would be X against Y forecast, so roughly Z is unaccounted for. A margin
+figure looks authoritative in a way a cash figure does not, so an unbelievable one
+has to announce itself.
+
+LEGACY FORECASTS ARE MORE ACCURATE HERE than on the cash flow - matDeliverDay is a
+stored fact, whereas the payment date had to be rebuilt from an assumed term.
+
+NOT INCLUDED: overheads, depreciation, accruals. This is GROSS margin. Overheads
+from Budgets are the next step to operating profit.
+
+
+ALSO - THE ERROR BOUNDARY (pkg642)
+----------------------------------
+Every page now shows the REAL error instead of "a client-side exception has
+occurred". Deploy this, open the project cash flow, and send me the red box - that
+names the fault outright.
