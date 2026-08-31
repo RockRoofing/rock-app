@@ -16,6 +16,7 @@ const TABS = [
   ['Forecast Margin', '/business-financials/forecast-margin'],
   ['Bills to Pay', '/business-financials/bills'],
   ['Invoices Owed', '/business-financials/invoices'],
+  ['Payment Perf', '/business-financials/payment-performance'],
   ['Retentions Due', '/business-financials/retentions-due'],
   ['VAT Refund', '/business-financials/vat-refund'],
   ['Budgets', '/business-financials/budgets'],

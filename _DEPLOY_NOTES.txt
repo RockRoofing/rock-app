@@ -1,8 +1,9 @@
-pkg660 - Drop-downs on Materials, Labour, CIS and VAT
-======================================================
+pkg661 - Customer payment performance, feeding the forecast
+============================================================
 
-*** SUPERSEDES pkg591 - pkg659. ***
-*** FIVE NEW FILES - create these in GitHub:
+*** SUPERSEDES pkg591 - pkg660. ***
+*** SIX NEW FILES - create these in GitHub:
+      pages/business-financials/payment-performance.js     <- NEW
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
       pages/business-financials/forecast-margin.js
@@ -13,63 +14,61 @@ pkg660 - Drop-downs on Materials, Labour, CIS and VAT
 
 CHANGED FILES (replace)
 -----------------------
+  lib/xero.js                     <- fetches paid invoices
+  pages/api/business-financials.js
   pages/business-financials/cashflow.js
+  components/BizNav.js
   pages/business-financials/forecast-pl.js
   pages/business-financials/forecast-margin.js
-  pages/api/business-financials.js
   pages/project-cashflow.js
   pages/applications.js
   pages/api/project-cashflow.js
-  components/BizNav.js
   pages/_app.js
   pages/business-financials.js
   pages/business-financials/invoice-finance.js
   pages/api/dashboard.js
   pages/connect.js
-  lib/xero.js
 
 
-YOUR CIS QUESTION - YES
------------------------
-pkg653 wired it. Forecast labour is GROSS, so:
+THE DATA DID NOT EXIST - NOW IT DOES
+------------------------------------
+Nothing in the app captured FullyPaidOnDate. The existing pulls take PAID invoices
+for VAT totals and throw the date away, and receivables only ever holds what is
+OUTSTANDING - which tells you nothing about how long anything takes.
 
-    J190 gross 25,585  ->  Labour out 20,468  +  CIS to HMRC 5,117
-
-The 20% taken off the labour column IS the figure in the CIS column, paid on the
-22nd of the month after. The two add back to the gross.
-
-
-1 + 2. MATERIALS OUT AND LABOUR OUT
------------------------------------
-Both open the SAME per-project breakdown the Project sales figure opens - it
-already carries sales, materials and labour together with cost %. A separate table
-would have been the same numbers twice and one more thing to keep in step.
+New fetch: paid sales invoices from the last 24 months with their due date and the
+date they were actually settled.
 
 
-3. CIS TO HMRC
---------------
-    Labour paid in Sept 26 -> HMRC 22/10/26
-      AJ Roofing             bill, net                 4,000    1,000
-      J190 - Russell Hill    forecast labour, gross   25,585    5,117
-      J247 - Kilburn Square  forecast labour, gross   12,000    2,400
-      Paid 22/10/26                                             8,517
+THE PAGE
+--------
+  Customer      Invoices  Value     Typically   Issue to cash  On time  Spread
+  Wates              42   612,400   31d late         74d          0%      19d
+  Torsion            18   204,900   12d late         55d         20%      60d
+  Alheembouw          9    88,100    3d late         33d          0%       4d
 
-THE BASIS IS NAMED ON EVERY LINE, because the two are not the same sum and that is
-the whole reason this was wrong twice:
+TYPICALLY PAID IS THE MEDIAN, not the average. One disputed invoice sitting at 300
+days would wreck a mean and make a reliable customer look terrible.
 
-    bill, net              already net of CIS  ->  value x 20/80
-    forecast labour, gross gross of CIS        ->  value x 20%
+SPREAD IS THE MORE USEFUL COLUMN for forecasting, and it is why the median alone
+is not enough. Torsion medians 12 days but swings between 0 and 60 - that is a
+customer you cannot plan around whatever the middle figure says. Wates is 31 days
+late every time, which is worse on paper and far easier to forecast.
 
-Grouped by the month the labour was paid, so you can see which month each HMRC
-payment settles.
+Click a customer for their last 20 invoices - due date, paid date, days late.
 
 
-4. VAT IN
----------
-    VAT month   Where it came from                                  Amount
-    Sept 26     Filed return - Box 5 as submitted                   18,193
-    Oct 26      Estimated reclaim: forecast materials and bills
-                that month x 20/120                                 14,513
+IT FEEDS THE FORECAST
+---------------------
+A "Forecast offset" box against each customer, pre-filled with their median as a
+placeholder. Set it and every one of their invoices shifts that many days in the
+13-week cash flow, instead of sitting on a due date they have never once hit.
 
-Says outright which is fact and which is a forecast, and shows the actual
-calculation for the estimate rather than just labelling it "est".
+Shown in the Invoices in drop-down as "+31d - this customer pays late", so a week
+never moves for a reason you cannot see.
+
+IT DOES NOT OVERRIDE A DATE YOU HAVE SET BY HAND. An expected date is a judgement
+somebody has already made; shifting it would overrule them.
+
+
+PRESS "READ PAID INVOICES FROM XERO" FIRST - the page is empty until you do.

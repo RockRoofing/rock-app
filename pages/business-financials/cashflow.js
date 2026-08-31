@@ -691,13 +691,24 @@ export default function CashFlow() {
       // your labour or HMRC wait. Shifting both would just slide the whole picture and
       // show nothing. Applied by testing an EARLIER date against this week, which moves
       // the receipt later without touching the stored dates.
-      const inWkIn = (dstr) => {
+      // PER-CUSTOMER OFFSET on top of the global risk shift.
+      //
+      // Measured on the Payment Performance tab: how many days that customer actually
+      // takes beyond the due date. Scheduling everyone on their stated terms is an
+      // assumption nobody has tested - a customer who is reliably 20 days late should sit
+      // 20 days later in the forecast, not on a date they have never once hit.
+      //
+      // Only applies where a date has NOT been set by hand: an expected date is a
+      // judgement somebody has already made, and shifting it would overrule them.
+      const inWkIn = (dstr, extraDays = 0) => {
         if (!dstr) return false
-        if (!riskDays) return inWk(dstr)
-        const d = new Date(dstr); d.setDate(d.getDate() + riskDays)
+        const add = riskDays + (Number(extraDays) || 0)
+        if (!add) return inWk(dstr)
+        const d = new Date(dstr); d.setDate(d.getDate() + add)
         const shifted = isoDay(d)
         return shifted >= s && shifted <= e
       }
+      const offsetFor = (i) => i.expectedDate ? 0 : (Number((data.custOffsets || {})[i.contact]) || 0)
       // OVERDUE LANDS IN WEEK 1, for money out as well as money in.
       //
       // A date before the horizon is not "never" - it is late, and late money out is the
@@ -726,11 +737,12 @@ export default function CashFlow() {
         if (excluded[invKey(i)]) continue
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) arrInvoices += (i.amountDue || 0)
-        else if (inWkIn(d)) {
+        else if (inWkIn(d, offsetFor(i))) {
           invoicesIn += (i.amountDue || 0)
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
           invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
             project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate,
+            offset: offsetFor(i),
             // The full invoice, so a part-paid one is obvious - the column only ever
             // showed what is still outstanding.
             total: i.total || 0 })
@@ -1476,6 +1488,7 @@ export default function CashFlow() {
                                     difference matters when a week looks optimistic. */}
                                 <td style={{ padding: '3px 6px', color: x.expected ? '#0f766e' : '#999' }}>
                                   {x.due ? fmtDMY(x.due) : '-'}{x.expected ? ' (expected)' : ' (due date)'}
+                                  {x.offset ? <div style={{ fontSize: 9.5, color: '#b45309' }}>+{x.offset}d - this customer pays late</div> : null}
                                 </td>
                                 {/* Amber where part of it has already been paid - the two
                                     figures differing is the only sign of that. */}
