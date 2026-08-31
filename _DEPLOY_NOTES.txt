@@ -1,7 +1,7 @@
-pkg657 - P&L revenue is now GROSS of retention
-===============================================
+pkg659 - Bills out drop-down
+=============================
 
-*** SUPERSEDES pkg591 - pkg656. ***
+*** SUPERSEDES pkg591 - pkg658. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -13,10 +13,10 @@ pkg657 - P&L revenue is now GROSS of retention
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js            <- the fix
+  pages/business-financials/cashflow.js
   pages/business-financials/forecast-pl.js
   pages/business-financials/forecast-margin.js
-  pages/business-financials/cashflow.js
+  pages/api/business-financials.js
   pages/project-cashflow.js
   pages/applications.js
   pages/api/project-cashflow.js
@@ -29,49 +29,39 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-YOU ARE RIGHT, AND IT WAS A REAL FAULT
----------------------------------------
-Both pages read salesSchedule.amount, which is revenueThisPeriod - NET of
-retention. Correct for the cash flow, because retention is not received. Wrong for
-the P&L, where retention is a DEBTOR: earned at the valuation date, simply not yet
-paid.
+CLICK ANY BILLS OUT FIGURE
+--------------------------
+    Supplier                Project              Reference   Date used    Bill value  Still due
+    Travis Perkins          J240 Market Drayton  INV-88213   (planned)      12,000     12,000
+    SIG Roofing             J190 Russell Hill    INV-77104   (due date)      8,500      5,200
+                                                                        3,300 already paid
+    AJ Roofing CIS          J247 Kilburn         SC-4471     (planned)       4,000      4,000
+    Total (3)                                                              24,500     21,200
 
-    J248, one period
-      certified gross            39,304.99
-      salesSchedule carried      38,125.84   <- what the P&L was using
-      understated by              1,179.15   = 3%, on every period
+Everything you asked for - supplier, project, reference, date used - plus two
+things that came out of building it.
 
-Now grossed up using each forecast's OWN retentionPct, not an assumed rate:
+BILL VALUE vs STILL DUE. Where they differ the row turns amber and says how much
+has already been paid. The column only ever showed the outstanding balance, so a
+part-paid bill looked like a small one.
 
-    stored as 3     -> 38,125.84 -> 39,304.99
-    stored as 0.03  -> 38,125.84 -> 39,304.99
-    stored as 0     -> unchanged
-
-That handles the fraction-versus-percentage trap in both directions - retentionPct
-is a fraction on some records and a percentage on others.
-
-
-THE THREE STATEMENTS NOW TIE
-----------------------------
-  P&L revenue     39,304.99 gross, in the valuation month
-  Balance sheet   debtor 38,125.84 + retention held 1,179.15 = 39,304.99
-  Cash flow       38,125.84 on the payment date; the retention arrives later
-
-Revenue equals what is collected plus what is held back, which is what makes the
-three-way tie. Before this the P&L was 3% light against a debtors figure that DID
-include retention - so "Out by" on the forecast balance sheet would have shown a
-difference growing month on month, and it would have been genuinely hard to trace.
-
-The cash flow is UNCHANGED and still uses the net figure - that is right there.
-
-Both pages now say "gross of retention" on the revenue line, so the two figures
-never look like they ought to agree.
+CIS MARKER on any bill carrying a deduction, because that bill has a second
+payment behind it - the 20% leaves separately in the CIS to HMRC column on the
+22nd of the following month. Seeing 4,000 without knowing another 1,000 follows
+it is the sort of thing that makes a week look cheaper than it is.
 
 
-AND ON YOUR ORIGINAL QUESTION
------------------------------
-The P&L and the cash flow will still not match, for three reasons that are all
-correct: the P&L takes revenue in the month VALUED while the cash flow takes it in
-the week PAID; the P&L runs Dec-Nov while the cash flow is 13 weeks; and the cash
-flow nets real invoices off and drops superseded periods. Same money, different
-questions.
+"(PLANNED)" vs "(DUE DATE)"
+---------------------------
+Same marker as the invoices drop-down. "(due date)" means Xero's date is being
+used because no planned payment date has been set - it assumes you pay exactly on
+terms. "(planned)" means somebody decided. A week full of due dates is a week
+built on assumptions, and you could not tell before.
+
+The arrears row keeps its own existing breakdown; every other week gets this one.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg658 - invoice value alongside still due in the Invoices in drop-down.
+pkg657 - P&L revenue GROSS of retention, so the three statements tie.

@@ -339,6 +339,7 @@ export default function CashFlow() {
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
   const [openInvWk, setOpenInvWk] = useState(null)       // which week's invoices are open
+  const [openBillWk, setOpenBillWk] = useState(null)     // which week's bills are open
   const [openArrears, setOpenArrears] = useState(false)  // arrears row broken out by bill
   const [openProj, setOpenProj] = useState(null)          // project row expanded to months
   const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
@@ -717,7 +718,10 @@ export default function CashFlow() {
           invoicesIn += (i.amountDue || 0)
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
           invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
-            project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate })
+            project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate,
+            // The full invoice, so a part-paid one is obvious - the column only ever
+            // showed what is still outstanding.
+            total: i.total || 0 })
         }
       }
       const overdueIn = w === 0
@@ -760,8 +764,22 @@ export default function CashFlow() {
         .sort((a, b) => b.amount - a.amount)
       // (Certified-but-uninvoiced cost is carried by the ARREARS row, not added to week 1's
       // bills as well - adding it in both places would count it twice.)
-      const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
-        .reduce((a, i) => a + (i.amountDue || 0), 0)
+      const billDetail = (data.bills || [])
+        .filter(i => !excluded[i.id] && inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+        .map(i => ({
+          name: i.contact || i.supplier || '(no supplier)',
+          project: i.project || '',
+          ref: i.reference || i.invoiceNumber || '',
+          amount: i.amountDue || 0,
+          total: i.total || 0,
+          date: (billOverrides[i.id] || i.payDate || i.dueDate) || '',
+          // Which of the three dates put it in this week - a planned date is a decision,
+          // a due date is just Xero's assumption that you pay on terms.
+          basis: billOverrides[i.id] ? 'planned' : (i.payDate ? 'planned' : 'due date'),
+          cis: !!cisFlags[i.id],
+        }))
+        .sort((a, b) => b.amount - a.amount)
+      const billsOut = billDetail.reduce((a, i) => a + i.amount, 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       // Per-week overhead breakdown by code (for the click-to-expand detail).
       const ohDetailMap = {}
@@ -930,7 +948,7 @@ export default function CashFlow() {
         invoicesIn: Math.round(invoicesIn), invDetail: invDetail.sort((a, b) => b.amount - a.amount),
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         vatEstimated, vatSrcs, cisEstimated,
-        bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
@@ -1369,11 +1387,11 @@ export default function CashFlow() {
                           but-uninvoiced cost. Clicking opens exactly what it is made of,
                           rather than sending you to the table below to match by eye. */}
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc', cursor: (r.arrears && r.bills) ? 'pointer' : 'default',
-                        textDecoration: (r.arrears && r.bills) ? 'underline dotted #e5b4b4' : 'none' }}
-                        onClick={() => r.arrears && r.bills && setOpenArrears(v => !v)}
-                        title={(r.arrears && r.bills) ? 'Click to see which bills and projects' : ''}>
+                        textDecoration: r.bills ? 'underline dotted #e5b4b4' : 'none' }}
+                        onClick={() => { if (!r.bills) return; if (r.arrears) setOpenArrears(v => !v); else setOpenBillWk(openBillWk === i ? null : i) }}
+                        title={r.bills ? 'Click to see which bills' : ''}>
                         {r.bills ? gbp(-r.bills) : '-'}
-                        {r.arrears && r.bills ? <span style={{ fontSize: 9, color: '#999' }}> {openArrears ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.bills ? <span style={{ fontSize: 9, color: '#999' }}> {(r.arrears ? openArrears : openBillWk === i) ? '\u25B2' : '\u25BC'}</span> : null}
                       </td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc', cursor: r.overheads ? 'pointer' : 'default', textDecoration: r.overheads ? 'underline dotted' : 'none' }}
                         onClick={() => r.overheads && setOpenOhWk(openOhWk === i ? null : i)}
@@ -1419,7 +1437,8 @@ export default function CashFlow() {
                             <th style={{ textAlign: 'left', padding: '3px 6px' }}>Invoice</th>
                             <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
                             <th style={{ textAlign: 'left', padding: '3px 6px' }}>Date used</th>
-                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Invoice value</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Still due</th>
                           </tr></thead>
                           <tbody>
                             {(forecast[openInvWk].invDetail || []).map((x, k) => (
@@ -1432,6 +1451,13 @@ export default function CashFlow() {
                                 <td style={{ padding: '3px 6px', color: x.expected ? '#0f766e' : '#999' }}>
                                   {x.due ? fmtDMY(x.due) : '-'}{x.expected ? ' (expected)' : ' (due date)'}
                                 </td>
+                                {/* Amber where part of it has already been paid - the two
+                                    figures differing is the only sign of that. */}
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: (x.total && Math.abs(x.total - x.amount) > 0.5) ? '#b45309' : '#777' }}>
+                                  {x.total ? gbp(x.total) : '-'}
+                                  {x.total && Math.abs(x.total - x.amount) > 0.5
+                                    ? <div style={{ fontSize: 9.5 }}>{gbp(x.total - x.amount)} already paid</div> : null}
+                                </td>
                                 <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{gbp(x.amount)}</td>
                               </tr>
                             ))}
@@ -1439,11 +1465,57 @@ export default function CashFlow() {
                           <tfoot><tr style={{ borderTop: '1px solid #cfe3d6', fontWeight: 700 }}>
                             <td style={{ padding: '3px 6px' }}>Total ({(forecast[openInvWk].invDetail || []).length})</td>
                             <td colSpan={3}></td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#777' }}>{gbp((forecast[openInvWk].invDetail || []).reduce((a, x) => a + (x.total || 0), 0))}</td>
                             <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{gbp(forecast[openInvWk].invoicesIn)}</td>
                           </tr></tfoot>
                         </table>
                         <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
                           &quot;(due date)&quot; means Xero&apos;s date is being used because no expected date has been set. Set one in the Invoices owed table below and it moves to the week you actually expect it.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {openBillWk != null && forecast[openBillWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#fdf7f2', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Bills due in {forecast[openBillWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Supplier</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Reference</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Date used</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Bill value</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Still due</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openBillWk].billDetail || []).map((x, k) => (
+                              <tr key={k} style={{ borderTop: '1px solid #f2e8e0' }}>
+                                <td style={{ padding: '3px 6px' }}>{x.name}{x.cis ? <span style={{ color: '#ea580c', fontSize: 9.5, fontWeight: 700 }}> CIS</span> : null}</td>
+                                <td style={{ padding: '3px 6px', color: '#777' }}>{x.project || '-'}</td>
+                                <td style={{ padding: '3px 6px', color: '#777' }}>{x.ref || '-'}</td>
+                                <td style={{ padding: '3px 6px', color: x.basis === 'planned' ? '#0f766e' : '#999' }}>
+                                  {x.date ? fmtDMY(x.date) : '-'} ({x.basis})
+                                </td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: (x.total && Math.abs(x.total - x.amount) > 0.5) ? '#b45309' : '#777' }}>
+                                  {x.total ? gbp(x.total) : '-'}
+                                  {x.total && Math.abs(x.total - x.amount) > 0.5
+                                    ? <div style={{ fontSize: 9.5 }}>{gbp(x.total - x.amount)} already paid</div> : null}
+                                </td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot><tr style={{ borderTop: '1px solid #eddcd0', fontWeight: 700 }}>
+                            <td style={{ padding: '3px 6px' }}>Total ({(forecast[openBillWk].billDetail || []).length})</td>
+                            <td colSpan={3}></td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#777' }}>{gbp((forecast[openBillWk].billDetail || []).reduce((a, x) => a + (x.total || 0), 0))}</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-forecast[openBillWk].bills)}</td>
+                          </tr></tfoot>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          &quot;(due date)&quot; means Xero&apos;s date is being used because no planned payment date has been set - it assumes you pay exactly on terms. Set one in the Bills to pay table below to move it to the week you intend. CIS marks a bill carrying a deduction; the 20% goes out separately in the CIS to HMRC column.
                         </div>
                       </td>
                     </tr>
