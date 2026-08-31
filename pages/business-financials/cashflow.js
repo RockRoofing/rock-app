@@ -338,6 +338,7 @@ export default function CashFlow() {
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
+  const [openInvWk, setOpenInvWk] = useState(null)       // which week's invoices are open
   const [openArrears, setOpenArrears] = useState(false)  // arrears row broken out by bill
   const [openProj, setOpenProj] = useState(null)          // project row expanded to months
   const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
@@ -707,11 +708,17 @@ export default function CashFlow() {
       // looks like an ordinary week otherwise.
       const isArrears = (d) => w === 0 && d && d < s
       let invoicesIn = 0, arrInvoices = 0
+      const invDetail = []
       for (const i of (data.receivables || [])) {
         if (excluded[invKey(i)]) continue
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) arrInvoices += (i.amountDue || 0)
-        else if (inWkIn(d)) invoicesIn += (i.amountDue || 0)
+        else if (inWkIn(d)) {
+          invoicesIn += (i.amountDue || 0)
+          // Kept so the week can say WHICH invoices, the same way Overheads out does.
+          invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
+            project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate })
+        }
       }
       const overdueIn = w === 0
         ? (data.receivables || []).filter(i => { const d = i.expectedDate || i.dueDate || ''; return d && d < s }).reduce((a, i) => a + (i.amountDue || 0), 0)
@@ -920,7 +927,8 @@ export default function CashFlow() {
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
-        invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
+        invoicesIn: Math.round(invoicesIn), invDetail: invDetail.sort((a, b) => b.amount - a.amount),
+        retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         vatEstimated, vatSrcs, cisEstimated,
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
@@ -1341,7 +1349,14 @@ export default function CashFlow() {
                             incl {gbp(r.awaiting)} certified, awaiting invoice
                           </div>
                         )}</td>
-                      <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
+                      {/* Same treatment as Overheads out - a week's total is not much use
+                          without knowing which customers it is waiting on. */}
+                      <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc', cursor: r.invoicesIn ? 'pointer' : 'default' }}
+                        onClick={() => r.invoicesIn && setOpenInvWk(openInvWk === i ? null : i)}
+                        title={r.invoicesIn ? 'Click to see which invoices' : ''}>
+                        {r.invoicesIn ? gbp(r.invoicesIn) : '-'}
+                        {r.invoicesIn ? <span style={{ fontSize: 9, color: '#999' }}> {openInvWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of
                           numbers. Anything not from a filed return is labelled. */}
@@ -1394,6 +1409,46 @@ export default function CashFlow() {
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
                   ))}
+                  {openInvWk != null && forecast[openInvWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#f4faf6', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Invoices due in {forecast[openInvWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Customer</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Invoice</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Date used</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openInvWk].invDetail || []).map((x, k) => (
+                              <tr key={k} style={{ borderTop: '1px solid #e8f0ea' }}>
+                                <td style={{ padding: '3px 6px' }}>{x.name}</td>
+                                <td style={{ padding: '3px 6px', color: '#777' }}>{x.ref || '-'}</td>
+                                <td style={{ padding: '3px 6px', color: '#777' }}>{x.project || '-'}</td>
+                                {/* Whether this is a date you set or Xero's due date - the
+                                    difference matters when a week looks optimistic. */}
+                                <td style={{ padding: '3px 6px', color: x.expected ? '#0f766e' : '#999' }}>
+                                  {x.due ? fmtDMY(x.due) : '-'}{x.expected ? ' (expected)' : ' (due date)'}
+                                </td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{gbp(x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot><tr style={{ borderTop: '1px solid #cfe3d6', fontWeight: 700 }}>
+                            <td style={{ padding: '3px 6px' }}>Total ({(forecast[openInvWk].invDetail || []).length})</td>
+                            <td colSpan={3}></td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{gbp(forecast[openInvWk].invoicesIn)}</td>
+                          </tr></tfoot>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          &quot;(due date)&quot; means Xero&apos;s date is being used because no expected date has been set. Set one in the Invoices owed table below and it moves to the week you actually expect it.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
                   {openArrears && forecast[0] && forecast[0].arrears && (
                     <tr>
                       <td colSpan={14} style={{ background: '#fffbeb', padding: '10px 14px' }}>
