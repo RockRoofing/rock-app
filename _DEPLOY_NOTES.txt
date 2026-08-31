@@ -1,7 +1,7 @@
-pkg663 - The Net Assets row was not being found
-================================================
+pkg664 - "0 monthly columns" - the response was dropping them
+==============================================================
 
-*** SUPERSEDES pkg591 - pkg662. ***
+*** SUPERSEDES pkg591 - pkg663. ***
 *** SIX NEW FILES - create these in GitHub:
       pages/business-financials/payment-performance.js
       pages/business-financials/forecast-balance-sheet.js
@@ -14,47 +14,48 @@ pkg663 - The Net Assets row was not being found
 
 CHANGED FILES (replace)
 -----------------------
-  lib/xero.js
-  pages/business-financials/forecast-balance-sheet.js
+  pages/api/business-financials.js        <- the fix, one line
   ... and the rest of the set as before
 
 
-STILL WRONG, AND HERE IS WHY
-----------------------------
-The actual months are still showing MY summed figure, not Xero's - net assets
-1,083,146 at Jul against a real 56,460, and "Out by" still constant.
+THE CHECK PANEL FOUND IT IN ONE GO
+----------------------------------
+"0 monthly columns, 0 total rows found" - on a payload that contained both.
 
-pkg662 IS deployed (the new note about ACTUAL months is on your screenshot), so
-the fetch ran. What did not happen is the MATCH: my parser only looked for a
-handful of exact labels at two levels of nesting. If Xero words the row
-differently, or nests it one level deeper, nothing matched - and the page fell
-back to my own sum silently, which is the very fault it was meant to fix.
+The refresh writes everything Xero returned:
 
-I checked the date parsing first: "31 Jul 2026" parses correctly, so the columns
-are not the problem.
+    await redis.set('bs:accounts', { ...r, fetchedAt: ... })     <- correct
+
+But the READ whitelists what it sends back to the page:
+
+    accounts, asAt, fetchedAt, items, assumptions                <- columns and
+                                                                    totals dropped
+
+So the twelve monthly columns and Xero's Net Assets row were fetched, stored, and
+then thrown away on the way out. The page was working correctly on data it never
+received.
+
+FOURTH TIME THIS EXACT FAULT HAS APPEARED IN THIS FILE - the finance config
+whitelist, the manual balances whitelist, the invoice-finance settings, and now
+this. Storing more than you return is silent by nature: nothing errors, the field
+is simply absent.
+
+I swept the file for other write-then-drop mismatches. bs:accounts was the only
+spread write, and the paid-invoices and cash-commitments endpoints return the same
+shape they store.
 
 
-TWO CHANGES
------------
-1. EVERY summary row is now captured, at any depth, whatever it is called -
-   rather than a fixed list of labels.
-
-2. The page prefers "Net Assets", then anything containing it, then "Total Capital
-   and Reserves" - which is the same figure from the other side of the sheet, and
-   is what sits underneath it on your PDF. Both routes give 56,459.73.
-
-
-AND IT NOW SHOWS ITS WORKING
-----------------------------
-A check panel at the top of the page:
+WHAT YOU SHOULD SEE
+-------------------
+The check panel turns GREEN:
 
     Xero balance sheet check - 8 monthly columns, 6 total rows found
-      Columns: 31 Jul 2026 | 30 Jun 2026 | ...
-      Total rows Xero gave:
-        Net Assets: 56,460 | 119,573 | 133,000 | ...
-      Matched to months: 2026-07, 2026-06, ...
+      Net Assets: 56,460 | 119,573 | 133,000 | 251,938 | ...
+      Matched to months: 2026-07, 2026-06, 2026-05, ...
 
-Green when it found both, amber when it did not. If the actual months are still
-wrong after this, open that panel and send it - it says outright whether the
-columns came through, which total rows Xero gave, and which months they matched
-to. No more guessing at the shape of somebody else's report.
+and the ACTUAL columns become Xero's real figures - 56,460 at July, not 889,966 -
+with "Out by" reading 0 on those months. The forecast then re-bases from July and
+should land near the 250-275k you expected.
+
+No need to press Read balance sheet again - the data is already in Redis. It just
+could not get out.

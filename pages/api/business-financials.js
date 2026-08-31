@@ -1235,7 +1235,13 @@ export default async function handler(req, res) {
       redis.get('config:bs-assumptions').then(v => v || null).catch(() => null),
     ])
     return res.json({
+      // columns and totals HAVE to be listed here. The refresh stores them, but this
+      // response whitelists what it sends back - so they were written to Redis and then
+      // dropped on the way out, and the page reported "0 monthly columns, 0 total rows"
+      // on a payload that contained both. Same shape of fault as the finance config
+      // whitelist, and the fourth time it has bitten in this file.
       accounts: bsAccounts?.accounts || [], asAt: bsAccounts?.asAt || null,
+      columns: bsAccounts?.columns || [], totals: bsAccounts?.totals || {},
       fetchedAt: bsAccounts?.fetchedAt || null, items: bsItems,
       assumptions: bsAssumptions || { debtorDays: 45, creditorDays: 45, retentionPct: 3, retentionMonths: 12, map: {} },
     })
