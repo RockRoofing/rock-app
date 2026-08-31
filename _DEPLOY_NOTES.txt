@@ -1,16 +1,18 @@
-pkg641 - Project names, and a month-by-month breakdown per project
-===================================================================
+pkg642 - Show the actual error instead of "a client-side exception"
+====================================================================
 
-*** SUPERSEDES pkg591 - pkg640. ***
-*** ONE NEW FILE - create it in GitHub:
+*** SUPERSEDES pkg591 - pkg641. ***
+*** TWO NEW FILES - create these in GitHub:
+      components/PageErrorBoundary.js
       pages/business-financials/balance-sheet.js
 ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
+  pages/_app.js                           <- wraps every page
   pages/project-cashflow.js
+  pages/business-financials/cashflow.js
   pages/business-financials/balance-sheet.js
   pages/api/business-financials.js
   pages/business-financials.js
@@ -20,48 +22,46 @@ CHANGED FILES (replace)
   pages/connect.js
   pages/business-financials/invoice-finance.js
 
-
-1. "J190 - RUSSELL HILL", NOT "L:190"
--------------------------------------
-projectName is blank whenever the dashboard cache has not named that job, and the
-fallback was projectKey - the raw Redis key, which means nothing to read.
-
-    J190 + Russell Hill        ->  J190 - Russell Hill
-    number only, no name       ->  190
-    neither                    ->  190          (key, stripped of "L:")
-    name already has the no.   ->  J240 Market Drayton   (not printed twice)
-    negotiated N:8335          ->  8335
+NEW FILES (create)
+------------------
+  components/PageErrorBoundary.js
+  pages/business-financials/balance-sheet.js
 
 
-2. CLICK A PROJECT FOR ITS MONTHS
----------------------------------
-Every row opens to show sales in, materials out, labour out, net and cost % BY
-MONTH:
+I COULD NOT FIND IT BY READING
+------------------------------
+I went through everything I changed on that page today - todayKey moved above the
+memos, needsUpdate, the focus filter, the bar click, the stale badge, the prior
+selection - and checked each identifier is declared before use and every array
+access guarded. All of it compiles and all of it reads correctly. So rather than a
+sixth theory, this makes the page tell us.
 
-    J190 - Russell Hill
-       Sept 26   sales 184,148   mat      -   lab  9,327   cost  5%
-       Oct 26    sales  87,500   mat 65,630   lab 11,069   cost 88%
+A production Next build replaces every render error with "a client-side exception
+has occurred". That single sentence has now cost us three round trips on three
+different pages. There is no good reason the person using the page is the only one
+who cannot see what went wrong.
 
-Which is more useful than the project total, because the total averages the two.
-A month at 5% has its materials missing; a month at 88% is behaving normally. On
-the total those cancel out to something unremarkable.
+pages/_app.js now wraps every page in an error boundary that shows:
 
-Collected in the same pass that builds the table, so it costs nothing extra and
-cannot disagree with the row above it.
+  - the real message, e.g. "Cannot read properties of undefined (reading 'has')"
+  - which component it happened in, collapsed under "Where it happened"
+  - Try again, and Reload
+
+Deploy this, open the project cash flow, and SEND ME THE RED BOX. That names the
+fault outright and I will fix it in one go.
+
+ReportProblemButton deliberately sits OUTSIDE the boundary so it still works on a
+page that has failed.
+
+This is worth keeping permanently, not just for today - every future render error
+on any page in the portal now identifies itself.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-I used React.Fragment to group the project row with its month rows, but this file
-does not import React - only the named hooks. It compiles and throws on render.
-Switched to the named Fragment import.
-
-
-ALSO IN THIS PACKAGE (pkg640)
------------------------------
-Project cash flows table; CIS marked "est" where predicted from forecast labour
-rather than a ticked bill; and RISK - PAY ME LATER, which delays every receipt by
-N weeks while leaving money OUT where it is.
-
-STILL TO SCOPE: the PDF of all tabs. Two routes in pkg640's notes - a print
-stylesheet (quick) or server-side pdf-lib (better, about a day). Say which.
+ALSO IN THIS PACKAGE
+--------------------
+pkg641 - "J190 - Russell Hill" instead of "L:190"; click a project in the cash
+flow table for a month-by-month breakdown.
+pkg640 - Project cash flows table; CIS marked "est" where predicted; RISK - pay me
+later, delaying receipts by N weeks while money out stays put.
+pkg639 - "CASH FLOW TO BE UPDATED" on the project timeline, and the correction that
+an elapsed period drops its SALES but keeps its COSTS.
