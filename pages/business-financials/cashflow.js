@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -68,6 +68,23 @@ function DateCell({ value, fallback, onCommit, onClear, title }) {
       )}
     </div>
   )
+}
+
+// "J190 - Russell Hill" where both are known, the number alone if the dashboard cache
+// has not named the job, and only then the raw key.
+// "Sep 26" from "2026-09".
+const monthName = (mk) => {
+  const [y, m] = String(mk).split('-').map(Number)
+  if (!y || !m) return mk
+  return `${new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' })} ${String(y).slice(2)}`
+}
+
+const projLabel = (fc) => {
+  const no = fc.projectNo ? String(fc.projectNo) : ''
+  const nm = (fc.projectName || '').trim()
+  // The name sometimes already starts with the number - do not print it twice.
+  if (no && nm) return nm.startsWith(no) ? nm : `${no} - ${nm}`
+  return nm || no || String(fc.projectKey || '').replace(/^L:/, '').replace(/^N:/, '') || '(unnamed)'
 }
 
 const invKey = (i) => String(i.invoiceNumber || i.number || i.id || '')
@@ -321,6 +338,7 @@ export default function CashFlow() {
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
+  const [openProj, setOpenProj] = useState(null)          // project row expanded to months
   const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
   const [openOhWk, setOpenOhWk] = useState(null)          // which week's overhead breakdown is expanded
 
@@ -743,7 +761,10 @@ export default function CashFlow() {
           if (!billUsed[wkMonth]) billUsed[wkMonth] = {}
           billUsed[wkMonth][k] = (billUsed[wkMonth][k] || 0) + offL + offM
         }
-        if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to,
+        // "J190 - Russell Hill", not "L:190". projectName is blank whenever the
+        // dashboard cache has not named that job, and the key was the fallback - which
+        // is the raw Redis key and means nothing to read.
+        if (sIn || lOut || mOut) fcBreak.push({ name: projLabel(fc), no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to, month: s.slice(0, 7),
           matEstimated: (fc.matItems || []).some(m => m.estimatedTerm) })
         // Use the figures already worked out above, net of any real bill. Recomputing them
         // here is how the two got out of step - and `hasBill` no longer exists.
@@ -1340,9 +1361,15 @@ export default function CashFlow() {
               for (const r of forecast) {
                 for (const b of (r.fcBreak || [])) {
                   const k = b.name || b.no || '(unnamed)'
-                  const e = byProj[k] || (byProj[k] = { name: k, sales: 0, labour: 0, mat: 0, weeks: 0 })
+                  const e = byProj[k] || (byProj[k] = { name: k, sales: 0, labour: 0, mat: 0, weeks: 0, months: {} })
                   e.sales += b.sales || 0; e.labour += b.labour || 0; e.mat += b.mat || 0
                   if ((b.sales || 0) || (b.labour || 0) || (b.mat || 0)) e.weeks += 1
+                  // Kept by month so each project can be opened up without another pass.
+                  const mk = b.month || (r.weekStart || '').slice(0, 7)
+                  if (mk) {
+                    const m = e.months[mk] || (e.months[mk] = { sales: 0, labour: 0, mat: 0 })
+                    m.sales += b.sales || 0; m.labour += b.labour || 0; m.mat += b.mat || 0
+                  }
                 }
               }
               const list = Object.values(byProj).sort((a, b) => b.sales - a.sales)
@@ -1369,8 +1396,14 @@ export default function CashFlow() {
                         const cost = x.mat + x.labour
                         const pc = x.sales > 0 ? (cost / x.sales) * 100 : null
                         return (
-                          <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
-                            <td style={{ ...td, textAlign: 'left' }}>{x.name}</td>
+                          <Fragment key={i}>
+                          <tr onClick={() => setOpenProj(openProj === x.name ? null : x.name)}
+                            title="Click to see it month by month"
+                            style={{ borderBottom: '1px solid #f2f0ec', cursor: 'pointer', background: openProj === x.name ? '#f7faf9' : 'transparent' }}>
+                            <td style={{ ...td, textAlign: 'left' }}>
+                              <span style={{ fontSize: 9, color: '#999', marginRight: 4 }}>{openProj === x.name ? '\u25BC' : '\u25B6'}</span>
+                              {x.name}
+                            </td>
                             <td style={{ ...td, color: '#999' }}>{x.weeks}</td>
                             <td style={{ ...td, color: '#0f766e' }}>{x.sales ? gbp(x.sales) : '-'}</td>
                             <td style={{ ...td, color: x.mat ? '#dc2626' : '#c00' }}>{x.mat ? gbp(-x.mat) : 'none'}</td>
@@ -1378,6 +1411,23 @@ export default function CashFlow() {
                             <td style={{ ...td, fontWeight: 600, color: (x.sales - cost) < 0 ? '#dc2626' : INK }}>{gbp(x.sales - cost)}</td>
                             <td style={{ ...td, fontWeight: 700, color: pc == null ? '#999' : pc < 50 ? '#dc2626' : '#16a34a' }}>{pc == null ? '-' : `${pc.toFixed(0)}%`}</td>
                           </tr>
+                          {openProj === x.name && Object.keys(x.months).sort().map(mk => {
+                            const m = x.months[mk]
+                            const c = m.mat + m.labour
+                            const mp = m.sales > 0 ? (c / m.sales) * 100 : null
+                            return (
+                              <tr key={`${i}-${mk}`} style={{ background: '#fbfdfc', borderBottom: '1px solid #f5f4f1' }}>
+                                <td style={{ ...td, textAlign: 'left', paddingLeft: 26, color: '#5b7085' }}>{monthName(mk)}</td>
+                                <td style={td}></td>
+                                <td style={{ ...td, color: '#0f766e' }}>{m.sales ? gbp(m.sales) : '-'}</td>
+                                <td style={{ ...td, color: m.mat ? '#dc2626' : '#ccc' }}>{m.mat ? gbp(-m.mat) : '-'}</td>
+                                <td style={{ ...td, color: m.labour ? '#dc2626' : '#ccc' }}>{m.labour ? gbp(-m.labour) : '-'}</td>
+                                <td style={{ ...td, color: (m.sales - c) < 0 ? '#dc2626' : '#555' }}>{gbp(m.sales - c)}</td>
+                                <td style={{ ...td, color: mp == null ? '#ccc' : mp < 50 ? '#dc2626' : '#16a34a' }}>{mp == null ? '-' : `${mp.toFixed(0)}%`}</td>
+                              </tr>
+                            )
+                          })}
+                          </Fragment>
                         )
                       })}
                     </tbody>

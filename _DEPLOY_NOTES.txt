@@ -1,12 +1,10 @@
-pkg640 - Project cash flows table, CIS estimates labelled, risk delay
-======================================================================
+pkg641 - Project names, and a month-by-month breakdown per project
+===================================================================
 
-*** SUPERSEDES pkg591 - pkg639. ***
+*** SUPERSEDES pkg591 - pkg640. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
-
-THREE OF YOUR FOUR ARE HERE. The PDF is not - see the last section.
 
 
 CHANGED FILES (replace)
@@ -23,60 +21,47 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-1. PROJECT CASH FLOWS TABLE
----------------------------
-Below the forecast: every project contributing to the 13 weeks, with sales in,
-materials out, labour out, net and COST %.
+1. "J190 - RUSSELL HILL", NOT "L:190"
+-------------------------------------
+projectName is blank whenever the dashboard cache has not named that job, and the
+fallback was projectKey - the raw Redis key, which means nothing to read.
 
-Built from the same fcBreak rows the weekly drill-down uses, so it agrees with the
-Project sales / Materials / Labour columns by construction rather than by luck.
-
-Cost % is red below 50% and a missing schedule reads "none" - so a forecast with
-income and no cost against it is obvious across the whole quarter, not just in the
-week you happen to open.
-
-
-2. CIS MARKED AS ESTIMATED
---------------------------
-A week whose CIS came partly from FORECAST labour now shows "est", the same as
-VAT. CIS from a bill already ticked in Xero is not marked - that is real.
-
-Hovering says which: "Includes CIS predicted from forecast labour" or "From bills
-ticked as CIS labour".
+    J190 + Russell Hill        ->  J190 - Russell Hill
+    number only, no name       ->  190
+    neither                    ->  190          (key, stripped of "L:")
+    name already has the no.   ->  J240 Market Drayton   (not printed twice)
+    negotiated N:8335          ->  8335
 
 
-3. RISK - PAY ME LATER (WEEKS)
-------------------------------
-Delays every RECEIPT by N weeks: invoices, retention and forecast sales.
+2. CLICK A PROJECT FOR ITS MONTHS
+---------------------------------
+Every row opens to show sales in, materials out, labour out, net and cost % BY
+MONTH:
 
-    0 weeks   an invoice due 10/09 lands in the week of 10/09
-    2 weeks   ... the week of 24/09
-    4 weeks   ... the week of 08/10
+    J190 - Russell Hill
+       Sept 26   sales 184,148   mat      -   lab  9,327   cost  5%
+       Oct 26    sales  87,500   mat 65,630   lab 11,069   cost 88%
 
-MONEY OUT IS NOT MOVED, and that asymmetry is the whole point. Customers paying
-late does not make your suppliers, your labour or HMRC wait. Shifting both would
-slide the entire picture and show you nothing.
+Which is more useful than the project total, because the total averages the two.
+A month at 5% has its materials missing; a month at 88% is behaving normally. On
+the total those cancel out to something unremarkable.
 
-The box turns red while a delay is applied, so a risk run cannot be mistaken for
-the plan. It does not touch any stored date.
+Collected in the same pass that builds the table, so it costs nothing extra and
+cannot disagree with the row above it.
 
 
-4. THE PDF - NOT BUILT, AND HERE IS WHY
----------------------------------------
-"PDF every tab into one document with tick options" is a build in itself, not a
-change to an existing page. There are two honest routes:
+A BUG CAUGHT IN BUILD
+---------------------
+I used React.Fragment to group the project row with its month rows, but this file
+does not import React - only the named hooks. It compiles and throws on render.
+Switched to the named Fragment import.
 
-  A. PRINT STYLESHEET. A /business-financials/report page that renders the ticked
-     tabs one after another, styled for print, and you use the browser's Print to
-     PDF. Fastest, looks like the screen, and page breaks need care. No new
-     dependency.
 
-  B. SERVER-SIDE with pdf-lib, which you already use. Full control of layout,
-     headers, page numbers, and it can be emailed or scheduled. But every tab's
-     figures have to be re-derived server-side - the tables are currently built in
-     the browser from several API calls each - so it is the larger piece by some
-     distance.
+ALSO IN THIS PACKAGE (pkg640)
+-----------------------------
+Project cash flows table; CIS marked "est" where predicted from forecast labour
+rather than a ticked bill; and RISK - PAY ME LATER, which delays every receipt by
+N weeks while leaving money OUT where it is.
 
-B is the better product and roughly a day's work; A gets you something usable much
-sooner. Tell me which and I will scope it properly rather than start it half-built
-at the end of a long session.
+STILL TO SCOPE: the PDF of all tabs. Two routes in pkg640's notes - a print
+stylesheet (quick) or server-side pdf-lib (better, about a day). Say which.
