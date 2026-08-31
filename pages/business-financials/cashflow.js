@@ -340,6 +340,8 @@ export default function CashFlow() {
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
   const [openInvWk, setOpenInvWk] = useState(null)       // which week's invoices are open
   const [openBillWk, setOpenBillWk] = useState(null)     // which week's bills are open
+  const [openCisWk, setOpenCisWk] = useState(null)
+  const [openVatWk, setOpenVatWk] = useState(null)
   const [openArrears, setOpenArrears] = useState(false)  // arrears row broken out by bill
   const [openProj, setOpenProj] = useState(null)          // project row expanded to months
   const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
@@ -614,6 +616,8 @@ export default function CashFlow() {
     // Where each month's CIS came from - a real ticked bill, or predicted off forecast
     // labour. Predicted CIS is an estimate and must say so, the same as VAT does.
     const cisSrcByMonth = {}
+    // Every contributing line, so the column can show its own workings.
+    const cisLines = {}
     for (const i of (data.bills || [])) {
       if (!cisBill(i)) continue
       const pd = billOverrides[i.id] || i.payDate || i.dueDate || ''
@@ -622,6 +626,10 @@ export default function CashFlow() {
       cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(i.amountDue || 0)
       cisSrcByMonth[mk] = cisSrcByMonth[mk] || {}
       cisSrcByMonth[mk].bill = true
+      ;(cisLines[mk] = cisLines[mk] || []).push({
+        who: i.contact || i.supplier || '(no supplier)', project: i.project || '',
+        base: i.amountDue || 0, basis: 'bill, net', cis: cisFromNet(i.amountDue || 0),
+      })
     }
     // CIS ON FORECAST LABOUR.
     //
@@ -646,6 +654,10 @@ export default function CashFlow() {
           if (!l.date) continue
           const mk = String(l.date).slice(0, 7)
           cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromGross(l.amount || 0)
+          ;(cisLines[mk] = cisLines[mk] || []).push({
+            who: projLabel(fc), project: '', base: l.amount || 0,
+            basis: 'forecast labour, gross', cis: cisFromGross(l.amount || 0),
+          })
           cisSrcByMonth[mk] = cisSrcByMonth[mk] || {}
           cisSrcByMonth[mk].forecast = true
         }
@@ -656,7 +668,7 @@ export default function CashFlow() {
     const cisPayments = Object.entries(cisByPayMonth).map(([mk, amt]) => {
       const [yy, mm] = mk.split('-').map(Number)   // mm is 1-based
       const payMonth = new Date(yy, mm, 22)         // mm (0-based next month), day 22
-      return { date: isoDay(payMonth), amount: amt, src: cisSrcByMonth[mk] || {} }
+      return { date: isoDay(payMonth), amount: amt, src: cisSrcByMonth[mk] || {}, mk, lines: (cisLines[mk] || []).slice().sort((a, b) => b.cis - a.cis) }
     })
 
     // Weeks to delay every receipt by. 0 = the plan as entered.
@@ -948,6 +960,7 @@ export default function CashFlow() {
         invoicesIn: Math.round(invoicesIn), invDetail: invDetail.sort((a, b) => b.amount - a.amount),
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         vatEstimated, vatSrcs, cisEstimated,
+        cisDetail: inWkCis,
         bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
@@ -1378,10 +1391,12 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of
                           numbers. Anything not from a filed return is labelled. */}
-                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}
+                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc', cursor: r.vatIn ? 'pointer' : 'default' }}
+                        onClick={() => r.vatIn && setOpenVatWk(openVatWk === i ? null : i)}
                         title={r.vatSrcs && r.vatSrcs.length ? r.vatSrcs.map(x => `${x.mk}: ${x.src === 'filed' ? 'filed return' : x.src === 'reclaim' ? 'estimated reclaim on forecast materials and bills' : 'VAT estimate'}`).join('; ') : ''}>
                         {r.vatIn ? gbp(r.vatIn) : '-'}
                         {r.vatIn && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
+                        {r.vatIn ? <span style={{ fontSize: 9, color: '#999' }}> {openVatWk === i ? '\u25B2' : '\u25BC'}</span> : null}
                       </td>
                       {/* On the arrears row this is a mix of overdue bills and certified-
                           but-uninvoiced cost. Clicking opens exactly what it is made of,
@@ -1408,10 +1423,12 @@ export default function CashFlow() {
                       </td>
                       {/* Marked "est" where any part came from FORECAST labour rather
                           than a real ticked bill - same treatment as VAT. */}
-                      <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}
+                      <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc', cursor: r.cisOut ? 'pointer' : 'default' }}
+                        onClick={() => r.cisOut && setOpenCisWk(openCisWk === i ? null : i)}
                         title={r.cisEstimated ? 'Includes CIS predicted from forecast labour, not just from bills already in Xero.' : (r.cisOut ? 'From bills ticked as CIS labour.' : '')}>
                         {r.cisOut ? gbp(-r.cisOut) : '-'}
                         {r.cisOut && r.cisEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
+                        {r.cisOut ? <span style={{ fontSize: 9, color: '#999' }}> {openCisWk === i ? '\u25B2' : '\u25BC'}</span> : null}
                       </td>
                       {/* Three columns, not one net figure. If Materials out and Labour
                           out sit at nil while Project sales runs high, the cost side of
@@ -1421,8 +1438,17 @@ export default function CashFlow() {
                         title={r.projSalesIn ? 'Click to see which projects this is' : ''}>
                         {r.projSalesIn ? gbp(r.projSalesIn) : '-'}{r.projSalesIn ? <span style={{ fontSize: 9, color: '#999' }}> {openFcWk === i ? '\u25B2' : '\u25BC'}</span> : null}
                       </td>
-                      <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#ccc' }}>{r.projMatOut ? gbp(-r.projMatOut) : '-'}</td>
-                      <td style={{ ...td, color: r.projLabourOut ? '#dc2626' : '#ccc' }}>{r.projLabourOut ? gbp(-r.projLabourOut) : '-'}</td>
+                      {/* Opens the same per-project breakdown the sales figure does - it
+                          already carries all three, so a separate table would be the same
+                          numbers twice and one more thing to keep in step. */}
+                      <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#ccc', cursor: r.projMatOut ? 'pointer' : 'default' }}
+                        onClick={() => r.projMatOut && setOpenFcWk(openFcWk === i ? null : i)}>{r.projMatOut ? gbp(-r.projMatOut) : '-'}</td>
+                      <td style={{ ...td, color: r.projLabourOut ? '#dc2626' : '#ccc', cursor: r.projLabourOut ? 'pointer' : 'default' }}
+                        onClick={() => r.projLabourOut && setOpenFcWk(openFcWk === i ? null : i)}
+                        title={r.projLabourOut ? 'Click to see it by project. Net of CIS - the 20% is in the CIS to HMRC column.' : ''}>
+                        {r.projLabourOut ? gbp(-r.projLabourOut) : '-'}
+                        {r.projLabourOut ? <span style={{ fontSize: 9, color: '#999' }}> {openFcWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                      </td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
@@ -1471,6 +1497,77 @@ export default function CashFlow() {
                         </table>
                         <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
                           &quot;(due date)&quot; means Xero&apos;s date is being used because no expected date has been set. Set one in the Invoices owed table below and it moves to the week you actually expect it.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {openCisWk != null && forecast[openCisWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#fef6f2', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>CIS to HMRC in {forecast[openCisWk].wk}</div>
+                        {/* The two bases are the thing to understand here, so they are
+                            named on every line rather than explained once at the bottom. */}
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginBottom: 6 }}>
+                          Paid on the 22nd of the month after the labour is paid. A Xero bill is already NET of CIS, so its deduction is value x 20/80. Forecast labour is GROSS, so its deduction is value x 20% - and that same 20% is what has been taken OFF the Labour out column.
+                        </div>
+                        {(forecast[openCisWk].cisDetail || []).map((c, ci) => (
+                          <div key={ci} style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#9a3412' }}>Labour paid in {monthName(c.mk)} &rarr; HMRC {fmtDMY(c.date)}</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                              <thead><tr style={{ color: '#888' }}>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Supplier / project</th>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Basis</th>
+                                <th style={{ textAlign: 'right', padding: '3px 6px' }}>Labour value</th>
+                                <th style={{ textAlign: 'right', padding: '3px 6px' }}>CIS</th>
+                              </tr></thead>
+                              <tbody>
+                                {(c.lines || []).map((l, k) => (
+                                  <tr key={k} style={{ borderTop: '1px solid #f6e6dc' }}>
+                                    <td style={{ padding: '3px 6px' }}>{l.who}{l.project ? <span style={{ color: '#999' }}> &middot; {l.project}</span> : null}</td>
+                                    <td style={{ padding: '3px 6px', color: l.basis.startsWith('forecast') ? '#b45309' : '#777' }}>{l.basis}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right', color: '#777' }}>{gbp(l.base)}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-l.cis)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot><tr style={{ borderTop: '1px solid #eddcd0', fontWeight: 700 }}>
+                                <td colSpan={3} style={{ padding: '3px 6px' }}>Paid {fmtDMY(c.date)}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-c.amount)}</td>
+                              </tr></tfoot>
+                            </table>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+
+                  {openVatWk != null && forecast[openVatWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#f4faf6', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>VAT in {forecast[openVatWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>VAT month</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Where it came from</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openVatWk].vatSrcs || []).map((x, k) => (
+                              <tr key={k} style={{ borderTop: '1px solid #e8f0ea' }}>
+                                <td style={{ padding: '3px 6px' }}>{monthName(x.mk)}</td>
+                                <td style={{ padding: '3px 6px', color: x.src === 'filed' ? '#16a34a' : '#b45309' }}>
+                                  {x.src === 'filed' ? 'Filed return - Box 5 as submitted'
+                                    : x.src === 'reclaim' ? `Estimated reclaim: forecast materials and bills that month x ${finance.vatRate}/${100 + Number(finance.vatRate || 0)}`
+                                    : 'Current VAT estimate'}
+                                </td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: x.amount < 0 ? '#dc2626' : '#0f766e' }}>{gbp(x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          VAT lands on the last day of the month it relates to. A FILED return is fact; anything else is an estimate and is marked &quot;est&quot; on the column. The reclaim estimate exists because most of your sales are reverse charge and carry no output VAT, while materials and overheads carry input VAT - so the position is a persistent refund.
                         </div>
                       </td>
                     </tr>

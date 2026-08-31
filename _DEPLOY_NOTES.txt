@@ -1,7 +1,7 @@
-pkg659 - Bills out drop-down
-=============================
+pkg660 - Drop-downs on Materials, Labour, CIS and VAT
+======================================================
 
-*** SUPERSEDES pkg591 - pkg658. ***
+*** SUPERSEDES pkg591 - pkg659. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -29,39 +29,47 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-CLICK ANY BILLS OUT FIGURE
---------------------------
-    Supplier                Project              Reference   Date used    Bill value  Still due
-    Travis Perkins          J240 Market Drayton  INV-88213   (planned)      12,000     12,000
-    SIG Roofing             J190 Russell Hill    INV-77104   (due date)      8,500      5,200
-                                                                        3,300 already paid
-    AJ Roofing CIS          J247 Kilburn         SC-4471     (planned)       4,000      4,000
-    Total (3)                                                              24,500     21,200
+YOUR CIS QUESTION - YES
+-----------------------
+pkg653 wired it. Forecast labour is GROSS, so:
 
-Everything you asked for - supplier, project, reference, date used - plus two
-things that came out of building it.
+    J190 gross 25,585  ->  Labour out 20,468  +  CIS to HMRC 5,117
 
-BILL VALUE vs STILL DUE. Where they differ the row turns amber and says how much
-has already been paid. The column only ever showed the outstanding balance, so a
-part-paid bill looked like a small one.
-
-CIS MARKER on any bill carrying a deduction, because that bill has a second
-payment behind it - the 20% leaves separately in the CIS to HMRC column on the
-22nd of the following month. Seeing 4,000 without knowing another 1,000 follows
-it is the sort of thing that makes a week look cheaper than it is.
+The 20% taken off the labour column IS the figure in the CIS column, paid on the
+22nd of the month after. The two add back to the gross.
 
 
-"(PLANNED)" vs "(DUE DATE)"
----------------------------
-Same marker as the invoices drop-down. "(due date)" means Xero's date is being
-used because no planned payment date has been set - it assumes you pay exactly on
-terms. "(planned)" means somebody decided. A week full of due dates is a week
-built on assumptions, and you could not tell before.
-
-The arrears row keeps its own existing breakdown; every other week gets this one.
+1 + 2. MATERIALS OUT AND LABOUR OUT
+-----------------------------------
+Both open the SAME per-project breakdown the Project sales figure opens - it
+already carries sales, materials and labour together with cost %. A separate table
+would have been the same numbers twice and one more thing to keep in step.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg658 - invoice value alongside still due in the Invoices in drop-down.
-pkg657 - P&L revenue GROSS of retention, so the three statements tie.
+3. CIS TO HMRC
+--------------
+    Labour paid in Sept 26 -> HMRC 22/10/26
+      AJ Roofing             bill, net                 4,000    1,000
+      J190 - Russell Hill    forecast labour, gross   25,585    5,117
+      J247 - Kilburn Square  forecast labour, gross   12,000    2,400
+      Paid 22/10/26                                             8,517
+
+THE BASIS IS NAMED ON EVERY LINE, because the two are not the same sum and that is
+the whole reason this was wrong twice:
+
+    bill, net              already net of CIS  ->  value x 20/80
+    forecast labour, gross gross of CIS        ->  value x 20%
+
+Grouped by the month the labour was paid, so you can see which month each HMRC
+payment settles.
+
+
+4. VAT IN
+---------
+    VAT month   Where it came from                                  Amount
+    Sept 26     Filed return - Box 5 as submitted                   18,193
+    Oct 26      Estimated reclaim: forecast materials and bills
+                that month x 20/120                                 14,513
+
+Says outright which is fact and which is a forecast, and shows the actual
+calculation for the estimate rather than just labelling it "est".
