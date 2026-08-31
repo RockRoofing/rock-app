@@ -1,61 +1,54 @@
-pkg665 - Re-base the component lines, not just the bottom line
-===============================================================
+pkg666 - Match on Xero's SECTION, not just the account name
+============================================================
 
-*** SUPERSEDES pkg591 - pkg664. ***
+*** SUPERSEDES pkg591 - pkg665. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
+
+
+*** AFTER DEPLOYING: PRESS "READ BALANCE SHEET FROM XERO" ON THE BALANCE SHEET
+    TAB. The stored figures predate the monthly breakdown. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  lib/xero.js
   pages/business-financials/forecast-balance-sheet.js
+  lib/xero.js
   ... and the rest of the set as before
 
 
-WHAT WAS HAPPENING
-------------------
-Actuals tie perfectly now. The forecast did not, and the table showed why:
+EVERY MONTH TIES NOW - BUT THE LINES WERE ALL NIL
+--------------------------------------------------
+Bank, Debtors, Retention and Creditors all read 0 on the actual months and the
+entire balance sat in Financing & tax. Two causes, both found by testing the
+matching against the real chart of accounts in your PDF.
 
-    Jul 26  net assets  56,460   reserves  56,460   ties
-    Aug 26  net assets 853,192   reserves  19,686   out by 833,506
+1. THE STORED DATA HAS NO MONTHLY VALUES. It was fetched before the parser kept
+   every column, so the totals came through - which is why the months tie - but
+   the individual lines did not. Every lookup returned zero.
 
-RESERVES was re-based onto Xero. THE COMPONENTS WERE NOT - bank, debtors and
-creditors carried on rolling forward from the same wrong opening. So the bottom
-line was right and everything above it was not.
+   The page now DETECTS this and says so, rather than showing a tidy table of
+   zeros. One refresh fixes it.
 
-The parser was reading every monthly cell and keeping only the last column. It now
-keeps them all, so each closed month sets bank, debtors, retention, cards and
-creditors to Xero's real figures, and the forecast rolls on from THOSE.
+2. MATCHING ON THE NAME ALONE WAS NEVER GOING TO WORK on your chart:
 
-FINANCING BALANCES THE MONTH. Fixed assets, WIP, inventory, prepayments and
-deferred tax are not modelled as their own lines, so that line absorbs them and
-the total equals Xero exactly:
+     "American Express Platinum Business - 2000" appears TWICE - once under
+     "Cash at bank and in hand" as an asset, once under Creditors as a liability.
+     Same name, opposite meaning. The asset matched nothing and the liability
+     went into Creditors instead of Cards.
 
-    Jul 26  bank 0 + debtors 415,457 + retention 115,975
-            - cards 118,755 - creditors 381,187 + financing 24,969
-            = 56,460, which is Xero's figure to the penny
+   Now matched on Xero's SECTION as well as the name:
 
+     Amex (Cash at bank)        -> Cards
+     Amex (Creditors)           -> Cards
+     Capital On Tap             -> Cards
+     Accounts Receivable        -> Debtors
+     Retentions Receivable      -> Retention
+     Other Debtors              -> Debtors
+     Accounts Payable           -> Creditors
+     CIS & PAYE                 -> Creditors
+     WIP, Inventory, Prepayments, fixed assets, deferred tax -> Financing
 
-YOUR SECOND QUESTION - WHY THE FOUR SETTINGS
---------------------------------------------
-They ONLY affect forecast months now. Actual months come from Xero and need no
-assumptions at all, which was not true before this package.
-
-They exist because a P&L does not tell you when cash moves. On 100,000 of billing:
-
-    debtor days  0 -> collected in the month, debtors nil
-    debtor days 45 -> nothing collected, 100,000 sitting as a debtor
-
-Identical profit. Completely different cash, and a completely different balance
-sheet. Without them profit and cash would be the same thing, which is the one
-assumption a construction business cannot make.
-
-  debtor days      how much of a month's billing is still owed at month end
-  creditor days    the same for what you owe
-  retention %      the slice of a bill you will not see for a year
-  retention held   how long before it is released
-
-WORTH KNOWING: the Payment Performance tab now measures your REAL debtor days per
-customer. Once you are happy with those figures, the 45 here should be replaced by
-what the data actually says rather than a round number. Say the word and I will
-wire it through.
+FINANCING IS A DELIBERATE CATCH-ALL. WIP, inventory, prepayments, fixed assets and
+deferred tax are real but are not separately forecast. Rather than invent a line
+for each and leave them static, that line absorbs them and balances the month
+exactly. One honest catch-all beats five stale lines.

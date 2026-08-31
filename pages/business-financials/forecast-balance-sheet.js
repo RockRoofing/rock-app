@@ -104,10 +104,17 @@ export default function ForecastBalanceSheet() {
     cols.forEach((c, i) => { const d = new Date(c); if (!isNaN(d)) colIdx[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`] = i })
     // Sum matching accounts AT A GIVEN MONTH. Liabilities come back positive from Xero, so
     // anything on the creditors side is negated here to keep one sign convention.
+    // Do the stored accounts carry monthly values at all? A payload fetched before the
+    // parser change has `balance` but no `values`, and every lookup then returns zero -
+    // which is how the actual months came out with nil bank, nil debtors and the entire
+    // balance dumped into Financing. Returning null instead leaves the previous figures
+    // alone and lets the page say what is wrong.
+    const hasMonthly = accounts.some(x => Array.isArray(x.values) && x.values.length > 1)
     const sumAt = (mo, test, negate) => {
+      if (!hasMonthly) return null
       const i = colIdx[mo]
       if (i == null) return null
-      const v = accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase()))
+      const v = accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase(), String(x.section || '').toLowerCase(), String(x.name || '').toLowerCase()))
         .reduce((t, x) => t + (Array.isArray(x.values) ? (x.values[i] || 0) : 0), 0)
       return negate ? -v : v
     }
@@ -226,19 +233,28 @@ export default function ForecastBalanceSheet() {
         // forecast month was out by 833,506. Every line is now set to Xero's real figure
         // at each closed month, and the forecast carries on from THOSE.
         reserves = xeroNet
-        const b = sumAt(mo, t => t.includes('bank') && !/credit card|visa|mastercard|amex/.test(t))
-        const dr = sumAt(mo, t => t.includes('receivable') || t.includes('debtor'))
-        const rt = sumAt(mo, t => t.includes('retention') && t.includes('receivable'))
-        const cr = sumAt(mo, t => t.includes('payable') || t.includes('creditor'), true)
-        const cc = sumAt(mo, t => /credit card|visa|mastercard|amex/.test(t))
+        // MATCHED ON XERO'S SECTION as well as the account name.
+        //
+        // Your Amex sits under "Cash at bank and in hand" as an ASSET and again under
+        // Creditors as a LIABILITY - same name, opposite meaning. Matching on the name
+        // alone put the asset nowhere and the liability in Creditors instead of Cards.
+        // The section is what distinguishes them.
+        //
+        // Anything unmatched - WIP, inventory, prepayments, fixed assets, deferred tax -
+        // is deliberately left to the Financing line, which balances the month. Those are
+        // real but not separately forecast, and inventing a line for each would be worse
+        // than one honest catch-all.
+        const isCard = (n) => /credit card|visa|mastercard|amex|american express|capital on tap/.test(n)
+        const b = sumAt(mo, (t, sec, nm) => sec.includes('cash at bank') && !isCard(nm))
+        const cc = sumAt(mo, (t, sec, nm) => (sec.includes('cash at bank') || sec.includes('creditor')) && isCard(nm), true)
+        const rt = sumAt(mo, (t, sec, nm) => nm.includes('retention') && sec.includes('asset'))
+        const dr = sumAt(mo, (t, sec, nm) => sec.includes('asset') && (nm.includes('receivable') || nm.includes('debtor')) && !nm.includes('retention'))
+        const cr = sumAt(mo, (t, sec, nm) => sec.includes('creditor') && !isCard(nm), true)
         if (b != null) bank = b
-        if (dr != null) debtors = dr - (rt || 0)     // retention is shown separately below
+        if (dr != null) debtors = dr
         if (rt != null) retention = rt
         if (cr != null) creditors = cr
         if (cc != null) cards = cc
-        // Financing is the balancing figure on an actual month, so the line total equals
-        // Xero's net assets exactly rather than being a tracked-item estimate sitting
-        // alongside real numbers.
         financing = xeroNet - (bank + debtors + retention + cards + creditors)
       }
       rows.push({
@@ -252,7 +268,7 @@ export default function ForecastBalanceSheet() {
         check: useXero ? 0 : (assets + liabs) - reserves,
       })
     })
-    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasOpening: accounts.length > 0 }
+    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasMonthly, hasOpening: accounts.length > 0 }
   }, [bs, oh, mg, cf, a])
 
   if (!ok) return null
@@ -296,6 +312,18 @@ export default function ForecastBalanceSheet() {
               <div style={{ marginTop: 6 }}><strong>Matched to months:</strong> {Object.keys(model?.actualNetKeys || {}).join(', ') || <span style={{ color: '#dc2626' }}>none</span>}</div>
             </div>
           </details>
+        )}
+
+        {/* The stored payload is from before monthly values were captured, so every
+            component reads nil and the whole balance lands in Financing. Says so rather
+            than showing a table of zeros that ties. */}
+        {!loading && model && model.hasOpening && !model.hasMonthly && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+            <strong>Press &quot;Read balance sheet from Xero&quot; on the Balance Sheet tab.</strong> The stored figures were fetched before
+            the monthly breakdown was added - the totals came through, which is why the months tie, but the individual lines did not. That
+            is why Bank, Debtors and Creditors read nil on the actual months and the whole balance sits in Financing &amp; tax. One refresh
+            fixes it.
+          </div>
         )}
 
         {loading && <div style={{ color: '#999', padding: 30 }}>Loading...</div>}
