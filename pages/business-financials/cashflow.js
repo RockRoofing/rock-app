@@ -485,6 +485,23 @@ export default function CashFlow() {
     // NET figure paid to the subcontractor (e.g. GBP1,000 on a GBP1,250 gross bill). So the
     // bill pays its full Amount Due; the extra cash event is the 20% CIS to HMRC. From a
     // net figure, gross = net / 0.8, so CIS = gross - net = net * 0.25.
+    // A FORECAST PERIOD THAT HAS ALREADY ENDED IS NOT FUTURE CASH.
+    //
+    // The supersede rule depends on latestAppEnd, which comes from the DASHBOARD CACHE -
+    // and that goes cold on a 4-hour TTL and whenever a marker ships. Stale cache meant
+    // latestAppEnd was empty, the forecast was NOT dropped, and the real invoice sat in
+    // receivables alongside it. Both counted.
+    //
+    // This does not depend on the cache at all: a period ending before today has either
+    // been applied for - in which case its money is a real invoice - or it did not
+    // happen. Either way it is not cash still to come. It is the backstop that catches
+    // everything the supersede rule misses as time rolls forward.
+    const isSpent = (fc) => {
+      if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) return true   // applied for
+      if (fc.to && fc.to < todayISO) return true                              // period over
+      return false
+    }
+
     // Rate is a setting - not every trade is on 20%, and a gross-status subcontractor is
     // on nil. From a NET figure, gross = net / (1 - r), so CIS = net * r / (1 - r).
     const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
@@ -518,7 +535,7 @@ export default function CashFlow() {
     const cisOnForecast = finance.cisOnForecast !== false
     if (cisOnForecast && cisRate > 0) {
       for (const fc of (data.projForecasts || [])) {
-        if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) continue   // superseded
+        if (isSpent(fc)) continue
         for (const l of (fc.labourSchedule || [])) {
           if (!l.date) continue
           const mk = String(l.date).slice(0, 7)
@@ -535,6 +552,9 @@ export default function CashFlow() {
     })
 
     const rows = []
+    // Bill allowance already consumed, per month per project - prevents one bill netting
+    // against the same forecast money in more than one week.
+    const billUsed = {}
     let running = openBank
     for (let w = 0; w < WEEKS; w++) {
       const wkStart = new Date(start.getTime() + w * 7 * 86400000)
@@ -619,13 +639,29 @@ export default function CashFlow() {
         .filter(i => inWk(i.expectedDate || i.dueDate || '') && i.projectNo).map(i => String(i.projectNo)))
       // AMOUNTS per project, not just a set of names - the forecast now nets the bill off
       // rather than discarding the whole thing, so it needs to know how much.
+      // NETTED OVER THE MONTH, not the week.
+      //
+      // A real bill and the forecast line it replaces almost never fall in the same week -
+      // the bill is paid on the supplier's terms, the forecast on its own schedule. Netting
+      // week by week meant a bill paid in week 3 left the week 5 forecast untouched and
+      // both counted. The month is the smallest window that reliably contains both.
+      //
+      // Each bill is used ONCE across the whole forecast: a running tally is kept so the
+      // same bill cannot net against two different weeks.
+      const wkMonth = s.slice(0, 7)
       const billByProjectThisWk = {}
       for (const b of (data.bills || [])) {
-        if (!b.project) continue
+        if (!b.project || excluded[b.id]) continue
         const d = (billOverrides[b.id] || b.payDate || b.dueDate) || ''
-        if (!inWk(d)) continue
+        if (!d || d.slice(0, 7) !== wkMonth) continue
         const k = normName(b.project)
         billByProjectThisWk[k] = (billByProjectThisWk[k] || 0) + Math.abs(b.amountDue || 0)
+      }
+      // What has already been netted against this project's bills in earlier weeks of the
+      // same month, so the allowance is not spent twice.
+      for (const k of Object.keys(billByProjectThisWk)) {
+        const used = (billUsed[wkMonth] && billUsed[wkMonth][k]) || 0
+        billByProjectThisWk[k] = Math.max(0, billByProjectThisWk[k] - used)
       }
       // Labour and materials kept SEPARATE, not rolled into one cost figure. Netted into
       // a single "Project forecast" column they are invisible - and if the cost schedules
@@ -641,7 +677,7 @@ export default function CashFlow() {
         // The old guard only suppressed a forecast when an invoice landed in the SAME
         // WEEK. An application invoiced in week 2 whose forecast scheduled cash in week 6
         // was counted twice - which is most of why money in reads high.
-        if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) continue
+        if (isSpent(fc)) continue
 
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
         const sIn = hasInvoice ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
@@ -664,6 +700,11 @@ export default function CashFlow() {
         const offM = Math.min(rawM, Math.max(0, billThisWk - offL))
         const lOut = Math.max(0, rawL - offL)
         const mOut = Math.max(0, rawM - offM)
+        if (offL + offM > 0) {
+          const k = normName(fc.projectName || '')
+          if (!billUsed[wkMonth]) billUsed[wkMonth] = {}
+          billUsed[wkMonth][k] = (billUsed[wkMonth][k] || 0) + offL + offM
+        }
         if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to,
           matEstimated: (fc.matItems || []).some(m => m.estimatedTerm) })
         // Use the figures already worked out above, net of any real bill. Recomputing them

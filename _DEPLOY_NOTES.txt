@@ -1,7 +1,7 @@
-pkg637 - CIS predicted from forecast labour, not just from ticked bills
-========================================================================
+pkg638 - Stopping the double count as today rolls forward
+==========================================================
 
-*** SUPERSEDES pkg591 - pkg636. ***
+*** SUPERSEDES pkg591 - pkg637. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,7 +9,7 @@ pkg637 - CIS predicted from forecast labour, not just from ticked bills
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js       <- the change
+  pages/business-financials/cashflow.js
   pages/business-financials/balance-sheet.js
   pages/api/business-financials.js
   pages/project-cashflow.js
@@ -21,51 +21,61 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-WHY IT WAS 1,031
-----------------
-CIS was computed ONLY from bills already in Xero and individually ticked as CIS
-labour. Nothing predicted it. So thirteen weeks carrying 224,686 of forecast
-labour produced 1,031 of CIS.
+THE TWO GUARDS AND WHERE THEY LEAKED
+------------------------------------
+SALES were dropped once a period had been applied for - but that test reads
+latestAppEnd from the DASHBOARD CACHE, which expires on a 4-hour TTL and whenever
+a new marker ships. Stale cache meant latestAppEnd was empty, the forecast was NOT
+dropped, and the real invoice sat in receivables beside it. Both counted.
 
-Now it also comes off FORECAST LABOUR:
-
-    net labour 25,585.57  ->  gross 31,981.96  ->  CIS  6,396.39
-    net labour  4,000.00  ->  gross  5,000.00  ->  CIS  1,000.00
-
-    your 13 weeks: 224,686 of labour  ->  CIS 56,171.50
-    (the column was showing 1,031)
-
-Still paid on the 22nd of the month AFTER the labour is paid, as before.
+COSTS were netted against real bills only within the SAME WEEK, matched on project
+name. A bill paid in week 3 left a week 5 forecast untouched, so both counted.
 
 
-NOTHING IS COUNTED TWICE - TWO WAYS
------------------------------------
-1. Forecast labour is ALREADY NET of any real bill on that project that week
-   (the billByProjectThisWk netting from pkg618). So a bill and its forecast
-   cannot both generate CIS on the same money.
+FIX 1 - A PERIOD THAT HAS ENDED IS NOT FUTURE CASH
+--------------------------------------------------
+    isSpent(fc) = applied for  OR  fc.to < today
 
-2. PAYE WAGES IN THE BUDGETS OVERHEADS ARE NOT TOUCHED. Employees are not
-   subcontractors, and their PAYE is a different liability - the one you are
-   paying down on the Balance Sheet tab at 6,000 a month. Deliberately separate.
+This depends on nothing external. A forecast period ending before today has either
+been applied for - in which case its money is a real invoice - or it did not
+happen. Either way it is not cash still to come.
 
-Superseded forecast periods are skipped, same as everywhere else.
+  period ended 31/07, no application recorded   dropped   (was counted)
+  period ended 31/07, application to 31/08      dropped
+  period ends 30/09                             counted
 
-
-TWO SETTINGS
-------------
-CIS RATE % - defaults 20. Not every trade is on 20, and a gross-status
-subcontractor is on nil. Set it to 0 and no CIS is predicted at all.
-
-CIS ON FORECAST LABOUR - on by default, tick off to go back to ticked bills only.
-
-The maths works from the NET figure: gross = net / (1 - r), so CIS = net * r/(1-r).
-At 20% that is net x 0.25, which is what the existing bill calculation already did.
+It is the backstop that catches everything the supersede rule misses as time rolls
+forward, cache or no cache. Applied to sales, to labour and materials, and to the
+new CIS prediction.
 
 
-WORTH KNOWING
--------------
-This will put a serious number into the forecast - roughly 56k over the thirteen
-weeks on current figures - and it is money that genuinely leaves the bank. Expect
-the closing balance to fall accordingly. If some of your subcontractors ARE gross
-status, the rate is the lever, but there is currently no per-subcontractor
-setting; say the word if that is worth building.
+FIX 2 - BILLS NET OVER THE MONTH, AND ONLY ONCE
+-----------------------------------------------
+A real bill and the forecast line it replaces almost never fall in the same week -
+the bill pays on the supplier's terms, the forecast on its own schedule. Netting
+now covers the MONTH, the smallest window that reliably contains both.
+
+And a running tally stops one bill netting twice:
+
+  one 10,000 bill, forecast 6,000 in wk1 and 6,000 in wk3
+    wk1  allowance 10,000  netted 6,000  counted 0
+    wk3  allowance  4,000  netted 4,000  counted 2,000
+    bill used once in total: 10,000
+
+Excluded bills no longer net anything either - they are not being paid, so they
+cannot displace forecast spend.
+
+
+WHAT IS STILL NOT COVERED
+-------------------------
+Bills are matched to forecasts by PROJECT NAME. Where Xero's tracking name and the
+forecast's project name differ, no netting happens and both count. The names come
+from the same dashboard record so they usually agree, but it is worth knowing that
+is the remaining weak link rather than assuming it is airtight.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg637 - CIS predicted from forecast labour, not just ticked bills. 224,686 of
+labour produces 56,171 of CIS where the column showed 1,031. Rate is a setting;
+PAYE wages in overheads are deliberately untouched.
