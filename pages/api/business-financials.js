@@ -449,6 +449,14 @@ export default async function handler(req, res) {
   }
 
   // ── Cash flow forecast ────────────────────────────────────────────────────
+  // NO SERVER VIEW FOR THE FORECAST P&L.
+  //
+  // It is composed on the CLIENT from the endpoints that already exist - budgets-overheads
+  // for overheads, margin for actual income and cost of sales, cashflow for the forecast
+  // accruals. Rebuilding the overheads pipeline here would duplicate a hundred lines and
+  // give two tabs that can disagree, which is the fault we have spent this session
+  // chasing. Composing from the same sources makes agreement structural.
+
   if (view === 'margin') {
     const bm = benchmark.months || {}
     const months = Object.keys(bm).sort().map(mo => {

@@ -1,8 +1,9 @@
-pkg644 - FIX: focusKey is not defined (and a second one behind it)
-===================================================================
+pkg645 - Forecast P&L for the financial year
+=============================================
 
-*** SUPERSEDES pkg591 - pkg643. ***
-*** THREE NEW FILES - create these in GitHub:
+*** SUPERSEDES pkg591 - pkg644. ***
+*** FOUR NEW FILES - create these in GitHub:
+      pages/business-financials/forecast-pl.js
       pages/business-financials/forecast-margin.js
       pages/business-financials/balance-sheet.js
       components/PageErrorBoundary.js
@@ -11,10 +12,10 @@ pkg644 - FIX: focusKey is not defined (and a second one behind it)
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js               <- the fix
   components/BizNav.js
   pages/_app.js
   pages/api/business-financials.js
+  pages/project-cashflow.js
   pages/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
@@ -23,41 +24,69 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-THE BOUNDARY PAID FOR ITSELF IMMEDIATELY
-----------------------------------------
-"focusKey is not defined" - one round trip instead of five.
+FORECAST P&L - new tab, placed AFTER 12-Month as asked
+-------------------------------------------------------
+December to November, the same financial year as Budgets. Twelve months across,
+each headed ACTUAL or forecast, with an FY total column:
 
-Row() is a MODULE-SCOPE component, so it cannot see the page component's state. I
-used focusKey and setFocusKey inside it when I made the forecast bars clickable.
-They are now passed as props.
+    Revenue
+    Cost of sale
+       materials (forecast)
+       labour (forecast)
+    Gross profit
+    Overheads
+    Net profit
+    Gross margin %
+    Net margin %
 
-AND A SECOND ONE SITTING RIGHT BEHIND IT. The same three lines also used `pk`,
-which is the parent loop's variable and does not exist in Row either. It would
-have thrown the instant focusKey was fixed - another round trip. Row already
-receives `p`, so p.key is the same value.
+ACTUAL months take income, cost of sales and overheads from Xero. FORECAST months
+take revenue and cost of sale from the project forecasts on the ACCRUAL basis -
+revenue in the month valued, materials when delivered, labour when done - and
+overheads from the Budgets grid.
 
-
-I THEN SCANNED EVERY COMPONENT IN BOTH CASH FLOW FILES
-------------------------------------------------------
-Stripping comments and strings, and accounting for destructured state and
-callback parameters, for identifiers that resolve to no parameter, local, module
-declaration or import.
-
-  project-cashflow.js   Row, HypAppModal, SpreadRow, PositionPanel   clean
-  cashflow.js           DateCell, NetPositionBox                     clean
-  forecast-margin.js                                                 clean
-  balance-sheet.js                                                   clean
-
-This is the third time this exact fault has shipped - a module-scope component
-reaching for the page's state. It compiles perfectly every time, which is why the
-build never catches it. The scan is now part of what I run before packaging.
+WHICH MONTHS ARE ACTUAL is decided by the Switch to Actual button on Budgets. That
+switch is already the single decision about which months are closed, so this
+follows it rather than having a rule of its own that could disagree.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg643 - FORECAST MARGIN tab. Accrual basis: revenue by the month each sales line
-belongs to, materials when DELIVERED, labour when the work was DONE. Says so
-outright when the margin is not credible for roofing. Gross margin only -
-overheads are the next step.
+COMPOSED, NOT REBUILT
+---------------------
+I started writing this as a server view and stopped. It would have duplicated the
+whole overheads pipeline, and two tabs computing the same figure separately is
+exactly the fault we have spent this session chasing.
 
-pkg642 - the error boundary itself. Worth keeping permanently.
+It fetches budgets-overheads, margin and cashflow - the same endpoints Budgets,
+Margin and Cash Flow already use - and composes them. So all four pages agree
+structurally rather than by being kept in step by hand.
+
+
+ONE LIMIT WORTH KNOWING
+-----------------------
+Xero gives ONE cost-of-sales total for a closed month, not the materials/labour
+split. So those two sub-lines only carry figures on FORECAST months, and show "-"
+on actual ones. Better than inventing a split.
+
+Depreciation, accruals and corporation tax are not modelled, so net profit is
+before those.
+
+
+THE FORECAST BALANCE SHEET - NOT IN THIS PACKAGE
+------------------------------------------------
+You asked for it as the third leg of a 3-way. It is the right goal and I have not
+started it, for a reason worth stating: a 3-way only works if the P&L and the cash
+flow are both trustworthy, because the balance sheet is what ties them together -
+it is where an error in either one shows up as a balance that does not balance.
+
+Right now the forecasts imply a 58.5% gross margin because roughly 330k of cost is
+missing from them. Build the balance sheet on that and it will not tie, and the
+time goes into chasing the difference rather than into the model.
+
+It also needs things nothing currently holds: an opening balance sheet by month,
+debtor and creditor movements derived from the invoice and bill ledgers, and
+retained earnings rolled forward from the P&L above.
+
+My suggestion: use the Forecast P&L and Forecast Margin tabs to get the project
+forecasts right first - the implausible-margin warning tells you when they are -
+then the balance sheet is a genuinely useful piece rather than a reconciliation
+exercise. Say the word and I will scope it properly at the start of a session
+rather than the end of one.

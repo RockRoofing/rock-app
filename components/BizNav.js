@@ -24,6 +24,7 @@ const TABS = [
   ['Balance Sheet', '/business-financials/balance-sheet'],
   ['Cash Flow', '/business-financials/cashflow'],
   ['12-Month', '/business-financials/monthly'],
+  ['Forecast P&L', '/business-financials/forecast-pl'],
 ]
 
 export function BizNav() {
