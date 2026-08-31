@@ -338,6 +338,7 @@ export default function CashFlow() {
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
+  const [openArrears, setOpenArrears] = useState(false)  // arrears row broken out by bill
   const [openProj, setOpenProj] = useState(null)          // project row expanded to months
   const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
   const [openOhWk, setOpenOhWk] = useState(null)          // which week's overhead breakdown is expanded
@@ -737,8 +738,19 @@ export default function CashFlow() {
 
       // Bills out: pay the full Amount Due (Xero already nets CIS off labour bills).
       // The 20% CIS to HMRC is scheduled separately below.
-      const arrBills = (data.bills || []).filter(i => !excluded[i.id] && isArrears((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
-        .reduce((a, i) => a + (i.amountDue || 0), 0)
+      // Keep the LIST, not just the total. "Overdue - brought forward £4,836" with no way
+      // to see what it is made of means going to the table below and matching by eye.
+      const arrBillList = (data.bills || [])
+        .filter(i => !excluded[i.id] && isArrears((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+        .map(i => ({ name: i.contact || i.supplier || '(no supplier)', project: i.project || '', ref: i.reference || i.invoiceNumber || '',
+          amount: i.amountDue || 0, due: (billOverrides[i.id] || i.payDate || i.dueDate) || '' }))
+        .sort((a, b) => b.amount - a.amount)
+      const arrBills = arrBillList.reduce((a, i) => a + i.amount, 0)
+      const arrInvList = (data.receivables || [])
+        .filter(i => !excluded[invKey(i)] && isArrears(i.expectedDate || i.dueDate || ''))
+        .map(i => ({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '', project: i.projectName || '',
+          amount: i.amountDue || 0, due: i.expectedDate || i.dueDate || '' }))
+        .sort((a, b) => b.amount - a.amount)
       // (Certified-but-uninvoiced cost is carried by the ARREARS row, not added to week 1's
       // bills as well - adding it in both places would count it twice.)
       const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
@@ -896,6 +908,7 @@ export default function CashFlow() {
           invoicesIn: Math.round(arrInvoices), retIn: Math.round(arrRet), vatIn: 0,
           vatEstimated: false, vatSrcs: [],
           bills: Math.round(arrBills + awaitingTotal), awaiting: Math.round(awaitingTotal), awaitingList: awaitingInvoice,
+          arrBillList, arrInvList,
           overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
           projSalesIn: 0, projCostOut: 0, projNet: 0, projLabourOut: 0, projMatOut: 0, fcBreak: [],
           moneyIn: Math.round(arrInvoices + arrRet), moneyOut: Math.round(arrBills + awaitingTotal),
@@ -1337,7 +1350,16 @@ export default function CashFlow() {
                         {r.vatIn ? gbp(r.vatIn) : '-'}
                         {r.vatIn && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
                       </td>
-                      <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
+                      {/* On the arrears row this is a mix of overdue bills and certified-
+                          but-uninvoiced cost. Clicking opens exactly what it is made of,
+                          rather than sending you to the table below to match by eye. */}
+                      <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc', cursor: (r.arrears && r.bills) ? 'pointer' : 'default',
+                        textDecoration: (r.arrears && r.bills) ? 'underline dotted #e5b4b4' : 'none' }}
+                        onClick={() => r.arrears && r.bills && setOpenArrears(v => !v)}
+                        title={(r.arrears && r.bills) ? 'Click to see which bills and projects' : ''}>
+                        {r.bills ? gbp(-r.bills) : '-'}
+                        {r.arrears && r.bills ? <span style={{ fontSize: 9, color: '#999' }}> {openArrears ? '\u25B2' : '\u25BC'}</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc', cursor: r.overheads ? 'pointer' : 'default', textDecoration: r.overheads ? 'underline dotted' : 'none' }}
                         onClick={() => r.overheads && setOpenOhWk(openOhWk === i ? null : i)}
                         title={r.overheads ? 'Click to see the breakdown' : ''}>
@@ -1372,6 +1394,51 @@ export default function CashFlow() {
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
                   ))}
+                  {openArrears && forecast[0] && forecast[0].arrears && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#fffbeb', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#92400e' }}>What is in the overdue row</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Supplier / project</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Reference</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Was due</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[0].arrBillList || []).map((b, i) => (
+                              <tr key={'b' + i} style={{ borderTop: '1px solid #f5eddd' }}>
+                                <td style={{ padding: '3px 6px' }}>{b.name}{b.project ? <span style={{ color: '#999' }}> &middot; {b.project}</span> : null}</td>
+                                <td style={{ padding: '3px 6px', color: '#999' }}>{b.ref || '-'}</td>
+                                <td style={{ padding: '3px 6px', color: '#b45309' }}>{b.due ? fmtDMY(b.due) : '-'}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-b.amount)}</td>
+                              </tr>
+                            ))}
+                            {(forecast[0].awaitingList || []).map((x, i) => (
+                              <tr key={'a' + i} style={{ borderTop: '1px solid #f5eddd', background: '#faf5ff' }}>
+                                <td style={{ padding: '3px 6px' }}>{x.name}</td>
+                                <td style={{ padding: '3px 6px', color: '#7c3aed' }}>certified, awaiting invoice</td>
+                                <td style={{ padding: '3px 6px', color: '#999' }}>to {x.upTo ? fmtDMY(x.upTo) : '-'}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#7c3aed' }}>{gbp(-x.amount)}</td>
+                              </tr>
+                            ))}
+                            {(forecast[0].arrInvList || []).length > 0 && (forecast[0].arrInvList || []).map((x, i) => (
+                              <tr key={'i' + i} style={{ borderTop: '1px solid #f5eddd', background: '#f4faf6' }}>
+                                <td style={{ padding: '3px 6px' }}>{x.name}{x.project ? <span style={{ color: '#999' }}> &middot; {x.project}</span> : null}</td>
+                                <td style={{ padding: '3px 6px', color: '#999' }}>{x.ref || '-'} (owed to us)</td>
+                                <td style={{ padding: '3px 6px', color: '#b45309' }}>{x.due ? fmtDMY(x.due) : '-'}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{gbp(x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          Everything past its date, swept into week 1. Red is owed by you, green is owed to you, purple is cost certified on a project whose invoice has not arrived. Set a date in the tables below and the item moves to the week you expect it.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
                   {/* WHICH PROJECTS make up the week's forecast sales, with the cost
                       beside each. A project showing sales and no labour or materials has
                       no cost schedule against it - that is the thing to look for. */}
