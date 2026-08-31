@@ -1,54 +1,45 @@
-pkg666 - Match on Xero's SECTION, not just the account name
-============================================================
+pkg667 - Sortable columns on Payment Performance
+=================================================
 
-*** SUPERSEDES pkg591 - pkg665. ***
-*** SIX NEW FILES - create these in GitHub (as before) ***
-
-
-*** AFTER DEPLOYING: PRESS "READ BALANCE SHEET FROM XERO" ON THE BALANCE SHEET
-    TAB. The stored figures predate the monthly breakdown. ***
+*** SUPERSEDES pkg591 - pkg666. ***
+*** SIX NEW FILES - create these in GitHub:
+      pages/business-financials/payment-performance.js
+      pages/business-financials/forecast-balance-sheet.js
+      pages/business-financials/forecast-pl.js
+      pages/business-financials/forecast-margin.js
+      pages/business-financials/balance-sheet.js
+      components/PageErrorBoundary.js
+***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/forecast-balance-sheet.js
-  lib/xero.js
+  pages/business-financials/payment-performance.js
   ... and the rest of the set as before
 
 
-EVERY MONTH TIES NOW - BUT THE LINES WERE ALL NIL
---------------------------------------------------
-Bank, Debtors, Retention and Creditors all read 0 on the actual months and the
-entire balance sat in Financing & tax. Two causes, both found by testing the
-matching against the real chart of accounts in your PDF.
+SORTING
+-------
+Every column header sorts. Click again to reverse.
 
-1. THE STORED DATA HAS NO MONTHLY VALUES. It was fetched before the parser kept
-   every column, so the totals came through - which is why the months tie - but
-   the individual lines did not. Every lookup returned zero.
+  value desc     Wates > Torsion > Alheembouw     (the default)
+  spread desc    Torsion > Wates > Alheembouw
+  medLate asc    Alheembouw > Torsion > Wates
+  name asc       Alheembouw > Torsion > Wates
 
-   The page now DETECTS this and says so, rather than showing a tidy table of
-   zeros. One refresh fixes it.
+A new column starts DESCENDING - biggest first is nearly always what you want -
+except the customer name, where A-Z is useful and Z-A is not.
 
-2. MATCHING ON THE NAME ALONE WAS NEVER GOING TO WORK on your chart:
+The arrow shows only on the column in use. Eight permanent arrows is noise and
+tells you nothing about which one is active.
 
-     "American Express Platinum Business - 2000" appears TWICE - once under
-     "Cash at bank and in hand" as an asset, once under Creditors as a liability.
-     Same name, opposite meaning. The asset matched nothing and the liability
-     went into Creditors instead of Cards.
+Default stays value descending: the biggest customers are the ones whose payment
+behaviour actually moves the forecast.
 
-   Now matched on Xero's SECTION as well as the name:
 
-     Amex (Cash at bank)        -> Cards
-     Amex (Creditors)           -> Cards
-     Capital On Tap             -> Cards
-     Accounts Receivable        -> Debtors
-     Retentions Receivable      -> Retention
-     Other Debtors              -> Debtors
-     Accounts Payable           -> Creditors
-     CIS & PAYE                 -> Creditors
-     WIP, Inventory, Prepayments, fixed assets, deferred tax -> Financing
-
-FINANCING IS A DELIBERATE CATCH-ALL. WIP, inventory, prepayments, fixed assets and
-deferred tax are real but are not separately forecast. Rather than invent a line
-for each and leave them static, that line absorbs them and balances the month
-exactly. One honest catch-all beats five stale lines.
+WORTH SORTING BY SPREAD AT LEAST ONCE
+-------------------------------------
+It puts the customers you cannot plan around at the top, whatever their median
+says. Torsion medians 12 days but swings between 0 and 60 - sorted by "typically
+paid" it looks like one of your better payers, and sorted by spread it is the
+worst. Those are the ones where a forecast offset will not save you.

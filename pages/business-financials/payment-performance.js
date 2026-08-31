@@ -17,6 +17,19 @@ const median = (arr) => {
 const th = { padding: '7px 9px', fontSize: 11, color: '#888', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }
 const td = { padding: '6px 9px', fontSize: 12.5, textAlign: 'right', whiteSpace: 'nowrap' }
 
+// Sortable header. Module scope, and the arrow only appears on the column in use - eight
+// permanent arrows is noise, and you cannot tell at a glance which one is active.
+function SortTh({ sk, sort, onSort, children, left, title }) {
+  const on = sort.key === sk
+  return (
+    <th style={{ ...th, textAlign: left ? 'left' : 'right', cursor: 'pointer', userSelect: 'none', color: on ? INK : '#888' }}
+      onClick={() => onSort(sk)} title={title || 'Click to sort'}>
+      {children}
+      <span style={{ fontSize: 9, marginLeft: 3, color: on ? '#b45309' : 'transparent' }}>{on && sort.dir === 'asc' ? '\u25B2' : '\u25BC'}</span>
+    </th>
+  )
+}
+
 export default function PaymentPerformance() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
@@ -26,6 +39,16 @@ export default function PaymentPerformance() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [open, setOpen] = useState(null)
+  // Defaults to value descending - the biggest customers are the ones whose payment
+  // behaviour actually moves the forecast.
+  const [sort, setSort] = useState({ key: 'value', dir: 'desc' })
+
+  // Clicking the column you are already on flips the direction, which is what everyone
+  // expects. A new column starts descending EXCEPT the name, where A-Z is the useful way
+  // round and Z-A almost never is.
+  const clickSort = (key) => setSort(sc => sc.key === key
+    ? { key, dir: sc.dir === 'desc' ? 'asc' : 'desc' }
+    : { key, dir: key === 'name' ? 'asc' : 'desc' })
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -92,8 +115,15 @@ export default function PaymentPerformance() {
         spread: e.lates.length > 1 ? Math.max(...e.lates) - Math.min(...e.lates) : 0,
         invoices: e.invoices.sort((a, b) => b.paidDate.localeCompare(a.paidDate)),
       }
-    }).sort((a, b) => b.value - a.value)
-  }, [data])
+    }).sort((a, b) => {
+      const k = sort.key
+      const av = k === 'name' ? String(a.name).toLowerCase() : (a[k] || 0)
+      const bv = k === 'name' ? String(b.name).toLowerCase() : (b[k] || 0)
+      if (av === bv) return 0
+      const cmp = av > bv ? 1 : -1
+      return sort.dir === 'asc' ? cmp : -cmp
+    })
+  }, [data, sort])
 
   const allLates = rows.flatMap(r => r.lates)
   const overall = median(allLates)
@@ -139,13 +169,13 @@ export default function PaymentPerformance() {
           <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
-                <th style={{ ...th, textAlign: 'left' }}>Customer</th>
-                <th style={th}>Invoices</th>
-                <th style={th}>Value</th>
-                <th style={th} title="Middle invoice, not the average - one disputed invoice at 300 days would wreck a mean.">Typically paid</th>
-                <th style={th} title="Days from invoice date to payment, whatever the terms said.">Issue to cash</th>
-                <th style={th}>On time</th>
-                <th style={th} title="Gap between their fastest and slowest payment. A customer reliably 20 days late is easy to forecast; one anywhere between 0 and 60 is not.">Spread</th>
+                <SortTh sk="name" sort={sort} onSort={clickSort} left>Customer</SortTh>
+                <SortTh sk="n" sort={sort} onSort={clickSort}>Invoices</SortTh>
+                <SortTh sk="value" sort={sort} onSort={clickSort}>Value</SortTh>
+                <SortTh sk="medLate" sort={sort} onSort={clickSort} title="Middle invoice, not the average - one disputed invoice at 300 days would wreck a mean.">Typically paid</SortTh>
+                <SortTh sk="medTaken" sort={sort} onSort={clickSort} title="Days from invoice date to payment, whatever the terms said.">Issue to cash</SortTh>
+                <SortTh sk="onTimePct" sort={sort} onSort={clickSort}>On time</SortTh>
+                <SortTh sk="spread" sort={sort} onSort={clickSort} title="Gap between their fastest and slowest payment. A customer reliably 20 days late is easy to forecast; one anywhere between 0 and 60 is not.">Spread</SortTh>
                 <th style={th} title="Days to shift this customer's invoices by in the 13-week cash flow. Blank uses the due date.">Forecast offset</th>
               </tr></thead>
               <tbody>
