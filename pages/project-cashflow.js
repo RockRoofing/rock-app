@@ -550,11 +550,11 @@ export default function ProjectCashflow() {
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} onView={openForecast} />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} focusKey={focusKey} onFocus={setFocusKey} onView={openForecast} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
                 {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} onView={openForecast} neg />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} focusKey={focusKey} onFocus={setFocusKey} onView={openForecast} neg />)}
               </div>
             </div>
           </div>
@@ -570,7 +570,7 @@ export default function ProjectCashflow() {
   )
 }
 
-function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], superseded, stale, onView, neg }) {
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], superseded, stale, focusKey, onFocus, onView, neg }) {
   const complD = parseISO(meta.completionDate || '')
   const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
@@ -648,9 +648,9 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
               // the View button. Clicking the bar now limits the cash rows above to this
               // project alone - clicking again clears it.
               return (
-                <div key={fc.id} onClick={() => setFocusKey(k => k === pk ? null : pk)}
-                  title={focusKey === pk ? 'Showing only this project above - click to show all' : 'Click to show only this project in the cash rows above'}
-                  style={{ position: 'absolute', top: 3, bottom: 3, left, width, cursor: 'pointer', outline: focusKey === pk ? '2px solid #1a1a19' : 'none', outlineOffset: 1, borderRadius: 4 }}>
+                <div key={fc.id} onClick={() => onFocus && onFocus(k => k === p.key ? null : p.key)}
+                  title={focusKey === p.key ? 'Showing only this project above - click to show all' : 'Click to show only this project in the cash rows above'}
+                  style={{ position: 'absolute', top: 3, bottom: 3, left, width, cursor: 'pointer', outline: focusKey === p.key ? '2px solid #1a1a19' : 'none', outlineOffset: 1, borderRadius: 4 }}>
                   <div title={gone
                     ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead'
                     // Shows what is STORED on the record, so a bar disagreeing with the

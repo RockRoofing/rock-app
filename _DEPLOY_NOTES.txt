@@ -1,7 +1,7 @@
-pkg643 - Forecast gross margin (accrual), plus the error boundary
-==================================================================
+pkg644 - FIX: focusKey is not defined (and a second one behind it)
+===================================================================
 
-*** SUPERSEDES pkg591 - pkg642. ***
+*** SUPERSEDES pkg591 - pkg643. ***
 *** THREE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-margin.js
       pages/business-financials/balance-sheet.js
@@ -11,10 +11,10 @@ pkg643 - Forecast gross margin (accrual), plus the error boundary
 
 CHANGED FILES (replace)
 -----------------------
+  pages/project-cashflow.js               <- the fix
   components/BizNav.js
   pages/_app.js
   pages/api/business-financials.js
-  pages/project-cashflow.js
   pages/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
@@ -23,55 +23,41 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-FORECAST MARGIN - A NEW TAB
----------------------------
-You were right that the data is already there. It needed no new inputs, only a
-second read of the same records on different dates:
+THE BOUNDARY PAID FOR ITSELF IMMEDIATELY
+----------------------------------------
+"focusKey is not defined" - one round trip instead of five.
 
-    revenue    the MONTH each sales line belongs to - the "Spread across the
-               period's calendar months" grid on the forecast
-    materials  DELIVERED (deliverDay), not paid
-    labour     the END of each instalment's window, not its pay date
+Row() is a MODULE-SCOPE component, so it cannot see the page component's state. I
+used focusKey and setFocusKey inside it when I made the forecast bars clickable.
+They are now passed as props.
 
-So the same forecast feeds both: a period paid in December for work valued in
-September sits in September here and December on the cash flow, and both are right.
-
-
-A REAL PROBLEM CAUGHT WHILE BUILDING IT
----------------------------------------
-My first version put a whole period's revenue on its END DATE while costs spread
-across months. That gave 90% margin one month and negative the next - true
-arithmetic, meaningless commercially. Every sales line already carries its month,
-so revenue now spreads exactly as the forecast says.
-
-    Aug   rev 20,859   lab 17,000                margin  3,859   19%
-    Sep   rev 20,859   lab  8,585                margin 12,274   59%
-    Oct   rev 20,859   mat 42,441                margin -21,582 -103%
-    Nov   rev 20,858                             margin 20,858  100%
-    TOTAL rev 83,435   cost 68,026               margin 15,409   18%
-
-MONTHLY IS STILL LUMPY and the page says so: materials are taken when delivered,
-so one delivery lands wholly in one month. The TOTAL is the figure to judge. That
-is accrual accounting behaving normally, not a fault - and better said plainly
-than smoothed over.
+AND A SECOND ONE SITTING RIGHT BEHIND IT. The same three lines also used `pk`,
+which is the parent loop's variable and does not exist in Row either. It would
+have thrown the instant focusKey was fixed - another round trip. Row already
+receives `p`, so p.key is the same value.
 
 
-IT CALLS OUT AN IMPLAUSIBLE MARGIN
-----------------------------------
-Above 35% it says so outright, with the arithmetic: at 20% the cost on your
-revenue would be X against Y forecast, so roughly Z is unaccounted for. A margin
-figure looks authoritative in a way a cash figure does not, so an unbelievable one
-has to announce itself.
+I THEN SCANNED EVERY COMPONENT IN BOTH CASH FLOW FILES
+------------------------------------------------------
+Stripping comments and strings, and accounting for destructured state and
+callback parameters, for identifiers that resolve to no parameter, local, module
+declaration or import.
 
-LEGACY FORECASTS ARE MORE ACCURATE HERE than on the cash flow - matDeliverDay is a
-stored fact, whereas the payment date had to be rebuilt from an assumed term.
+  project-cashflow.js   Row, HypAppModal, SpreadRow, PositionPanel   clean
+  cashflow.js           DateCell, NetPositionBox                     clean
+  forecast-margin.js                                                 clean
+  balance-sheet.js                                                   clean
 
-NOT INCLUDED: overheads, depreciation, accruals. This is GROSS margin. Overheads
-from Budgets are the next step to operating profit.
+This is the third time this exact fault has shipped - a module-scope component
+reaching for the page's state. It compiles perfectly every time, which is why the
+build never catches it. The scan is now part of what I run before packaging.
 
 
-ALSO - THE ERROR BOUNDARY (pkg642)
-----------------------------------
-Every page now shows the REAL error instead of "a client-side exception has
-occurred". Deploy this, open the project cash flow, and send me the red box - that
-names the fault outright.
+ALSO IN THIS PACKAGE
+--------------------
+pkg643 - FORECAST MARGIN tab. Accrual basis: revenue by the month each sales line
+belongs to, materials when DELIVERED, labour when the work was DONE. Says so
+outright when the margin is not credible for roofing. Gross margin only -
+overheads are the next step.
+
+pkg642 - the error boundary itself. Worth keeping permanently.
