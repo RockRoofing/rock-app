@@ -1,0 +1,289 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import { BizNav, INK, GOLD, gbp } from '../../components/BizNav'
+
+function fyMonths(endYear) {
+  const out = [`${endYear - 1}-12`]
+  for (let m = 1; m <= 11; m++) out.push(`${endYear}-${String(m).padStart(2, '0')}`)
+  return out
+}
+const monthShort = (mo) => {
+  const [y, m] = String(mo).split('-').map(Number)
+  if (!y || !m) return mo
+  return `${new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' })} ${String(y).slice(2)}`
+}
+const projLabel = (fc) => {
+  const no = fc.projectNo ? String(fc.projectNo) : ''
+  const nm = (fc.projectName || '').trim()
+  if (no && nm) return nm.startsWith(no) ? nm : `${no} - ${nm}`
+  return nm || no || String(fc.projectKey || '').replace(/^[LN]:/, '') || ''
+}
+
+const th = { padding: '7px 8px', fontSize: 10.5, color: '#888', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }
+const td = { padding: '6px 8px', fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap' }
+const inp = { padding: '5px 7px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, width: 74, textAlign: 'right' }
+
+export default function ForecastBalanceSheet() {
+  const router = useRouter()
+  const [ok, setOk] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [bs, setBs] = useState(null)
+  const [oh, setOh] = useState(null)
+  const [mg, setMg] = useState(null)
+  const [cf, setCf] = useState(null)
+  const [a, setA] = useState({ debtorDays: 45, creditorDays: 45, retentionPct: 3, retentionMonths: 12 })
+  const [saved, setSaved] = useState('')
+
+  useEffect(() => {
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
+      if (!d.user) { router.replace('/login'); return }
+      if (d.user.role !== 'admin') { router.replace('/'); return }
+      setOk(true)
+      Promise.all([
+        fetch('/api/business-financials?view=balance-sheet').then(r => r.json()).catch(() => null),
+        fetch('/api/business-financials?view=budgets-overheads').then(r => r.json()).catch(() => null),
+        fetch('/api/business-financials?view=margin').then(r => r.json()).catch(() => null),
+        fetch('/api/business-financials?view=cashflow').then(r => r.json()).catch(() => null),
+      ]).then(([b, o, m, c]) => {
+        setBs(b); setOh(o); setMg(m); setCf(c)
+        if (b?.assumptions) setA(x => ({ ...x, ...b.assumptions }))
+        setLoading(false)
+      })
+    })
+  }, [])
+
+  async function saveAssumptions(next) {
+    setA(next); setSaved('saving')
+    try {
+      const r = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'balance-sheet', action: 'save-assumptions', assumptions: next }),
+      })
+      setSaved(r.ok ? 'saved' : 'NOT SAVED')
+      if (r.ok) setTimeout(() => setSaved(''), 1500)
+    } catch { setSaved('NOT SAVED') }
+  }
+
+  const model = useMemo(() => {
+    if (!bs || !oh || !mg || !cf) return null
+    const now = new Date()
+    const fyEnd = now.getMonth() >= 11 ? now.getFullYear() + 1 : now.getFullYear()
+    const months = fyMonths(fyEnd)
+    const actualSet = new Set(oh.actualMonths || [])
+
+    // ---- OPENING POSITION, from Xero's own balance sheet ------------------------------
+    // Grouped by whatever sections that tenant's report produces, so nothing here assumes
+    // Rock Roofing's chart of accounts.
+    const accounts = bs.accounts || []
+    const sum = (test) => accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase())).reduce((t, x) => t + (x.balance || 0), 0)
+    const openBank = sum(s => s.includes('bank') && !/credit card|visa|mastercard|amex/.test(s))
+    const openCards = sum(s => /credit card|visa|mastercard|amex/.test(s))
+    const openDebtors = sum(s => s.includes('receivable') || s.includes('debtor'))
+    const openCreditors = sum(s => s.includes('payable') || s.includes('creditor'))
+    const openOther = accounts.reduce((t, x) => t + (x.balance || 0), 0) - openBank - openCards - openDebtors - openCreditors
+    const openEquityish = openBank + openCards + openDebtors + openCreditors + openOther
+
+    // ---- P&L, the same composition the Forecast P&L tab uses --------------------------
+    const byMonth = {}
+    for (const m of (mg.months || [])) byMonth[m.month] = m
+    const fRev = {}, fCos = {}
+    for (const fc of (cf.projForecasts || [])) {
+      const acc = fc.accrual
+      if (!acc) continue
+      for (const r of (acc.revenueByMonth || [])) if (r.month && r.amount) fRev[r.month] = (fRev[r.month] || 0) + r.amount
+      for (const x of (acc.materials || [])) if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fCos[k] = (fCos[k] || 0) + x.amount }
+      for (const x of (acc.labour || [])) if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fCos[k] = (fCos[k] || 0) + x.amount }
+    }
+    const fOh = {}
+    for (const byM of Object.values(oh.predictedByCodeMonth || {})) {
+      for (const [mo, v] of Object.entries(byM || {})) fOh[mo] = (fOh[mo] || 0) + (Number(v) || 0)
+    }
+
+    // ---- FINANCING, from the tracked balance sheet items ------------------------------
+    const finByMonth = {}
+    for (const it of (bs.items || [])) {
+      if (it.inForecast === false) continue
+      const monthly = Number(it.monthly) || 0
+      if (!monthly) continue
+      let left = Number(it.liability) || 0
+      const capped = left > 0
+      for (const mo of months) {
+        if (it.start && mo < it.start) continue
+        if (it.end && mo > it.end) continue
+        if (capped && left <= 0) break
+        const amt = capped ? Math.min(monthly, left) : monthly
+        if (amt <= 0) break
+        if (capped) left -= amt
+        finByMonth[mo] = (finByMonth[mo] || 0) + amt
+      }
+    }
+    const openFinancing = -(bs.items || []).filter(i => i.inForecast !== false).reduce((t, i) => t + (Number(i.liability) || 0), 0)
+
+    // ---- ROLL FORWARD -----------------------------------------------------------------
+    //
+    // Cash is DERIVED, not asserted. Profit goes to reserves; the movement in debtors,
+    // creditors, retention and financing is what turns that profit into cash. Which is
+    // what makes it a three-way rather than three separate statements: if the working
+    // capital assumptions are wrong, the bank line goes wrong in a way you can see.
+    //
+    // The 13-week cash flow stays the detailed near-term view - it schedules real invoice
+    // and bill dates. This is the twelve-month shape.
+    const dDays = Number(a.debtorDays) || 0
+    const cDays = Number(a.creditorDays) || 0
+    const retPct = (Number(a.retentionPct) || 0) / 100
+    const retMonths = Math.max(1, Number(a.retentionMonths) || 12)
+
+    let bank = openBank, cards = openCards, debtors = openDebtors, creditors = openCreditors
+    let financing = openFinancing, retention = 0, reserves = openEquityish
+    const rows = []
+    // Revenue and cost by month, kept so receipts and payments can lag them.
+    const revOf = [], cosOf = [], ohOf = []
+    for (const mo of months) {
+      const isActual = actualSet.has(mo)
+      const m = byMonth[mo] || {}
+      revOf.push(isActual ? (m.income || 0) : (fRev[mo] || 0))
+      cosOf.push(isActual ? (m.cos || 0) : (fCos[mo] || 0))
+      ohOf.push(isActual ? (m.overheads || 0) : (fOh[mo] || 0))
+    }
+    // A lag in months, rounded - 45 days is one and a half months, so half of a month's
+    // billing is collected in the following month and half the one after.
+    const lag = (arr, i, days) => {
+      const whole = Math.floor(days / 30), frac = (days % 30) / 30
+      const a1 = arr[i - whole] ?? 0
+      const a2 = arr[i - whole - 1] ?? 0
+      return a1 * (1 - frac) + a2 * frac
+    }
+
+    months.forEach((mo, i) => {
+      const isActual = actualSet.has(mo)
+      const revenue = revOf[i], cos = cosOf[i], overheads = ohOf[i]
+      const net = revenue - cos - overheads
+
+      // Retention withheld on this month's billing, released after retMonths.
+      const withheld = revenue * retPct
+      const released = (revOf[i - retMonths] ?? 0) * retPct
+
+      const receipts = lag(revOf, i, dDays) * (1 - retPct) + released
+      const payments = lag(cosOf, i, cDays) + overheads
+      const finPaid = finByMonth[mo] || 0
+
+      debtors += revenue * (1 - retPct) - lag(revOf, i, dDays) * (1 - retPct)
+      retention += withheld - released
+      creditors += -(cos - lag(cosOf, i, cDays))       // liabilities carried negative
+      financing += finPaid                              // liability negative, so paying it rises toward 0
+      bank += receipts - payments - finPaid
+      reserves += net
+
+      const assets = bank + debtors + retention
+      const liabs = cards + creditors + financing
+      rows.push({
+        mo, isActual, revenue, cos, overheads, net,
+        bank, debtors, retention, cards, creditors, financing,
+        assets, liabs, netAssets: assets + liabs, reserves,
+        // The whole point of the third statement. If this is not ~0 the model does not
+        // tie, and saying so is more useful than a balance sheet that quietly does not.
+        check: (assets + liabs) - reserves,
+      })
+    })
+    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, hasOpening: accounts.length > 0 }
+  }, [bs, oh, mg, cf, a])
+
+  if (!ok) return null
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f7f6f3' }}>
+      <Head><title>Forecast Balance Sheet - Business Financials</title></Head>
+      <BizNav />
+      <div style={{ padding: '22px 26px' }}>
+        <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Forecast balance sheet{model ? ` - year to Nov ${model.fyEnd}` : ''}</h1>
+        <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4, maxWidth: 960 }}>
+          The third leg of the three-way. Opening position from Xero, then rolled forward month by month: profit goes to reserves, and the
+          movement in debtors, creditors, retention and financing is what turns that profit into cash. <strong>Cash is derived, not
+          asserted</strong> - so if the working capital assumptions are wrong, the bank line goes wrong somewhere you can see it.
+          Months marked ACTUAL on Budgets use Xero's figures; the rest are forecast.
+        </div>
+
+        {loading && <div style={{ color: '#999', padding: 30 }}>Loading...</div>}
+
+        {!loading && model && !model.hasOpening && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginTop: 18, fontSize: 13, color: '#92400e' }}>
+            No opening balance sheet yet. Go to the <strong>Balance Sheet</strong> tab and press &quot;Read balance sheet from Xero&quot; -
+            everything below rolls forward from it, so without it the whole thing starts at zero.
+          </div>
+        )}
+
+        {model && (
+          <>
+            <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', margin: '16px 0', display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="How long customers take to pay. 45 days means roughly half a month's billing is collected in the following month and half the one after.">Debtor days</div>
+                <input type="number" value={a.debtorDays} onChange={e => saveAssumptions({ ...a, debtorDays: e.target.value })} style={inp} /></div>
+              <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="How long you take to pay suppliers and subcontractors.">Creditor days</div>
+                <input type="number" value={a.creditorDays} onChange={e => saveAssumptions({ ...a, creditorDays: e.target.value })} style={inp} /></div>
+              <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Retention withheld on billing. It becomes a debtor that is not collected with the rest.">Retention %</div>
+                <input type="number" value={a.retentionPct} onChange={e => saveAssumptions({ ...a, retentionPct: e.target.value })} style={inp} /></div>
+              <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Months before retention is released. The tracker holds the real dates; this is the shape for the year.">Retention held (months)</div>
+                <input type="number" value={a.retentionMonths} onChange={e => saveAssumptions({ ...a, retentionMonths: e.target.value })} style={inp} /></div>
+              {saved && <span style={{ fontSize: 11.5, fontWeight: 700, color: saved === 'saved' ? '#16a34a' : saved === 'saving' ? '#b45309' : '#dc2626' }}>{saved}</span>}
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', minWidth: 1150 }}>
+                <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                  <th style={{ ...th, textAlign: 'left', position: 'sticky', left: 0, background: '#faf9f7' }}>Month end</th>
+                  {model.rows.map(r => (
+                    <th key={r.mo} style={{ ...th, background: r.isActual ? '#f4faf6' : '#fffdf5' }}>
+                      {monthShort(r.mo)}
+                      <div style={{ fontSize: 9, fontWeight: 700, color: r.isActual ? '#16a34a' : '#b45309' }}>{r.isActual ? 'ACTUAL' : 'forecast'}</div>
+                    </th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  <Row label="Bank" rows={model.rows} pick={r => r.bank} bold />
+                  <Row label="Debtors" rows={model.rows} pick={r => r.debtors} />
+                  <Row label="Retention held" rows={model.rows} pick={r => r.retention} />
+                  <Row label="Creditors" rows={model.rows} pick={r => r.creditors} colour="#dc2626" />
+                  <Row label="Credit cards" rows={model.rows} pick={r => r.cards} colour="#dc2626" />
+                  <Row label="Financing &amp; tax" rows={model.rows} pick={r => r.financing} colour="#dc2626" />
+                  <Row label="Net assets" rows={model.rows} pick={r => r.netAssets} bold band />
+                  <Row label="Reserves (opening + profit)" rows={model.rows} pick={r => r.reserves} />
+                  <Row label="Out by" rows={model.rows} pick={r => r.check} check />
+                </tbody>
+              </table>
+              <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 8, lineHeight: 1.45 }}>
+                <strong>&quot;Out by&quot; is the point of this page.</strong> Net assets should equal reserves. Where it does not, the three
+                statements do not tie - normally because the working capital assumptions above do not match how the business actually
+                collects and pays, or because something moves cash without touching the P&amp;L and is not yet on the Balance Sheet tab.
+                A balance sheet that quietly did not balance would be worse than useless.
+                <br />
+                Corporation tax, depreciation, dividends and VAT timing are not modelled. The 13-week cash flow remains the detailed
+                near-term view - it schedules real invoice and bill dates, where this is the twelve-month shape.
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, rows, pick, colour, bold, band, check }) {
+  return (
+    <tr style={{ borderBottom: '1px solid #f2f0ec', background: band ? '#f7faf9' : 'transparent' }}>
+      <td style={{ padding: '6px 8px', fontSize: 12, textAlign: 'left', whiteSpace: 'nowrap', fontWeight: bold ? 700 : 400,
+        position: 'sticky', left: 0, background: band ? '#f7faf9' : '#fff' }}
+        dangerouslySetInnerHTML={{ __html: label }} />
+      {rows.map(r => {
+        const v = pick(r)
+        const bad = check && Math.abs(v) > 1
+        return (
+          <td key={r.mo} style={{ ...td, fontWeight: bold || bad ? 700 : 400,
+            color: bad ? '#dc2626' : (check ? '#16a34a' : (v < 0 ? (colour || '#dc2626') : (colour === '#dc2626' ? '#16a34a' : INK))),
+            background: r.isActual ? 'transparent' : '#fffdf7' }}>
+            {check && !bad ? 'ties' : gbp(v)}
+          </td>
+        )
+      })}
+    </tr>
+  )
+}

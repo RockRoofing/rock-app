@@ -1014,6 +1014,11 @@ export default async function handler(req, res) {
               raw: Number(m.amount != null && m.amount !== '' ? m.amount : m.value) || 0,
             })),
             from: fc.from, to: fc.to,
+            // A person's decision about what is still coming, made when the forecast was
+            // last redone. null means "use claimed less spend"; a number means somebody
+            // has looked and settled it.
+            awaitLabour: fc.awaitLabour == null ? null : Number(fc.awaitLabour) || 0,
+            awaitMaterials: fc.awaitMaterials == null ? null : Number(fc.awaitMaterials) || 0,
             // WHAT THE RECORD ACTUALLY CONTAINS. Sales come through and costs do not, so
             // rather than guess at the field names again, report them. Keys only and a
             // few figures - no payload bloat.
@@ -1149,11 +1154,31 @@ export default async function handler(req, res) {
         return res.json({ ok: true, items: clean })
       } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
     }
-    const [bsAccounts, bsItems] = await Promise.all([
+    if (req.method === 'POST' && (req.body || {}).action === 'save-assumptions') {
+      try {
+        const a = (req.body || {}).assumptions || {}
+        await redis.set('config:bs-assumptions', {
+          debtorDays: Number(a.debtorDays) || 45,
+          creditorDays: Number(a.creditorDays) || 45,
+          retentionPct: Number(a.retentionPct) || 3,
+          retentionMonths: Number(a.retentionMonths) || 12,
+          // Which section titles hold each thing. Typed once from THIS tenant's own chart
+          // of accounts, so nothing is hard-coded to one company's codes.
+          map: (a.map && typeof a.map === 'object') ? a.map : {},
+        })
+        return res.json({ ok: true })
+      } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+    }
+    const [bsAccounts, bsItems, bsAssumptions] = await Promise.all([
       redis.get('bs:accounts').then(v => v || null).catch(() => null),
       redis.get('config:bs-items').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
+      redis.get('config:bs-assumptions').then(v => v || null).catch(() => null),
     ])
-    return res.json({ accounts: bsAccounts?.accounts || [], asAt: bsAccounts?.asAt || null, fetchedAt: bsAccounts?.fetchedAt || null, items: bsItems })
+    return res.json({
+      accounts: bsAccounts?.accounts || [], asAt: bsAccounts?.asAt || null,
+      fetchedAt: bsAccounts?.fetchedAt || null, items: bsItems,
+      assumptions: bsAssumptions || { debtorDays: 45, creditorDays: 45, retentionPct: 3, retentionMonths: 12, map: {} },
+    })
   }
 
   if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-exclusions') {

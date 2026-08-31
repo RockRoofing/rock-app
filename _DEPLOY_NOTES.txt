@@ -1,8 +1,9 @@
-pkg645 - Forecast P&L for the financial year
-=============================================
+pkg648 - "Not yet invoiced" on the project forecast, and editable
+==================================================================
 
-*** SUPERSEDES pkg591 - pkg644. ***
-*** FOUR NEW FILES - create these in GitHub:
+*** SUPERSEDES pkg591 - pkg647. ***
+*** FIVE NEW FILES - create these in GitHub:
+      pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
       pages/business-financials/forecast-margin.js
       pages/business-financials/balance-sheet.js
@@ -12,81 +13,63 @@ pkg645 - Forecast P&L for the financial year
 
 CHANGED FILES (replace)
 -----------------------
+  pages/project-cashflow.js
+  pages/business-financials/cashflow.js
+  pages/api/business-financials.js
+  pages/api/project-cashflow.js
   components/BizNav.js
   pages/_app.js
-  pages/api/business-financials.js
-  pages/project-cashflow.js
   pages/business-financials.js
-  pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/api/dashboard.js
   pages/connect.js
   lib/xero.js
 
 
-FORECAST P&L - new tab, placed AFTER 12-Month as asked
--------------------------------------------------------
-December to November, the same financial year as Budgets. Twelve months across,
-each headed ACTUAL or forecast, with an FY total column:
-
-    Revenue
-    Cost of sale
-       materials (forecast)
-       labour (forecast)
-    Gross profit
-    Overheads
-    Net profit
-    Gross margin %
-    Net margin %
-
-ACTUAL months take income, cost of sales and overheads from Xero. FORECAST months
-take revenue and cost of sale from the project forecasts on the ACCRUAL basis -
-revenue in the month valued, materials when delivered, labour when done - and
-overheads from the Budgets grid.
-
-WHICH MONTHS ARE ACTUAL is decided by the Switch to Actual button on Budgets. That
-switch is already the single decision about which months are closed, so this
-follows it rather than having a rule of its own that could disagree.
-
-
-COMPOSED, NOT REBUILT
----------------------
-I started writing this as a server view and stopped. It would have duplicated the
-whole overheads pipeline, and two tabs computing the same figure separately is
-exactly the fault we have spent this session chasing.
-
-It fetches budgets-overheads, margin and cashflow - the same endpoints Budgets,
-Margin and Cash Flow already use - and composes them. So all four pages agree
-structurally rather than by being kept in step by hand.
-
-
-ONE LIMIT WORTH KNOWING
------------------------
-Xero gives ONE cost-of-sales total for a closed month, not the materials/labour
-split. So those two sub-lines only carry figures on FORECAST months, and show "-"
-on actual ones. Better than inventing a split.
-
-Depreciation, accruals and corporation tax are not modelled, so net profit is
-before those.
-
-
-THE FORECAST BALANCE SHEET - NOT IN THIS PACKAGE
+IT WAS ALREADY ON THE SCREEN - JUST NEVER NAMED
 ------------------------------------------------
-You asked for it as the third leg of a 3-way. It is the right goal and I have not
-started it, for a reason worth stating: a 3-way only works if the P&L and the cash
-flow are both trustworthy, because the balance sheet is what ties them together -
-it is where an error in either one shows up as a balance that does not balance.
+Your J190 materials panel reads claimed 240,772 and spend 165,030. THAT 75,742 GAP
+IS THE AWAITING-INVOICE FIGURE. It has been sitting there as two unconnected
+numbers the whole time.
 
-Right now the forecasts imply a 58.5% gross margin because roughly 330k of cost is
-missing from them. Build the balance sheet on that and it will not tie, and the
-time goes into chasing the difference rather than into the model.
+So this is not a new calculation, it is naming one you already had. Both the
+Labour and Materials panels now carry a line:
 
-It also needs things nothing currently holds: an opening balance sheet by month,
-debtor and creditor movements derived from the invoice and bill ledgers, and
-retained earnings rolled forward from the P&L above.
+    Not yet invoiced (claimed less spend)     £75,742
+    expected still to be invoiced to us
 
-My suggestion: use the Forecast P&L and Forecast Margin tabs to get the project
-forecasts right first - the implausible-margin warning tells you when they are -
-then the balance sheet is a genuinely useful piece rather than a reconciliation
-exercise. Say the word and I will scope it properly at the start of a session
-rather than the end of one.
+NOT in materials on site, which would have been wrong - that box is materials
+CLAIMED on the application, an asset you have billed the customer for. This is the
+opposite: cost you have incurred that your supplier has not billed YOU for.
+
+
+EDITABLE, BECAUSE ONLY YOU KNOW WHICH IT IS
+-------------------------------------------
+A gap is either a subcontractor who has not invoiced yet, or work that was never
+done and should be written off. The app cannot tell those apart.
+
+Blank uses claimed less spend. Type a figure and it says "overridden - calculated
+is 75,742" so a decision never looks like the default.
+
+    claimed 240,772, spend 165,030, no override  ->  75,742
+    override 0                                    ->       0  (written off)
+    override 20,000                               ->  20,000
+    labour OVERSPENT (79,496 vs 94,703)          ->       0
+
+That last one matters: it shows nil rather than a negative. You cannot be owed an
+invoice for cost you have already paid more of than you claimed.
+
+
+IT IS STORED ON THE FORECAST
+----------------------------
+Which scopes it to the position at that valuation. Redo the forecast after the
+next application and it starts clean rather than a write-off silently suppressing
+a later, genuine shortfall - exactly as you described your workflow.
+
+
+AND THE 13-WEEK HONOURS IT
+--------------------------
+Where you have set a figure, the cash flow uses it instead of recomputing. It
+already sweeps this into the current week inside the "Overdue - brought forward"
+row, so nothing is left in a month that has gone. Recomputing it there would have
+quietly overruled you.

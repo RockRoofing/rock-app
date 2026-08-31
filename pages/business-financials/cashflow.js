@@ -523,7 +523,60 @@ export default function CashFlow() {
     // subcontractor invoice and the materials bill are still coming. Dropping those too
     // made the forecast look BETTER than reality, which is the one direction a cash flow
     // must never err in.
+    // THE VALUATION DATE IS THE BOUNDARY.
+    //
+    // Everything a project has been valued for is now a real application and real bills;
+    // everything after it is still forecast. One line, not a per-week netting rule, which
+    // is what makes the hand-over clean as each valuation passes.
+    //
+    // Falls back to the period end where a project has no application calendar set - it is
+    // closer to the truth than a generic month end and it degrades predictably.
     const isApplied = (fc) => !!(fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd)
+
+    // COST CERTIFIED BUT NOT YET INVOICED.
+    //
+    // Dropping forecast cost at the valuation date assumes the subcontractor invoices have
+    // arrived. They lag - a valuation on the 25th is invoiced weeks later - so dropping it
+    // outright would quietly improve the forecast in the gap, which is the same mistake as
+    // dropping elapsed costs along with elapsed sales.
+    //
+    // So the forecast cost behind a passed valuation is dropped only to the extent real
+    // bills have turned up for that project. The shortfall is real money still to pay, and
+    // it lands in THE CURRENT WEEK - never left sitting in a month that has gone, because
+    // a balance in a past week cannot be paid and only makes you reconcile backwards.
+    const awaitingInvoice = (() => {
+      const billByProject = {}
+      for (const b of (data.bills || [])) {
+        if (!b.project || excluded[b.id]) continue
+        const k = normName(b.project)
+        billByProject[k] = (billByProject[k] || 0) + Math.abs(b.amountDue || 0)
+      }
+      const out = []
+      for (const fc of (data.projForecasts || [])) {
+        if (!fc.latestAppEnd) continue
+        const certified = [...(fc.labourSchedule || []), ...(fc.matItems || [])]
+          .filter(x => x.date && x.date <= fc.latestAppEnd)
+          .reduce((t, x) => t + (x.amount || 0), 0)
+        if (certified <= 0) continue
+        const k = normName(fc.projectName || '')
+        const billed = billByProject[k] || 0
+        // AN OVERRIDE SET ON THE PROJECT FORECAST WINS.
+        //
+        // Only a person knows whether a gap is a subcontractor who has not invoiced yet or
+        // work that was never done. Where somebody has settled it on the forecast, that is
+        // the answer - recomputing it here would quietly overrule them.
+        const ovr = (fc.awaitLabour == null && fc.awaitMaterials == null)
+          ? null
+          : (Number(fc.awaitLabour) || 0) + (Number(fc.awaitMaterials) || 0)
+        const short = ovr != null ? Math.max(0, ovr) : Math.max(0, certified - billed)
+        // Consume the allowance so two forecast periods on one project cannot both claim
+        // the same bills against themselves.
+        billByProject[k] = Math.max(0, billed - certified)
+        if (short > 0.5) out.push({ name: fc.projectName || fc.projectKey, amount: short, upTo: fc.latestAppEnd })
+      }
+      return out
+    })()
+    const awaitingTotal = awaitingInvoice.reduce((t, x) => t + x.amount, 0)
     const salesSpent = (fc) => isApplied(fc) || !!(fc.to && fc.to < todayISO)
     // Costs drop ONLY when a real application has replaced them. An elapsed period keeps
     // its costs until the real bill turns up, at which point the month netting removes
@@ -667,6 +720,8 @@ export default function CashFlow() {
       // The 20% CIS to HMRC is scheduled separately below.
       const arrBills = (data.bills || []).filter(i => !excluded[i.id] && isArrears((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
+      // (Certified-but-uninvoiced cost is carried by the ARREARS row, not added to week 1's
+      // bills as well - adding it in both places would count it twice.)
       const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
@@ -748,8 +803,11 @@ export default function CashFlow() {
         // the forecast it covers should be removed. Anything above it is spend still to
         // come and belongs in the forecast.
         const billThisWk = fc.projectName ? (billByProjectThisWk[normName(fc.projectName)] || 0) : 0
-        const rawL = (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-        const rawM = (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        // Behind the valuation date it is no longer forecast - it is a real bill, or it is
+        // in the awaiting-invoice figure that has already been swept into week 1.
+        const past = (x) => fc.latestAppEnd && x.date && x.date <= fc.latestAppEnd
+        const rawL = (fc.labourSchedule || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        const rawM = (fc.matItems || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
         // Applied to labour first, then materials - a project bill is far more often
         // subcontract labour than a materials invoice.
         const offL = Math.min(rawL, billThisWk)
@@ -781,16 +839,17 @@ export default function CashFlow() {
       // ARREARS ROW, before week 1 only. Everything already past its date, swept forward
       // - the money that is late rather than due. Shown separately so week 1 reads as the
       // week it actually is, and so the size of the arrears is impossible to miss.
-      if (w === 0 && (arrInvoices || arrBills || arrRet)) {
-        const arrNet = arrInvoices + arrRet - arrBills
+      if (w === 0 && (arrInvoices || arrBills || arrRet || awaitingTotal)) {
+        const arrNet = arrInvoices + arrRet - arrBills - awaitingTotal
         running += arrNet
         rows.push({
           wk: 'Overdue - brought forward', arrears: true, weekStart: s,
           invoicesIn: Math.round(arrInvoices), retIn: Math.round(arrRet), vatIn: 0,
           vatEstimated: false, vatSrcs: [],
-          bills: Math.round(arrBills), overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
+          bills: Math.round(arrBills + awaitingTotal), awaiting: Math.round(awaitingTotal), awaitingList: awaitingInvoice,
+          overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
           projSalesIn: 0, projCostOut: 0, projNet: 0, projLabourOut: 0, projMatOut: 0, fcBreak: [],
-          moneyIn: Math.round(arrInvoices + arrRet), moneyOut: Math.round(arrBills),
+          moneyIn: Math.round(arrInvoices + arrRet), moneyOut: Math.round(arrBills + awaitingTotal),
           net: Math.round(arrNet), closing: Math.round(running),
         })
       }
@@ -1213,7 +1272,13 @@ export default function CashFlow() {
                     <tr key={i} style={{ borderBottom: r.arrears ? '2px solid #fde68a' : '1px solid #f2f0ec', background: r.arrears ? '#fffbeb' : 'transparent' }}>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: r.arrears ? '#92400e' : undefined }}
                         title={r.arrears ? 'Everything already past its due date, swept into today. It is late money, not money due this week - shown separately so week 1 reads as the week it actually is.' : ''}>
-                        {r.wk}{r.arrears ? <div style={{ fontSize: 9.5, fontWeight: 600, color: '#b45309' }}>late - confirm dates below</div> : null}</td>
+                        {r.wk}{r.arrears ? <div style={{ fontSize: 9.5, fontWeight: 600, color: '#b45309' }}>late - confirm dates below</div> : null}
+                        {r.awaiting > 0 && (
+                          <div title={(r.awaitingList || []).map(x => `${x.name} - ${gbp(x.amount)} certified to ${fmtDMY(x.upTo)}, not yet invoiced`).join('\n')}
+                            style={{ fontSize: 9.5, fontWeight: 700, color: '#7c3aed', cursor: 'help' }}>
+                            incl {gbp(r.awaiting)} certified, awaiting invoice
+                          </div>
+                        )}</td>
                       <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of

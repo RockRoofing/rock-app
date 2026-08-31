@@ -722,6 +722,16 @@ function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 // term = { basis: 'days' | 'eom', days: N }
 //  - 'days': refDate + N days
 //  - 'eom' : last day of refDate's month, then + N days (last day of month included)
+// Last day of a "YYYY-MM". MODULE SCOPE - there is another monthEnd nested inside a memo
+// further up, which is invisible here; reaching for it would have thrown on the first
+// forecast without an application calendar.
+function monthEndOf(mk) {
+  const [y, m] = String(mk).split('-').map(Number)
+  if (!y || !m) return ''
+  const d = new Date(y, m, 0)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function paymentDate(refISO, term) {
   if (!refISO) return ''
   const [y, m, d] = refISO.split('-').map(Number)
@@ -849,7 +859,17 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
   const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
-  const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30, cycle: 'applications', startDate: '' })  // sales cash received
+  // DEFAULTS TO THE PROJECT'S OWN APPLICATION DATES.
+  //
+  // Under eom+30 a forecast lands on a date the real application will never use, so when
+  // it supersedes, one figure leaves on the 30th and its replacement arrives on the 14th -
+  // a phantom gap and spike in the same week. Anchored to the project's own valuation and
+  // payment days, the forecast sits on exactly the date its replacement will occupy, and
+  // the hand-over is a swap rather than a shuffle.
+  //
+  // Falls back to eom+30 automatically where the project has no application calendar -
+  // see appCalendarUsable, which already guards this.
+  const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30, cycle: 'project', startDate: '' })  // sales cash received
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   // null = follow the calculation. Anything else is a manual figure that wins.
   // Kept as the raw string so the box can be cleared and retyped without fighting it.
@@ -862,6 +882,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [prevGrossOverride, setPrevGrossOverride] = useState(null)
   // The revenue figure stored on the forecast, i.e. what the timeline bar reads.
   const [savedRevenue, setSavedRevenue] = useState(null)
+  // null = use claimed less spend. A number is a deliberate statement that the balance is
+  // not coming. Stored on the forecast, so it is scoped to the position at that valuation
+  // rather than sticking around and suppressing a later, genuine shortfall.
+  const [awaitLabour, setAwaitLabour] = useState(null)
+  const [awaitMaterials, setAwaitMaterials] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [contractTerms, setContractTerms] = useState({})  // retention / MCD from Edit Project Details
   const [appCalendar, setAppCalendar] = useState(null)    // application/valuation/payment days
@@ -885,7 +910,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null); setAwaitLabour(null); setAwaitMaterials(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -924,6 +949,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setRevOverride(editing.revenueOverride == null ? null : String(editing.revenueOverride))
           // What the timeline bar is currently showing, so the two can be compared.
           setSavedRevenue(editing.revenueThisPeriod == null ? null : num(editing.revenueThisPeriod))
+          setAwaitLabour(editing.awaitLabour == null ? null : String(editing.awaitLabour))
+          setAwaitMaterials(editing.awaitMaterials == null ? null : String(editing.awaitMaterials))
           setPrevGrossOverride(editing.prevGrossOverride == null ? null : String(editing.prevGrossOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
@@ -1450,7 +1477,19 @@ function HypAppModal({ modal, onClose, onSaved }) {
     // lands on the exact dates the real applications will - including any per-month
     // override. Rebuilding the rule here would drift the moment one of them changed.
     if (cycle === 'project') {
-      if (!periodMonths.length || !appCalendarUsable) return []
+      if (!periodMonths.length) return []
+      // NO APPLICATION CALENDAR -> fall back to the PERIOD END plus the payment term,
+      // rather than returning nothing. Returning [] silently produced a forecast with no
+      // sales at all, which is far worse than an approximate date - and now that this is
+      // the default cycle, it would have hit every project without a calendar set.
+      if (!appCalendarUsable) {
+        return periodMonths.map(mk => ({
+          month: mk,
+          appDate: monthEndOf(mk) || to || '',
+          date: paymentDate(monthEndOf(mk) || to || '', { basis: salesTerm.basis || 'eom', days: num(salesTerm.days) }),
+          amount: rev * (num(salesSpread[mk]) / 100),
+        })).filter(x => x.date)
+      }
       return periodMonths.map(mk => {
         const dts = resolveAppDates(mk, appCalendar || {})
         const cash = salesTerm.payOn === 'due' ? (dts.paymentDate || dts.finalDate) : (dts.finalDate || dts.paymentDate)
@@ -1585,6 +1624,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
       // null = follow the chain. A number is a deliberate statement of what has been
       // claimed, and wins over anything the chain works out.
       prevGrossOverride: prevGrossOverride === null || prevGrossOverride === '' ? null : num(prevGrossOverride),
+      awaitLabour: awaitLabour === null || awaitLabour === '' ? null : num(awaitLabour),
+      awaitMaterials: awaitMaterials === null || awaitMaterials === '' ? null : num(awaitMaterials),
       // WHAT THIS FORECAST CLAIMS TO DATE, cumulative, which is NOT the same as what its
       // percentages measure whenever an override has been used. Overriding revenue rather
       // than filling in percentages is a normal way to work - but without recording it,
@@ -1745,12 +1786,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   budget={labourBudgetTotal}
                   claimed={labourToDate} claimedNote="(labour element of measured work)"
                   spend={actuals ? actuals.labourSpend : null} spendAt={actuals ? actuals.calculatedAt : null}
+                  awaiting={actuals ? Math.max(0, labourToDate - (actuals.labourSpend || 0)) : null}
+                  awaitingOverride={awaitLabour} onAwaiting={setAwaitLabour}
                 />
                 <PositionPanel
                   title="Materials" colour="#7c3aed"
                   budget={materialsBudgetTotal}
                   claimed={materialsClaimedOnLines + mosToDate} claimedNote="(line items + on site)"
                   spend={actuals ? actuals.materialsSpend : null} spendAt={actuals ? actuals.calculatedAt : null}
+                  awaiting={actuals ? Math.max(0, (materialsClaimedOnLines + mosToDate) - (actuals.materialsSpend || 0)) : null}
+                  awaitingOverride={awaitMaterials} onAwaiting={setAwaitMaterials}
                   rows={<>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '1px 0 1px 12px' }}>
                       <span style={{ fontSize: 11, color: '#b8b3aa' }}>against line items</span>
@@ -2104,7 +2149,18 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
 //   Budget   what the contracted rates and instructed variations allow.
 //   Claimed  what has been billed to the CUSTOMER for it, cumulative.
 //   Spend    what has actually left the business, from Project Financials.
-function PositionPanel({ title, colour, budget, claimed, claimedNote, spend, spendAt, rows }) {
+// NOT YET INVOICED = claimed to date less spend to date.
+//
+// This was already on screen as two separate numbers and never named. On J190 materials
+// were claimed at 240,772 against spend of 165,030 - that 75,742 gap IS cost certified
+// but not yet billed to us, and it is what the 13-week cash flow now sweeps into the
+// current week rather than leaving in a month that has gone.
+//
+// Editable, because only a person knows which it is: a subcontractor who has not invoiced
+// yet, or work that was never done and should be written off. The app cannot tell those
+// apart. The override is stored against the forecast, so redoing the forecast after each
+// application is the natural moment to settle it.
+function PositionPanel({ title, colour, budget, claimed, claimedNote, spend, spendAt, rows, awaiting, awaitingOverride, onAwaiting }) {
   const pct = budget > 0 ? (spend / budget) * 100 : null
   const over = pct != null && pct > 100
   const Row = ({ k, v, note, strong, tone }) => (
@@ -2123,6 +2179,25 @@ function PositionPanel({ title, colour, budget, claimed, claimedNote, spend, spe
         {spend == null
           ? <Row k="Spend to date" v="n/a" note="(not in Xero)" />
           : <Row k="Spend to date" v={gbp(spend)} note="(Project Financials)" strong tone={over ? '#b91c1c' : INK} />}
+        {awaiting != null && spend != null && (
+          <div style={{ borderTop: '1px dashed #f0eee9', marginTop: 4, paddingTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11.5, color: '#6d28d9', fontWeight: 700 }}>Not yet invoiced
+                <span style={{ color: '#b8b3aa', fontWeight: 400 }}> (claimed less spend)</span></span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
+                <input type="number" value={awaitingOverride == null ? '' : awaitingOverride}
+                  placeholder={Math.round(awaiting).toString()}
+                  title="Blank uses claimed less spend. Type a figure where you know the balance is not coming - work that was never done, or a subcontractor who will not be invoicing."
+                  onChange={e => onAwaiting && onAwaiting(e.target.value === '' ? null : e.target.value)}
+                  style={{ width: 96, padding: '3px 6px', border: '1px solid ' + (awaitingOverride != null ? '#ddd6fe' : '#e5e5e5'), borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: '#b8b3aa', textAlign: 'right', marginTop: 1 }}>
+              {awaitingOverride != null ? `overridden - calculated is ${gbp(awaiting)}` : 'expected still to be invoiced to us'}
+            </div>
+          </div>
+        )}
         {spend != null && (
           <div style={{ fontSize: 10, color: over ? '#b91c1c' : '#b8b3aa', textAlign: 'right' }}>
             {pct != null ? `${pct.toFixed(1)}% of budget spent` : ''}
