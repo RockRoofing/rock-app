@@ -1,7 +1,7 @@
-pkg648 - "Not yet invoiced" on the project forecast, and editable
-==================================================================
+pkg649 - The pages now say WHY a forecast is not showing
+=========================================================
 
-*** SUPERSEDES pkg591 - pkg647. ***
+*** SUPERSEDES pkg591 - pkg648. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -11,65 +11,48 @@ pkg648 - "Not yet invoiced" on the project forecast, and editable
 ***
 
 
-CHANGED FILES (replace)
------------------------
-  pages/project-cashflow.js
-  pages/business-financials/cashflow.js
-  pages/api/business-financials.js
-  pages/api/project-cashflow.js
-  components/BizNav.js
-  pages/_app.js
-  pages/business-financials.js
-  pages/business-financials/invoice-finance.js
-  pages/api/dashboard.js
-  pages/connect.js
-  lib/xero.js
-
-
-IT WAS ALREADY ON THE SCREEN - JUST NEVER NAMED
+PROBABLY THIS, AND YOU CAN CHECK IT IN ONE LOOK
 ------------------------------------------------
-Your J190 materials panel reads claimed 240,772 and spend 165,030. THAT 75,742 GAP
-IS THE AWAITING-INVOICE FIGURE. It has been sitting there as two unconnected
-numbers the whole time.
+Today is 31 August. A forecast whose period ENDS ON OR BEFORE TODAY has its sales
+dropped - that is the rule you and I agreed: if a period has passed without being
+applied for, you have not earned the money, so it is not future cash.
 
-So this is not a new calculation, it is naming one you already had. Both the
-Labour and Materials panels now carry a line:
-
-    Not yet invoiced (claimed less spend)     £75,742
-    expected still to be invoiced to us
-
-NOT in materials on site, which would have been wrong - that box is materials
-CLAIMED on the application, an asset you have billed the customer for. This is the
-opposite: cost you have incurred that your supplier has not billed YOU for.
+So if you have just built forecasts for the period that has JUST ENDED, they will
+be saved correctly and still show nothing. That is the rule working, not a fault -
+but nothing on the page said so, which is the actual problem.
 
 
-EDITABLE, BECAUSE ONLY YOU KNOW WHICH IT IS
--------------------------------------------
-A gap is either a subcontractor who has not invoiced yet, or work that was never
-done and should be written off. The app cannot tell those apart.
+THREE GATES, ALL PREVIOUSLY SILENT
+----------------------------------
+  1. no `accrual` data      the API file has not been deployed
+  2. sales dropped          period already applied for, OR period ended before today
+  3. outside the window     its cash falls beyond the next 13 weeks
 
-Blank uses claimed less spend. Type a figure and it says "overridden - calculated
-is 75,742" so a decision never looks like the default.
+The Cash Flow page now lists every forecast that is NOT in the figures, and why:
 
-    claimed 240,772, spend 165,030, no override  ->  75,742
-    override 0                                    ->       0  (written off)
-    override 20,000                               ->  20,000
-    labour OVERSPENT (79,496 vs 94,703)          ->       0
+    3 forecasts not in the figures above.
+      J190 - Russell Hill - period ended 31/08/26 - sales drop once a period has
+        passed without being applied for
+      J248 - Renshaw House - already applied for (application to 31/08/26) - its
+        money is a real invoice now
+      J251 - Winnersh - its cash falls outside the next 13 weeks
 
-That last one matters: it shows nil rather than a negative. You cannot be owed an
-invoice for cost you have already paid more of than you claimed.
-
-
-IT IS STORED ON THE FORECAST
-----------------------------
-Which scopes it to the position at that valuation. Redo the forecast after the
-next application and it starts clean rather than a write-off silently suppressing
-a later, genuine shortfall - exactly as you described your workflow.
+The Forecast Margin page does the same for its empty state, and distinguishes the
+cases: no forecasts at all, versus all of them missing accrual data because the
+API is not deployed, versus forecasts with no monthly sales spread saved.
 
 
-AND THE 13-WEEK HONOURS IT
---------------------------
-Where you have set a figure, the cash flow uses it instead of recomputing. It
-already sweeps this into the current week inside the "Overdue - brought forward"
-row, so nothing is left in a month that has gone. Recomputing it there would have
-quietly overruled you.
+SO, IN ORDER
+------------
+1. Deploy this and open the Cash Flow. Read the amber list.
+2. If it says "no accrual data", pages/api/business-financials.js has not gone up -
+   that is the file that carries the accrual dates the P&L and Margin both need.
+3. If it says "period ended", the forecast is for a period that has passed. Raise
+   the application, or move the forecast period forward.
+
+
+A BUG CAUGHT IN BUILD
+---------------------
+Writing the Margin page's empty state I used `cf` for the forecast payload - that
+is the P&L page's name for it; on Margin it is `data`. It compiles and throws on
+render. Caught by the scope scan before packaging, which is exactly what it is for.

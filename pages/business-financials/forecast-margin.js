@@ -106,12 +106,23 @@ export default function ForecastMarginPage() {
 
         {loading && <div style={{ color: '#999', padding: 30 }}>Loading...</div>}
 
-        {!loading && months.length === 0 && (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginTop: 18, fontSize: 13, color: '#92400e' }}>
-            No project forecasts with accrual dates yet. If the Cash Flow page is showing project figures but this is empty, the API file
-            in this package has not been deployed.
-          </div>
-        )}
+        {!loading && months.length === 0 && (() => {
+          // WHY IT IS EMPTY, rather than just that it is. Forecasts are dropped for
+          // specific reasons and every one of them was silent.
+          // `data` on this page, not `cf` - that is the P&L page's name for the same payload.
+          const all = (data && data.projForecasts) || []
+          const noAccrual = all.filter(f => !f.accrual).length
+          const noRev = all.filter(f => f.accrual && !(f.accrual.revenueByMonth || []).length).length
+          return (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginTop: 18, fontSize: 13, color: '#92400e' }}>
+              <strong>Nothing to show yet.</strong>{' '}
+              {all.length === 0 && <>No project forecasts were returned at all - open the Commercial project cash flow and check they are saved.</>}
+              {all.length > 0 && noAccrual === all.length && <>All {all.length} forecasts came back WITHOUT accrual dates, which means the API file in this package has not been deployed. Replace pages/api/business-financials.js.</>}
+              {all.length > 0 && noAccrual < all.length && noRev > 0 && <>{noRev} of {all.length} forecasts have no monthly sales spread saved - open each one and set the spread across the period's months.</>}
+              {all.length > 0 && noAccrual === 0 && noRev === 0 && <>Forecasts were found but none fall inside this financial year.</>}
+            </div>
+          )
+        })()}
 
         {!loading && months.length > 0 && (
           <>

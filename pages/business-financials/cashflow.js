@@ -1417,6 +1417,37 @@ export default function CashFlow() {
               </table>
             </div>
 
+            {/* WHY A FORECAST IS NOT SHOWING.
+                Three gates can drop one and all of them were silent, so a forecast you
+                had just saved could vanish with nothing to say why. */}
+            {(() => {
+              const all = data.projForecasts || []
+              const shown = new Set()
+              for (const r of forecast) for (const b of (r.fcBreak || [])) shown.add(b.name)
+              const hidden = []
+              for (const fc of all) {
+                const nm = projLabel(fc)
+                if (shown.has(nm)) continue
+                let why = ''
+                if (!fc.accrual) why = 'no accrual data - the API file in this package has not been deployed'
+                else if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) why = `already applied for (application to ${fmtDMY(fc.latestAppEnd)}) - its money is a real invoice now`
+                else if (fc.to && fc.to < todayISO) why = `period ended ${fmtDMY(fc.to)} - sales drop once a period has passed without being applied for`
+                else if (!(fc.salesSchedule || []).length) why = 'no sales schedule saved on the forecast'
+                else why = 'its cash falls outside the next 13 weeks'
+                hidden.push({ nm, why, to: fc.to })
+              }
+              if (!hidden.length) return null
+              return (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
+                  <strong>{hidden.length} forecast{hidden.length === 1 ? '' : 's'} not in the figures above.</strong>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                    {hidden.slice(0, 8).map((h, i) => <li key={i} style={{ marginBottom: 2 }}>{h.nm} - {h.why}</li>)}
+                  </ul>
+                  {hidden.length > 8 && <div style={{ marginTop: 4 }}>and {hidden.length - 8} more.</div>}
+                </div>
+              )
+            })()}
+
             {/* PROJECT CASH FLOWS - what the Project sales / Materials / Labour columns
                 are made of, across the whole 13 weeks rather than one week at a time.
                 Built from the same forecast rows, so it always agrees with the table
