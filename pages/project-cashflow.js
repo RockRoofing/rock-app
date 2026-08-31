@@ -127,6 +127,10 @@ export default function ProjectCashflow() {
   //
   // Nothing is deleted. The forecast stays on the record and on the list, greyed, so a
   // prediction can still be read against what actually happened.
+  // Declared ABOVE the memos that read it - a const is not hoisted, so leaving it further
+  // down was a temporal dead zone that throws on first render.
+  const todayKey = iso(new Date())
+
   const supersededIds = useMemo(() => {
     const out = new Set()
     for (const [pk, list] of Object.entries(allForecasts || {})) {
@@ -142,6 +146,41 @@ export default function ProjectCashflow() {
     }
     return out
   }, [allForecasts, appActuals, xeroMap])
+
+  // PROJECTS WHOSE FORECAST NEEDS REDOING.
+  //
+  // A forecast is superseded the moment an application covers its period - the money is
+  // now a real invoice and the forecast stops counting. That is correct, but it happens
+  // SILENTLY: the plan quietly loses a period and nobody is told the remaining work has
+  // not been re-forecast.
+  //
+  // Two triggers, both meaning "go and redo this":
+  //   1. an application was raised AFTER the forecast was last saved - the position has
+  //      moved and the forecast predates it;
+  //   2. a forecast period has ENDED without being applied for - it has slipped, and its
+  //      sales are dropped from the cash flow, so the work needs re-planning.
+  const needsUpdate = useMemo(() => {
+    const out = {}
+    for (const [pk, list] of Object.entries(allForecasts || {})) {
+      const no = String(pk).startsWith('L:') ? String(pk).slice(2) : ''
+      const xid = no ? xeroMap[no] : ''
+      const apps = (xid && appActuals[xid]) || []
+      const reasons = []
+      // Latest application, by the date it was created or its period end.
+      const lastApp = apps.reduce((m, a) => {
+        const t = a.createdAt || (a.endDate ? Date.parse(a.endDate) : 0)
+        return t > (m.t || 0) ? { t, a } : m
+      }, {})
+      const newestSave = (list || []).reduce((m, f) => Math.max(m, f.updatedAt || f.createdAt || 0), 0)
+      if (lastApp.t && newestSave && lastApp.t > newestSave) {
+        reasons.push(`Application ${lastApp.a.appNumber || lastApp.a.seq || ''} raised since this forecast was saved`.replace('  ', ' '))
+      }
+      const elapsed = (list || []).filter(f => f.to && f.to < todayKey && !supersededIds.has(f.id))
+      if (elapsed.length) reasons.push(`${elapsed.length} period${elapsed.length === 1 ? '' : 's'} ended without an application`)
+      if (reasons.length) out[pk] = reasons
+    }
+    return out
+  }, [allForecasts, appActuals, xeroMap, supersededIds, todayKey])
 
   // Per-day cash movement across all saved forecasts (in = sales + retention released;
   // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
@@ -274,7 +313,6 @@ export default function ProjectCashflow() {
   const negotiated = (data.projects || []).filter(p => p.type === 'negotiated')
   const allocations = data.allocations || {}
   const metaAll = data.meta || {}
-  const todayKey = iso(new Date())
 
   const countOnDay = (p, dateKey) => cellCount((allocations[p.key] || {})[dateKey])
 
@@ -512,11 +550,11 @@ export default function ProjectCashflow() {
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} onView={openForecast} />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} onView={openForecast} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
                 {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} onView={openForecast} neg />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} stale={needsUpdate[p.key] || null} onView={openForecast} neg />)}
               </div>
             </div>
           </div>
@@ -532,7 +570,7 @@ export default function ProjectCashflow() {
   )
 }
 
-function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], superseded, onView, neg }) {
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], superseded, stale, onView, neg }) {
   const complD = parseISO(meta.completionDate || '')
   const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
@@ -551,6 +589,15 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
         <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
+        {/* The bar going dark red says something is wrong; this says WHAT and that it is
+            on you to fix. A superseded period disappearing silently is how a plan quietly
+            stops matching the job. */}
+        {stale && (
+          <div title={stale.join('\n')}
+            style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', background: '#7f1d1d', borderRadius: 4, padding: '1px 5px', marginTop: 2, maxWidth: NAME_W - 16, cursor: 'help' }}>
+            CASH FLOW TO BE UPDATED
+          </div>
+        )}
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       <PlainCell w={DATE_W} style={{ fontSize: 11, color: plannedStart ? (plannedStart <= todayKey ? '#166534' : '#1d4ed8') : '#bbb', fontWeight: 600 }}>
@@ -587,7 +634,9 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
               const s = Math.max(0, dayIndex(fc.from < firstDayKey ? firstDayKey : fc.from))
               const e = Math.min(days.length - 1, dayIndex(fc.to > lastDayKey ? lastDayKey : fc.to))
               if (e < s) return null
-              const col = appColour(idx)
+              // DARK RED when the forecast needs redoing. A superseded period going grey
+              // is not enough - it says "this one is done", not "the plan is out of date".
+              const col = stale ? '#7f1d1d' : appColour(idx)
               // Overtaken by a real application. Kept on the chart so you can read the
               // prediction against what happened, but faded and struck so it is obvious
               // it is no longer contributing cash.
@@ -606,6 +655,8 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
                     ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead'
                     // Shows what is STORED on the record, so a bar disagreeing with the
                     // modal can be settled here instead of by guesswork.
+                    : stale
+                    ? `PROJECT CASH FLOW NEEDS UPDATING\n${stale.join('\n')}\n\nOpen the forecast and re-plan the remaining work.`
                     : `Stored on this forecast:\nrevenueThisPeriod ${fc.revenueThisPeriod == null ? '(not set)' : gbp(fc.revenueThisPeriod)}\nthisCertTotal ${fc.thisCertTotal == null ? '(not set)' : gbp(fc.thisCertTotal)}\ngrossClaimedToDate ${fc.grossClaimedToDate == null ? '(not set)' : gbp(fc.grossClaimedToDate)}\nprevGrossOverride ${fc.prevGrossOverride == null ? '(none)' : gbp(fc.prevGrossOverride)}\nrevenueOverride ${fc.revenueOverride == null ? '(none)' : gbp(fc.revenueOverride)}\nsaved ${fc.updatedAt ? new Date(fc.updatedAt).toLocaleString('en-GB') : '-'}`}
                     style={{ position: 'absolute', inset: 0, background: gone ? '#c9c5bd' : col, opacity: gone ? 0.5 : 0.82, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', pointerEvents: gone ? 'auto' : 'none' }}>
                     <span style={{ color: '#fff', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.3)', padding: '0 4px', textDecoration: gone ? 'line-through' : 'none' }}>

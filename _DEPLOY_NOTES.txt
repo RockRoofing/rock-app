@@ -1,7 +1,7 @@
-pkg638 - Stopping the double count as today rolls forward
-==========================================================
+pkg639 - "CASH FLOW TO BE UPDATED", and a correction to pkg638
+===============================================================
 
-*** SUPERSEDES pkg591 - pkg637. ***
+*** SUPERSEDES pkg591 - pkg638. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,10 +9,10 @@ pkg638 - Stopping the double count as today rolls forward
 
 CHANGED FILES (replace)
 -----------------------
+  pages/project-cashflow.js
   pages/business-financials/cashflow.js
   pages/business-financials/balance-sheet.js
   pages/api/business-financials.js
-  pages/project-cashflow.js
   pages/business-financials.js
   components/BizNav.js
   lib/xero.js
@@ -21,61 +21,52 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-THE TWO GUARDS AND WHERE THEY LEAKED
-------------------------------------
-SALES were dropped once a period had been applied for - but that test reads
-latestAppEnd from the DASHBOARD CACHE, which expires on a 4-hour TTL and whenever
-a new marker ships. Stale cache meant latestAppEnd was empty, the forecast was NOT
-dropped, and the real invoice sat in receivables beside it. Both counted.
+1. A CORRECTION - pkg638 DROPPED COSTS IT SHOULD HAVE KEPT
+----------------------------------------------------------
+I applied one rule to sales and costs together. They are not the same:
 
-COSTS were netted against real bills only within the SAME WEEK, matched on project
-name. A bill paid in week 3 left a week 5 forecast untouched, so both counted.
+  applied for                sales DROP   costs DROP   (real invoice + real bills)
+  elapsed, not applied for   sales DROP   costs KEEP
+  still future               sales keep   costs keep
 
+If a period ends without being applied for you have not EARNED the money - so
+dropping the sales is right, and conservative. But the WORK happened, so the
+subcontractor invoice and the materials bill are still coming. Dropping those too
+made the forecast look BETTER than reality, which is the one direction a cash flow
+must never err in.
 
-FIX 1 - A PERIOD THAT HAS ENDED IS NOT FUTURE CASH
---------------------------------------------------
-    isSpent(fc) = applied for  OR  fc.to < today
-
-This depends on nothing external. A forecast period ending before today has either
-been applied for - in which case its money is a real invoice - or it did not
-happen. Either way it is not cash still to come.
-
-  period ended 31/07, no application recorded   dropped   (was counted)
-  period ended 31/07, application to 31/08      dropped
-  period ends 30/09                             counted
-
-It is the backstop that catches everything the supersede rule misses as time rolls
-forward, cache or no cache. Applied to sales, to labour and materials, and to the
-new CIS prediction.
+Costs now drop only when a real application replaces them. An elapsed period keeps
+its costs until the actual bill arrives, at which point the month netting removes
+them - nothing counted twice, nothing silently gone.
 
 
-FIX 2 - BILLS NET OVER THE MONTH, AND ONLY ONCE
------------------------------------------------
-A real bill and the forecast line it replaces almost never fall in the same week -
-the bill pays on the supplier's terms, the forecast on its own schedule. Netting
-now covers the MONTH, the smallest window that reliably contains both.
+2. "CASH FLOW TO BE UPDATED"
+----------------------------
+Superseding happened SILENTLY. A period quietly left the plan and nobody was told
+the remaining work had not been re-forecast.
 
-And a running tally stops one bill netting twice:
+The project's bar now goes DARK RED and a badge appears under the project name:
 
-  one 10,000 bill, forecast 6,000 in wk1 and 6,000 in wk3
-    wk1  allowance 10,000  netted 6,000  counted 0
-    wk3  allowance  4,000  netted 4,000  counted 2,000
-    bill used once in total: 10,000
+    CASH FLOW TO BE UPDATED
 
-Excluded bills no longer net anything either - they are not being paid, so they
-cannot displace forecast spend.
+Two triggers, both meaning go and redo it:
 
+  an application was raised AFTER the forecast was last saved
+      - the position has moved and the forecast predates it
+  a forecast period ENDED without being applied for
+      - it has slipped, its sales are now dropped, the work needs re-planning
 
-WHAT IS STILL NOT COVERED
--------------------------
-Bills are matched to forecasts by PROJECT NAME. Where Xero's tracking name and the
-forecast's project name differ, no netting happens and both count. The names come
-from the same dashboard record so they usually agree, but it is worth knowing that
-is the remaining weak link rather than assuming it is airtight.
+Hovering the badge or the bar says which, and names the application. A project
+with everything still in the future stays clean.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg637 - CIS predicted from forecast labour, not just ticked bills. 224,686 of
-labour produces 56,171 of CIS where the column showed 1,031. Rate is a setting;
-PAYE wages in overheads are deliberately untouched.
+WHY DARK RED RATHER THAN THE GREY "SUPERSEDED"
+----------------------------------------------
+Grey says "this period is done". Dark red says "the plan is out of date and it is
+on you". Those are different messages and only one of them prompts action.
+
+
+A BUG CAUGHT IN BUILD
+---------------------
+todayKey was declared BELOW the memos that now read it. A const is not hoisted, so
+that is a temporal dead zone - it would have thrown on first render. Moved above.

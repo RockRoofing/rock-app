@@ -496,11 +496,19 @@ export default function CashFlow() {
     // been applied for - in which case its money is a real invoice - or it did not
     // happen. Either way it is not cash still to come. It is the backstop that catches
     // everything the supersede rule misses as time rolls forward.
-    const isSpent = (fc) => {
-      if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) return true   // applied for
-      if (fc.to && fc.to < todayISO) return true                              // period over
-      return false
-    }
+    // SALES and COSTS are NOT the same here, and pkg638 treated them as if they were.
+    //
+    // If a period has ended without being applied for, you have not earned the money -
+    // dropping the sales is right and conservative. But the WORK still happened, so the
+    // subcontractor invoice and the materials bill are still coming. Dropping those too
+    // made the forecast look BETTER than reality, which is the one direction a cash flow
+    // must never err in.
+    const isApplied = (fc) => !!(fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd)
+    const salesSpent = (fc) => isApplied(fc) || !!(fc.to && fc.to < todayISO)
+    // Costs drop ONLY when a real application has replaced them. An elapsed period keeps
+    // its costs until the real bill turns up, at which point the month netting removes
+    // them - so nothing is double counted and nothing silently disappears.
+    const costsSpent = (fc) => isApplied(fc)
 
     // Rate is a setting - not every trade is on 20%, and a gross-status subcontractor is
     // on nil. From a NET figure, gross = net / (1 - r), so CIS = net * r / (1 - r).
@@ -535,7 +543,7 @@ export default function CashFlow() {
     const cisOnForecast = finance.cisOnForecast !== false
     if (cisOnForecast && cisRate > 0) {
       for (const fc of (data.projForecasts || [])) {
-        if (isSpent(fc)) continue
+        if (costsSpent(fc)) continue
         for (const l of (fc.labourSchedule || [])) {
           if (!l.date) continue
           const mk = String(l.date).slice(0, 7)
@@ -677,10 +685,13 @@ export default function CashFlow() {
         // The old guard only suppressed a forecast when an invoice landed in the SAME
         // WEEK. An application invoiced in week 2 whose forecast scheduled cash in week 6
         // was counted twice - which is most of why money in reads high.
-        if (isSpent(fc)) continue
+        // Applied for -> everything drops, the real invoice and bills replace it.
+        // Period merely ELAPSED -> sales drop, costs stay. The work happened, so the
+        // spend is still coming; only the earning did not.
+        if (costsSpent(fc)) continue
 
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
-        const sIn = hasInvoice ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const sIn = (hasInvoice || salesSpent(fc)) ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         // NET THE BILL OFF, do not throw the whole forecast away.
         //
         // hasBill was all-or-nothing: ONE real bill on a project killed every forecast
