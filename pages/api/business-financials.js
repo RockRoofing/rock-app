@@ -761,7 +761,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, bsItems, custOffsets, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, bsItems, custOffsets, paidRecStore, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -771,6 +771,7 @@ export default async function handler(req, res) {
       redis.get('config:cashflow-excluded').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({})),
       redis.get('config:bs-items').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('config:customer-offsets').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({})),
+      redis.get('config:paid-receivables').then(v => v || null).catch(() => null),
       redis.get('bank:account-balances').then(v => v || null).catch(() => null),
       redis.get('config:manual-balances').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
@@ -909,12 +910,14 @@ export default async function handler(req, res) {
         for (const k of (batch || [])) keys.push(k)
       } while (cursor)
       // Map planning project key -> a display/project name for matching to invoices/bills.
+      const dashCustByNo = {}
       const dashByNo = {}
       // Latest application valuation date per job number, for the supersede rule below.
       const recByNo = {}
       for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
         if (!p.jobNo) continue
         dashByNo[String(p.jobNo)] = p.name || ''
+        dashCustByNo[String(p.jobNo)] = p.customer || ''
         // From the dashboard cache's own field. It was reading p.applications, which does
         // NOT exist on the cache - applications live under settings.applications there.
         // So latestAppEnd was always empty and the supersede rule never fired once, which
@@ -932,6 +935,10 @@ export default async function handler(req, res) {
             projectKey: pk,
             projectNo,
             projectName,
+            // The CUSTOMER, so the payment-behaviour table can group a project's forecast
+            // sales with that customer's invoices and retention. Without it a forecast row
+            // groups under the project name and never meets the rest of their money.
+            customer: (dashByNo[projectNo] && dashCustByNo[projectNo]) || '',
             salesSchedule: fc.salesSchedule || (fc.salesDate ? [{ date: fc.salesDate, amount: fc.revenueThisPeriod || 0 }] : []),
             // SAME FALLBACK THE PROJECT CASH FLOW USES (project-cashflow.js:213).
             //
@@ -1075,6 +1082,26 @@ export default async function handler(req, res) {
       cfExcluded,
       bsItems,
       custOffsets,
+      // MEASURED payment behaviour per customer, so the cash flow can show what the data
+      // says next to whatever has been typed over it. Computed here rather than on the
+      // page because the raw invoice list is large and only the summary is needed.
+      custPerf: (() => {
+        const by = {}
+        for (const inv of (paidRecStore?.invoices || [])) {
+          if (!inv.contact || !inv.dueDate || !inv.paidDate) continue
+          const late = Math.round((Date.parse(inv.paidDate) - Date.parse(inv.dueDate)) / 86400000)
+          ;(by[inv.contact] = by[inv.contact] || []).push(late)
+        }
+        const out = {}
+        for (const [name, arr] of Object.entries(by)) {
+          const a = arr.slice().sort((x, y) => x - y)
+          const m = Math.floor(a.length / 2)
+          // Median, not mean - one disputed invoice at 300 days would wreck an average.
+          out[name] = { medLate: a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2), n: a.length,
+            spread: a.length > 1 ? a[a.length - 1] - a[0] : 0 }
+        }
+        return out
+      })(),
       ifAvailability,
       bills,
       billPayDates,

@@ -273,8 +273,8 @@ function retentionEvents(entries) {
     const r2 = parseFloat(e.release2Value || 0) || 0
     // undated halves are returned WITHOUT a date so the page can report them rather than
     // pretend they do not exist.
-    if (r1 && !released1(e)) out.push({ date: e.release1Date || '', amount: r1, name: e.projectName || e.ourRef || '' })
-    if (r2 && !released2(e)) out.push({ date: e.release2Date || '', amount: r2, name: e.projectName || e.ourRef || '' })
+    if (r1 && !released1(e)) out.push({ date: e.release1Date || '', amount: r1, name: e.projectName || e.ourRef || '', customer: e.customer || e.client || '' })
+    if (r2 && !released2(e)) out.push({ date: e.release2Date || '', amount: r2, name: e.projectName || e.ourRef || '', customer: e.customer || e.client || '' })
   }
   return out
 }
@@ -288,7 +288,7 @@ export default function CashFlow() {
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true, riskWeeks: 0 })
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true, riskWeeks: 0, usePaymentPerf: false })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
   // { [key]: true }. Bills key on id, receivables on invoice number - the same key the
@@ -309,6 +309,23 @@ export default function CashFlow() {
         body: JSON.stringify({ action: 'set-expected', invoiceNumber, expectedDate }),
       })
     } catch {}
+  }
+
+  const [offsets, setOffsets] = useState({})
+  const [offsetMsg, setOffsetMsg] = useState('')
+
+  // Posts to the SAME endpoint the Payment Performance tab uses, so a figure changed here
+  // shows there and vice versa - one store, no syncing to drift.
+  async function saveOffsets(next) {
+    setOffsets(next); setOffsetMsg('saving')
+    try {
+      const r = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'payment-performance', action: 'save-offsets', offsets: next }),
+      })
+      setOffsetMsg(r.ok ? 'saved' : 'NOT SAVED')
+      if (r.ok) { setTimeout(() => setOffsetMsg(''), 1500); setData(d => ({ ...d, custOffsets: next })) }
+    } catch { setOffsetMsg('NOT SAVED') }
   }
 
   async function toggleExcluded(key, next) {
@@ -362,6 +379,7 @@ export default function CashFlow() {
       setData(d)
       setManualBal(Array.isArray(d.manualBalances) ? d.manualBalances : [])
       setExcluded(d.cfExcluded && typeof d.cfExcluded === 'object' ? d.cfExcluded : {})
+      setOffsets(d.custOffsets && typeof d.custOffsets === 'object' ? d.custOffsets : {})
       const fc = d.financeCfg || {}
       // Whitelisted on the way in, so anything not named here is dropped on every
       // refresh even though the save writes the whole object. The overdraft limit and the
@@ -374,6 +392,7 @@ export default function CashFlow() {
         cisRate: fc.cisRate ?? 20,
         cisOnForecast: fc.cisOnForecast !== false,
         riskWeeks: fc.riskWeeks ?? 0,
+        usePaymentPerf: fc.usePaymentPerf === true,
         cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
       })
       // Seed local bill payment-date overrides from what's saved.
@@ -411,6 +430,7 @@ export default function CashFlow() {
         cisRate: Number(finance.cisRate ?? 20),
         cisOnForecast: finance.cisOnForecast !== false,
         riskWeeks: Number(finance.riskWeeks) || 0,
+        usePaymentPerf: finance.usePaymentPerf === true,
         cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
       }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
@@ -673,6 +693,7 @@ export default function CashFlow() {
 
     // Weeks to delay every receipt by. 0 = the plan as entered.
     const riskDays = (Number(finance.riskWeeks) || 0) * 7
+    const usePerf = finance.usePaymentPerf === true
     const rows = []
     // Bill allowance already consumed, per month per project - prevents one bill netting
     // against the same forecast money in more than one week.
@@ -708,7 +729,18 @@ export default function CashFlow() {
         const shifted = isoDay(d)
         return shifted >= s && shifted <= e
       }
-      const offsetFor = (i) => i.expectedDate ? 0 : (Number((data.custOffsets || {})[i.contact]) || 0)
+      // OFF BY DEFAULT. Shifting every receipt by a measured average changes the whole
+      // forecast, so it has to be a deliberate choice rather than something that happens
+      // the moment the data is imported.
+      //
+      // A typed override wins over the measured figure; the measured figure is used where
+      // nothing has been typed. Either way an expected date set by hand is untouched.
+      const offsetFor = (i) => {
+        if (i.expectedDate || !usePerf) return 0
+        const typed = (data.custOffsets || {})[i.contact]
+        if (typed != null && typed !== '') return Number(typed) || 0
+        return Number((data.custPerf || {})[i.contact]?.medLate) || 0
+      }
       // OVERDUE LANDS IN WEEK 1, for money out as well as money in.
       //
       // A date before the horizon is not "never" - it is late, and late money out is the
@@ -1273,6 +1305,13 @@ export default function CashFlow() {
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Used to estimate the VAT reclaim on future materials and overhead spend, for months with no filed return. Set to 0 to turn the estimate off.">VAT rate % (reclaim estimate)</div>
                       <input type="number" value={finance.vatRate} onChange={e => setFinance(f => ({ ...f, vatRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Schedule receipts on how each customer ACTUALLY pays instead of the invoice due date. Off means every invoice is assumed to be paid exactly on terms - which is what the due date represents, not what happens.">Use payment performance</div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, paddingTop: 4 }}>
+                        <input type="checkbox" checked={finance.usePaymentPerf === true} onChange={e => setFinance(f => ({ ...f, usePaymentPerf: e.target.checked }))} />
+                        <span style={{ color: finance.usePaymentPerf ? '#b45309' : '#8a857c', fontWeight: finance.usePaymentPerf ? 700 : 400 }}>
+                          {finance.usePaymentPerf ? 'measured' : 'due dates'}
+                        </span>
+                      </label></div>
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="RISK TEST. Delays every receipt - invoices, retention and forecast sales - by this many weeks, leaving money OUT where it is. Customers paying late does not make your suppliers, your labour or HMRC wait, which is the whole point of the test.">Risk: pay me later (weeks)</div>
                       <input type="number" min={0} max={13} value={finance.riskWeeks} onChange={e => setFinance(f => ({ ...f, riskWeeks: e.target.value }))}
                         style={{ ...inpS, width: 70, borderColor: (Number(finance.riskWeeks) || 0) > 0 ? '#dc2626' : undefined }} /></div>
@@ -1890,6 +1929,93 @@ export default function CashFlow() {
                       <td style={td}>{t.sales > 0 ? `${(((t.mat + t.labour) / t.sales) * 100).toFixed(0)}%` : '-'}</td>
                     </tr></tfoot>
                   </table>
+                </div>
+              )
+            })()}
+
+            {/* CUSTOMER PAYMENT BEHAVIOUR - everyone you are owed money by, in one place.
+                Invoices, retention and forecast sales, with what the data says about how
+                they pay and what the forecast is using. */}
+            {(() => {
+              const perf = data.custPerf || {}
+              const by = {}
+              const add = (name, k, v) => {
+                if (!name || !v) return
+                const e = by[name] || (by[name] = { name, invoices: 0, retention: 0, forecast: 0 })
+                e[k] += v
+              }
+              for (const i of (data.receivables || [])) if (!excluded[invKey(i)]) add(i.contact, 'invoices', i.amountDue || 0)
+              for (const r of retEvents) add(r.customer || r.name, 'retention', r.amount || 0)
+              for (const fc of (data.projForecasts || [])) {
+                const fut = (fc.salesSchedule || []).filter(x => x.date && x.date >= todayISO).reduce((a, x) => a + (x.amount || 0), 0)
+                add(fc.customer || fc.projectName, 'forecast', fut)
+              }
+              const list = Object.values(by)
+                .map(x => ({ ...x, total: x.invoices + x.retention + x.forecast, perf: perf[x.name] || null }))
+                .filter(x => x.total > 0.5).sort((a, b) => b.total - a.total)
+              if (!list.length) return null
+              const usingPerf = finance.usePaymentPerf === true
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Customer payment behaviour</div>
+                    <div style={{ fontSize: 12, color: usingPerf ? '#b45309' : '#8a857c' }}>
+                      {usingPerf
+                        ? <>Forecast is using <strong>measured behaviour</strong> - switch to due dates in Facilities above</>
+                        : <>Forecast is using <strong>invoice due dates</strong> - tick &quot;Use payment performance&quot; in Facilities above to apply these</>}
+                      {offsetMsg && <span style={{ marginLeft: 8, fontWeight: 700, color: offsetMsg === 'saved' ? '#16a34a' : offsetMsg === 'saving' ? '#b45309' : '#dc2626' }}>{offsetMsg}</span>}
+                    </div>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 8 }}>
+                    <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Customer</th>
+                      <th style={th}>Invoices</th>
+                      <th style={th}>Retention</th>
+                      <th style={th}>Forecast sales</th>
+                      <th style={th}>Total owed</th>
+                      <th style={th} title="Median days beyond the due date, measured from paid invoices on the Payment Perf tab.">Measured</th>
+                      <th style={th} title="Spread between their fastest and slowest payment. A wide spread means the median is not much of a guide.">Spread</th>
+                      <th style={th} title="Days the forecast shifts this customer by. Blank uses the measured figure; type to override it.">Days used</th>
+                    </tr></thead>
+                    <tbody>
+                      {list.map((x, i) => {
+                        const typed = offsets[x.name]
+                        const measured = x.perf ? x.perf.medLate : null
+                        const effective = typed != null && typed !== '' ? Number(typed) : (measured || 0)
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid #f2f0ec', opacity: usingPerf ? 1 : 0.65 }}>
+                            <td style={{ ...td, textAlign: 'left' }}>{x.name}</td>
+                            <td style={{ ...td, color: x.invoices ? '#0f766e' : '#ccc' }}>{x.invoices ? gbp(x.invoices) : '-'}</td>
+                            <td style={{ ...td, color: x.retention ? '#15803d' : '#ccc' }}>{x.retention ? gbp(x.retention) : '-'}</td>
+                            <td style={{ ...td, color: x.forecast ? '#5b7085' : '#ccc' }}>{x.forecast ? gbp(x.forecast) : '-'}</td>
+                            <td style={{ ...td, fontWeight: 700 }}>{gbp(x.total)}</td>
+                            <td style={{ ...td, color: measured == null ? '#ccc' : measured > 14 ? '#dc2626' : measured > 0 ? '#b45309' : '#16a34a' }}
+                              title={x.perf ? `${x.perf.n} paid invoices` : 'No paid invoices on record - read them in on the Payment Perf tab'}>
+                              {measured == null ? 'no data' : `${measured}d`}
+                            </td>
+                            <td style={{ ...td, color: x.perf && x.perf.spread > 45 ? '#dc2626' : '#999' }}>{x.perf ? `${x.perf.spread}d` : '-'}</td>
+                            <td style={td}>
+                              <input type="number" value={typed == null ? '' : typed} placeholder={measured == null ? '0' : String(measured)}
+                                onChange={e => {
+                                  const next = { ...offsets }
+                                  if (e.target.value === '') delete next[x.name]; else next[x.name] = Number(e.target.value)
+                                  saveOffsets(next)
+                                }}
+                                style={{ width: 74, padding: '3px 6px', textAlign: 'right', fontSize: 12,
+                                  border: '1px solid ' + (typed != null ? '#fed7aa' : '#e5e5e5'), borderRadius: 6 }} />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 8, lineHeight: 1.45 }}>
+                    Blank uses the MEASURED figure; type a number to override it. Shared with the Payment Perf tab - change it in either place.
+                    An expected date set by hand on an invoice always wins over both: that is a judgement somebody has already made about a
+                    specific invoice, and a customer average should not overrule it.
+                    &quot;No data&quot; means no paid invoices on record for that customer, so there is nothing to measure - press Read paid
+                    invoices on the Payment Perf tab.
+                  </div>
                 </div>
               )
             })()}

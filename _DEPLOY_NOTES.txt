@@ -1,45 +1,57 @@
-pkg667 - Sortable columns on Payment Performance
-=================================================
+pkg668 - Payment behaviour into the cash flow, with a toggle
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg666. ***
-*** SIX NEW FILES - create these in GitHub:
-      pages/business-financials/payment-performance.js
-      pages/business-financials/forecast-balance-sheet.js
-      pages/business-financials/forecast-pl.js
-      pages/business-financials/forecast-margin.js
-      pages/business-financials/balance-sheet.js
-      components/PageErrorBoundary.js
-***
+*** SUPERSEDES pkg591 - pkg667. ***
+*** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/payment-performance.js
+  pages/business-financials/cashflow.js
+  pages/api/business-financials.js
   ... and the rest of the set as before
 
 
-SORTING
--------
-Every column header sorts. Click again to reverse.
+THE TOGGLE - "USE PAYMENT PERFORMANCE"
+--------------------------------------
+In Facilities, beside the risk setting. OFF BY DEFAULT and deliberately so -
+shifting every receipt by a measured average changes the entire forecast, and that
+should be a decision rather than something that happens the moment data is
+imported.
 
-  value desc     Wates > Torsion > Alheembouw     (the default)
-  spread desc    Torsion > Wates > Alheembouw
-  medLate asc    Alheembouw > Torsion > Wates
-  name asc       Alheembouw > Torsion > Wates
+    off  "due dates"  every invoice assumed paid exactly on terms
+    on   "measured"   each customer shifted by what they actually do
 
-A new column starts DESCENDING - biggest first is nearly always what you want -
-except the customer name, where A-Z is useful and Z-A is not.
-
-The arrow shows only on the column in use. Eight permanent arrows is noise and
-tells you nothing about which one is active.
-
-Default stays value descending: the biggest customers are the ones whose payment
-behaviour actually moves the forecast.
+The label says which is live, so a forecast can never quietly be one or the other.
 
 
-WORTH SORTING BY SPREAD AT LEAST ONCE
--------------------------------------
-It puts the customers you cannot plan around at the top, whatever their median
-says. Torsion medians 12 days but swings between 0 and 60 - sorted by "typically
-paid" it looks like one of your better payers, and sorted by spread it is the
-worst. Those are the ones where a forecast offset will not save you.
+THE TABLE - EVERYONE WHO OWES YOU MONEY
+---------------------------------------
+  Customer   Invoices  Retention  Forecast   Total   Measured  Spread  Days used
+  Wates       216,997     24,000   120,000  360,997      31d     19d   45d (typed)
+  Torsion      38,125          -    87,500  125,625      12d     60d          12d
+  Selsdon      11,998      5,000         -   16,998  no data       -           0d
+
+Invoices, retention AND forecast sales in one place, so you see a customer's whole
+exposure rather than three separate views of it.
+
+BLANK USES THE MEASURED FIGURE, typed overrides it. Shared with the Payment Perf
+tab - change it in either place, it is one store.
+
+SPREAD IS THERE FOR A REASON. Torsion medians 12 days and swings 60. Applying that
+12 will be wrong most months; the column tells you when the average is not worth
+trusting.
+
+
+TWO THINGS THAT HAD TO BE FIXED TO MAKE THE TABLE WORK
+------------------------------------------------------
+RETENTION carried the PROJECT name, not the customer, so those rows would never
+have grouped with that customer's invoices. It now carries both.
+
+FORECAST SALES carried no customer at all. Now taken from the dashboard record, so
+a project's future billing sits with the rest of that customer's money.
+
+
+AN EXPECTED DATE SET BY HAND ALWAYS WINS over both the measured figure and a typed
+override. That is a judgement somebody has made about a specific invoice, and a
+customer average should not overrule it.
