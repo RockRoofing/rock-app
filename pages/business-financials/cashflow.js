@@ -645,6 +645,8 @@ export default function CashFlow() {
     // Bill allowance already consumed, per month per project - prevents one bill netting
     // against the same forecast money in more than one week.
     const billUsed = {}
+    // Same for invoices - one invoice cannot net against two different weeks.
+    const invUsed = {}
     let running = openBank
     for (let w = 0; w < WEEKS; w++) {
       const wkStart = new Date(start.getTime() + w * 7 * 86400000)
@@ -743,8 +745,31 @@ export default function CashFlow() {
       // forecast SALES are suppressed in any week it has a real invoice; its forecast
       // COSTS (labour + materials) are suppressed in any week it has a real bill. This
       // means as actuals arrive the forecast drops off, leaving only future periods.
-      const projNosWithInvoiceThisWk = new Set((data.receivables || [])
-        .filter(i => inWk(i.expectedDate || i.dueDate || '') && i.projectNo).map(i => String(i.projectNo)))
+      // Declared ABOVE both netting blocks - a const is not hoisted, and the invoice
+      // netting below reads it.
+      const wkMonth = s.slice(0, 7)
+
+      // AMOUNTS per project, not a set of job numbers.
+      //
+      // This was all-or-nothing: ONE unpaid invoice on a project in a week wiped out that
+      // project's ENTIRE forecast sales for the week. Six projects were showing labour and
+      // materials with no sales against them at all - which is why the table read as if
+      // half the jobs were pure cost.
+      //
+      // Exactly the fault fixed for BILLS in pkg618 and never applied to invoices. The
+      // invoice is real money and is already in Invoices in, so only the part of the
+      // forecast it covers should come out; anything above it is still to be billed.
+      const invByProjectThisWk = {}
+      for (const i of (data.receivables || [])) {
+        if (!i.projectNo || excluded[invKey(i)]) continue
+        if (!inWkIn(i.expectedDate || i.dueDate || '')) continue
+        const k = String(i.projectNo)
+        invByProjectThisWk[k] = (invByProjectThisWk[k] || 0) + (i.amountDue || 0)
+      }
+      for (const k of Object.keys(invByProjectThisWk)) {
+        const used = (invUsed[wkMonth] && invUsed[wkMonth][k]) || 0
+        invByProjectThisWk[k] = Math.max(0, invByProjectThisWk[k] - used)
+      }
       // AMOUNTS per project, not just a set of names - the forecast now nets the bill off
       // rather than discarding the whole thing, so it needs to know how much.
       // NETTED OVER THE MONTH, not the week.
@@ -756,7 +781,6 @@ export default function CashFlow() {
       //
       // Each bill is used ONCE across the whole forecast: a running tally is kept so the
       // same bill cannot net against two different weeks.
-      const wkMonth = s.slice(0, 7)
       const billByProjectThisWk = {}
       for (const b of (data.bills || [])) {
         if (!b.project || excluded[b.id]) continue
@@ -790,8 +814,14 @@ export default function CashFlow() {
         // spend is still coming; only the earning did not.
         if (costsSpent(fc)) continue
 
-        const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
-        const sIn = (hasInvoice || salesSpent(fc)) ? 0 : (fc.salesSchedule || []).filter(x => inWkIn(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const invThisWk = fc.projectNo ? (invByProjectThisWk[String(fc.projectNo)] || 0) : 0
+        const rawS = salesSpent(fc) ? 0 : (fc.salesSchedule || []).filter(x => inWkIn(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const offS = Math.min(rawS, invThisWk)
+        const sIn = Math.max(0, rawS - offS)
+        if (offS > 0 && fc.projectNo) {
+          if (!invUsed[wkMonth]) invUsed[wkMonth] = {}
+          invUsed[wkMonth][String(fc.projectNo)] = (invUsed[wkMonth][String(fc.projectNo)] || 0) + offS
+        }
         // NET THE BILL OFF, do not throw the whole forecast away.
         //
         // hasBill was all-or-nothing: ONE real bill on a project killed every forecast

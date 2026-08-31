@@ -1,7 +1,7 @@
-pkg649 - The pages now say WHY a forecast is not showing
-=========================================================
+pkg650 - One invoice was wiping out a project's whole forecast sales
+=====================================================================
 
-*** SUPERSEDES pkg591 - pkg648. ***
+*** SUPERSEDES pkg591 - pkg649. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -11,48 +11,64 @@ pkg649 - The pages now say WHY a forecast is not showing
 ***
 
 
-PROBABLY THIS, AND YOU CAN CHECK IT IN ONE LOOK
-------------------------------------------------
-Today is 31 August. A forecast whose period ENDS ON OR BEFORE TODAY has its sales
-dropped - that is the rule you and I agreed: if a period has passed without being
-applied for, you have not earned the money, so it is not future cash.
-
-So if you have just built forecasts for the period that has JUST ENDED, they will
-be saved correctly and still show nothing. That is the rule working, not a fault -
-but nothing on the page said so, which is the actual problem.
-
-
-THREE GATES, ALL PREVIOUSLY SILENT
-----------------------------------
-  1. no `accrual` data      the API file has not been deployed
-  2. sales dropped          period already applied for, OR period ended before today
-  3. outside the window     its cash falls beyond the next 13 weeks
-
-The Cash Flow page now lists every forecast that is NOT in the figures, and why:
-
-    3 forecasts not in the figures above.
-      J190 - Russell Hill - period ended 31/08/26 - sales drop once a period has
-        passed without being applied for
-      J248 - Renshaw House - already applied for (application to 31/08/26) - its
-        money is a real invoice now
-      J251 - Winnersh - its cash falls outside the next 13 weeks
-
-The Forecast Margin page does the same for its empty state, and distinguishes the
-cases: no forecasts at all, versus all of them missing accrual data because the
-API is not deployed, versus forecasts with no monthly sales spread saved.
+CHANGED FILES (replace)
+-----------------------
+  pages/business-financials/cashflow.js        <- the fix
+  pages/project-cashflow.js
+  pages/api/business-financials.js
+  pages/api/project-cashflow.js
+  components/BizNav.js
+  pages/_app.js
+  pages/business-financials.js
+  pages/business-financials/invoice-finance.js
+  pages/api/dashboard.js
+  pages/connect.js
+  lib/xero.js
 
 
-SO, IN ORDER
-------------
-1. Deploy this and open the Cash Flow. Read the amber list.
-2. If it says "no accrual data", pages/api/business-financials.js has not gone up -
-   that is the file that carries the accrual dates the P&L and Margin both need.
-3. If it says "period ended", the forecast is for a period that has passed. Raise
-   the application, or move the forecast period forward.
+THE PATTERN IN YOUR SCREENSHOT GAVE IT AWAY
+--------------------------------------------
+Six projects showing labour and materials with NO sales at all - J242, J190, J244,
+J240, J241, J230. Cost with no income against it, which is why the table read as
+if half the jobs were pure expense.
+
+    const hasInvoice = projNosWithInvoiceThisWk.has(String(fc.projectNo))
+    const sIn = (hasInvoice || salesSpent(fc)) ? 0 : ...
+
+ALL OR NOTHING. One unpaid invoice on a project in a week wiped out that project's
+ENTIRE forecast sales for the week - any invoice, any amount.
+
+This is EXACTLY the fault I fixed for BILLS in pkg618 and never applied to
+invoices. I fixed one side of the same guard and left the other.
+
+NOW NETTED, like the bills:
+
+    forecast sales 20,859, real invoice 12,000  ->  forecast sales 8,859
+
+The invoice is already counted in Invoices in, so only the part of the forecast it
+covers comes out. Anything above it is work still to be billed. The allowance is
+consumed, so one invoice cannot net against two different weeks.
+
+Excluded invoices no longer suppress anything either - if you have taken an
+invoice out of the forecast it should not be displacing forecast sales.
+
+
+EXPECT
+------
+Sales to appear against those six projects, and Cost % to become meaningful for
+them - at the moment they show "-" because there is no revenue to divide by. The
+96% total should drop toward the 75-85% range, and your 28% margin should hold up.
 
 
 A BUG CAUGHT IN BUILD
 ---------------------
-Writing the Margin page's empty state I used `cf` for the forecast payload - that
-is the P&L page's name for it; on Margin it is `data`. It compiles and throws on
-render. Caught by the scope scan before packaging, which is exactly what it is for.
+wkMonth is read by the new invoice netting but was declared BELOW it - a const is
+not hoisted, so that is a temporal dead zone and would have thrown on first render.
+Moved above both netting blocks.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg649 - the Cash Flow lists forecasts NOT in the figures and why. Worth keeping
+an eye on after this: 8335 falling outside the 13 weeks is correct - its period
+runs 01/02/27 to 10/05/27.
