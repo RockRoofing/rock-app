@@ -99,6 +99,18 @@ export default function ForecastBalanceSheet() {
       })
     }
     const accounts = bs.accounts || []
+    // Column index for a month, so a component can be read at the right month end.
+    const colIdx = {}
+    cols.forEach((c, i) => { const d = new Date(c); if (!isNaN(d)) colIdx[`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`] = i })
+    // Sum matching accounts AT A GIVEN MONTH. Liabilities come back positive from Xero, so
+    // anything on the creditors side is negated here to keep one sign convention.
+    const sumAt = (mo, test, negate) => {
+      const i = colIdx[mo]
+      if (i == null) return null
+      const v = accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase()))
+        .reduce((t, x) => t + (Array.isArray(x.values) ? (x.values[i] || 0) : 0), 0)
+      return negate ? -v : v
+    }
     const sum = (test) => accounts.filter(x => test(`${x.section} ${x.name}`.toLowerCase())).reduce((t, x) => t + (x.balance || 0), 0)
     const openBank = sum(s => s.includes('bank') && !/credit card|visa|mastercard|amex/.test(s))
     const openCards = sum(s => /credit card|visa|mastercard|amex/.test(s))
@@ -206,7 +218,29 @@ export default function ForecastBalanceSheet() {
       // from an accumulated drift.
       const xeroNet = actualNet[mo]
       const useXero = isActual && xeroNet != null
-      if (useXero) { reserves = xeroNet }
+      if (useXero) {
+        // RE-BASE THE COMPONENTS TOO, not just the bottom line.
+        //
+        // Re-basing reserves alone left bank, debtors and creditors still rolling forward
+        // from the original wrong opening - so an actual month tied while the first
+        // forecast month was out by 833,506. Every line is now set to Xero's real figure
+        // at each closed month, and the forecast carries on from THOSE.
+        reserves = xeroNet
+        const b = sumAt(mo, t => t.includes('bank') && !/credit card|visa|mastercard|amex/.test(t))
+        const dr = sumAt(mo, t => t.includes('receivable') || t.includes('debtor'))
+        const rt = sumAt(mo, t => t.includes('retention') && t.includes('receivable'))
+        const cr = sumAt(mo, t => t.includes('payable') || t.includes('creditor'), true)
+        const cc = sumAt(mo, t => /credit card|visa|mastercard|amex/.test(t))
+        if (b != null) bank = b
+        if (dr != null) debtors = dr - (rt || 0)     // retention is shown separately below
+        if (rt != null) retention = rt
+        if (cr != null) creditors = cr
+        if (cc != null) cards = cc
+        // Financing is the balancing figure on an actual month, so the line total equals
+        // Xero's net assets exactly rather than being a tracked-item estimate sitting
+        // alongside real numbers.
+        financing = xeroNet - (bank + debtors + retention + cards + creditors)
+      }
       rows.push({
         mo, isActual, fromXero: useXero, revenue, cos, overheads, net,
         bank, debtors, retention, cards, creditors, financing,
@@ -234,6 +268,13 @@ export default function ForecastBalanceSheet() {
           movement in debtors, creditors, retention and financing is what turns that profit into cash. <strong>Cash is derived, not
           asserted</strong> - so if the working capital assumptions are wrong, the bank line goes wrong somewhere you can see it.
           Months marked ACTUAL on Budgets use Xero's figures; the rest are forecast.
+          <div style={{ marginTop: 6 }}>
+            <strong>The four settings below only affect FORECAST months.</strong> Actual months come from Xero and need no assumptions.
+            They exist because a P&amp;L does not tell you when cash moves: <em>debtor days</em> decides how much of a month's billing is still
+            owed at month end rather than collected, <em>creditor days</em> the same for what you owe, and <em>retention</em> splits off the
+            part of a bill you will not see for a year. Without them, profit and cash would be the same thing - which is the one assumption
+            no construction business can afford.
+          </div>
         </div>
 
         {/* WHAT XERO ACTUALLY RETURNED. The actual months are still showing my summed

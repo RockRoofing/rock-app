@@ -1,61 +1,61 @@
-pkg664 - "0 monthly columns" - the response was dropping them
-==============================================================
+pkg665 - Re-base the component lines, not just the bottom line
+===============================================================
 
-*** SUPERSEDES pkg591 - pkg663. ***
-*** SIX NEW FILES - create these in GitHub:
-      pages/business-financials/payment-performance.js
-      pages/business-financials/forecast-balance-sheet.js
-      pages/business-financials/forecast-pl.js
-      pages/business-financials/forecast-margin.js
-      pages/business-financials/balance-sheet.js
-      components/PageErrorBoundary.js
-***
+*** SUPERSEDES pkg591 - pkg664. ***
+*** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js        <- the fix, one line
+  lib/xero.js
+  pages/business-financials/forecast-balance-sheet.js
   ... and the rest of the set as before
 
 
-THE CHECK PANEL FOUND IT IN ONE GO
-----------------------------------
-"0 monthly columns, 0 total rows found" - on a payload that contained both.
+WHAT WAS HAPPENING
+------------------
+Actuals tie perfectly now. The forecast did not, and the table showed why:
 
-The refresh writes everything Xero returned:
+    Jul 26  net assets  56,460   reserves  56,460   ties
+    Aug 26  net assets 853,192   reserves  19,686   out by 833,506
 
-    await redis.set('bs:accounts', { ...r, fetchedAt: ... })     <- correct
+RESERVES was re-based onto Xero. THE COMPONENTS WERE NOT - bank, debtors and
+creditors carried on rolling forward from the same wrong opening. So the bottom
+line was right and everything above it was not.
 
-But the READ whitelists what it sends back to the page:
+The parser was reading every monthly cell and keeping only the last column. It now
+keeps them all, so each closed month sets bank, debtors, retention, cards and
+creditors to Xero's real figures, and the forecast rolls on from THOSE.
 
-    accounts, asAt, fetchedAt, items, assumptions                <- columns and
-                                                                    totals dropped
+FINANCING BALANCES THE MONTH. Fixed assets, WIP, inventory, prepayments and
+deferred tax are not modelled as their own lines, so that line absorbs them and
+the total equals Xero exactly:
 
-So the twelve monthly columns and Xero's Net Assets row were fetched, stored, and
-then thrown away on the way out. The page was working correctly on data it never
-received.
-
-FOURTH TIME THIS EXACT FAULT HAS APPEARED IN THIS FILE - the finance config
-whitelist, the manual balances whitelist, the invoice-finance settings, and now
-this. Storing more than you return is silent by nature: nothing errors, the field
-is simply absent.
-
-I swept the file for other write-then-drop mismatches. bs:accounts was the only
-spread write, and the paid-invoices and cash-commitments endpoints return the same
-shape they store.
+    Jul 26  bank 0 + debtors 415,457 + retention 115,975
+            - cards 118,755 - creditors 381,187 + financing 24,969
+            = 56,460, which is Xero's figure to the penny
 
 
-WHAT YOU SHOULD SEE
--------------------
-The check panel turns GREEN:
+YOUR SECOND QUESTION - WHY THE FOUR SETTINGS
+--------------------------------------------
+They ONLY affect forecast months now. Actual months come from Xero and need no
+assumptions at all, which was not true before this package.
 
-    Xero balance sheet check - 8 monthly columns, 6 total rows found
-      Net Assets: 56,460 | 119,573 | 133,000 | 251,938 | ...
-      Matched to months: 2026-07, 2026-06, 2026-05, ...
+They exist because a P&L does not tell you when cash moves. On 100,000 of billing:
 
-and the ACTUAL columns become Xero's real figures - 56,460 at July, not 889,966 -
-with "Out by" reading 0 on those months. The forecast then re-bases from July and
-should land near the 250-275k you expected.
+    debtor days  0 -> collected in the month, debtors nil
+    debtor days 45 -> nothing collected, 100,000 sitting as a debtor
 
-No need to press Read balance sheet again - the data is already in Redis. It just
-could not get out.
+Identical profit. Completely different cash, and a completely different balance
+sheet. Without them profit and cash would be the same thing, which is the one
+assumption a construction business cannot make.
+
+  debtor days      how much of a month's billing is still owed at month end
+  creditor days    the same for what you owe
+  retention %      the slice of a bill you will not see for a year
+  retention held   how long before it is released
+
+WORTH KNOWING: the Payment Performance tab now measures your REAL debtor days per
+customer. Once you are happy with those figures, the 45 here should be replaced by
+what the data actually says rather than a round number. Say the word and I will
+wire it through.
