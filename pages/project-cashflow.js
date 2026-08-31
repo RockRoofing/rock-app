@@ -147,6 +147,32 @@ export default function ProjectCashflow() {
     return out
   }, [allForecasts, appActuals, xeroMap])
 
+  // FORECASTS THAT CANNOT SCHEDULE THEIR CASH.
+  //
+  // Detected from the saved schedules rather than by fetching every project's calendar:
+  // a forecast with revenue but no dated sales line, or with labour and materials that
+  // carry no dates, cannot land anywhere in a cash flow. It is saved, it looks fine on
+  // this page, and it contributes nothing - which is exactly the silent failure that
+  // cost us most of today.
+  const missingDates = useMemo(() => {
+    const out = []
+    for (const [pk, list] of Object.entries(allForecasts || {})) {
+      for (const fc of (list || [])) {
+        if (supersededIds.has(fc.id)) continue
+        const gaps = []
+        const rev = Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0
+        const salesDated = (fc.salesSchedule || []).filter(x => x.date).length
+        if (rev > 0 && !salesDated && !fc.salesDate) gaps.push('no sales payment date')
+        const matUndated = (fc.matItems || []).filter(x => !x.payDate && (Number(x.amount) || Number(x.value) || 0) > 0).length
+        if (matUndated) gaps.push(`${matUndated} materials line${matUndated === 1 ? '' : 's'} with no delivery date`)
+        const labUndated = (fc.labourSchedule || []).filter(x => !x.date && (Number(x.amount) || 0) > 0).length
+        if (labUndated) gaps.push(`${labUndated} labour payment${labUndated === 1 ? '' : 's'} with no date`)
+        if (gaps.length) out.push({ pk, id: fc.id, from: fc.from, to: fc.to, gaps })
+      }
+    }
+    return out
+  }, [allForecasts, supersededIds])
+
   // PROJECTS WHOSE FORECAST NEEDS REDOING.
   //
   // A forecast is superseded the moment an application covers its period - the money is
@@ -414,6 +440,27 @@ export default function ProjectCashflow() {
                 {/* FOCUS BANNER. Filtering silently would be worse than not filtering at
                     all - a total that is quietly one project's is indistinguishable from
                     the whole picture. */}
+                {/* CANNOT BE SCHEDULED. A forecast with no dates is saved, looks correct
+                    on this page, and contributes nothing to any cash flow - the worst kind
+                    of failure because there is nothing on screen to notice. */}
+                {missingDates.length > 0 && (
+                  <div style={{ position: 'sticky', left: 0, zIndex: 6, background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', borderRadius: 8, padding: '9px 14px', margin: '0 0 8px', fontSize: 12, color: '#b91c1c', width: 'fit-content', maxWidth: 900 }}>
+                    <strong>{missingDates.length} forecast{missingDates.length === 1 ? '' : 's'} cannot be scheduled - missing dates.</strong>
+                    <div style={{ marginTop: 4, color: '#7f1d1d' }}>
+                      {missingDates.slice(0, 6).map((m, i) => (
+                        <div key={i}>
+                          {projName(m.pk) || m.pk}{m.from ? ` (${fmtDMY(parseISO(m.from))} - ${fmtDMY(parseISO(m.to))})` : ''} - {m.gaps.join('; ')}
+                        </div>
+                      ))}
+                      {missingDates.length > 6 && <div>and {missingDates.length - 6} more.</div>}
+                    </div>
+                    <div style={{ marginTop: 5, fontSize: 11, color: '#991b1b' }}>
+                      These are saved and look right above, but they contribute NOTHING to the cash flow - the money has no date to land on.
+                      Open the forecast and set the sales cycle, or fill the delivery dates in on the materials lines.
+                    </div>
+                  </div>
+                )}
+
                 {focusKey && (
                   <div style={{ position: 'sticky', left: 0, zIndex: 6, background: '#eef4ff', border: '1px solid #c7d7f5', borderRadius: 8, padding: '6px 12px', margin: '0 0 6px', fontSize: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 10, width: 'fit-content' }}>
                     <strong>Showing {focusKey.startsWith('L:')

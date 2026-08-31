@@ -1,7 +1,7 @@
-pkg652 - FIX: periodMonths is not defined
-==========================================
+pkg654 - Banner on the project cash flow for forecasts with missing dates
+==========================================================================
 
-*** SUPERSEDES pkg591 - pkg651. ***
+*** SUPERSEDES pkg591 - pkg653. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -13,9 +13,9 @@ pkg652 - FIX: periodMonths is not defined
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js       <- the fix
-  pages/applications.js
+  pages/project-cashflow.js       <- the banner
   pages/business-financials/cashflow.js
+  pages/applications.js
   pages/api/business-financials.js
   pages/api/project-cashflow.js
   components/BizNav.js
@@ -27,34 +27,38 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-MY BUG, AND THE SAME SHAPE AS THE LAST ONE
--------------------------------------------
-The "names the missing months" message I added in pkg651 sits in TermEditor - a
-SEPARATE component. periodMonths lives in HypAppModal and is invisible there.
-Passed in as a prop.
+THE BANNER
+----------
+Above the cash rows, red, listing every forecast whose money has no date to land
+on:
 
-AND A SECOND ONE BEHIND IT. The same message also used appCalendar, which is
-HypAppModal's name for an object TermEditor already receives as `calendar`. It
-would have thrown the moment the missing-months branch ran - so fixing only the
-first would have bought one more round trip.
+    3 forecasts cannot be scheduled - missing dates.
+      J190 - Russell Hill (31/08/26 - 06/11/26) - no sales payment date
+      J244 - Waungron (01/09/26 - 30/11/26) - 2 materials lines with no delivery date
+      J240 - Market Drayton (05/10/26 - 17/12/26) - 1 labour payment with no date
 
-That is now FIVE times this session that a component has reached for a value
-belonging to another scope. My per-component scan only compared each component
-against module scope; it did not check whether an identifier belonged to a
-DIFFERENT component. It does now - that cross-component check is what found the
-appCalendar one, and it comes up clean on this file.
+    These are saved and look right above, but they contribute NOTHING to the cash
+    flow - the money has no date to land on.
+
+Three checks: revenue with no dated sales line, materials with a value but no
+delivery date, labour with a value but no date. Superseded periods are skipped.
 
 
-ALSO IN THIS PACKAGE (pkg651)
+WHY THIS ONE MATTERS
+--------------------
+It is the exact failure that cost most of today. A forecast with no dates SAVES
+correctly, RENDERS correctly on the Gantt, and contributes nothing anywhere -
+there was no way to tell it apart from one that was working. Every session we have
+found another variant of it by chasing a total that looked wrong.
+
+DETECTED FROM THE SAVED SCHEDULES, not by fetching every project's calendar. If a
+forecast has revenue and no dated sales line, that is proof enough that something
+upstream did not resolve - whatever the reason.
+
+
+ALSO IN THIS PACKAGE (pkg653)
 -----------------------------
-THE MONTHLY DATE TABLE COUNTS AS AN APPLICATION CALENDAR. appCalendarUsable only
-looked at the three default day fields, so J190 - blank defaults, fifteen months
-of overrides filled in - read as having no calendar. The forecast fell back to one
-date at period end and the applications screen warned about days you had
-deliberately overridden.
-
-    before  usable false -> one date at period end
-    after   Sep val 30/09 cash 23/10, Oct 31/10 cash 27/11, Nov 30/11 cash 25/12
-
-So one application spread over several months now gives one application date per
-month at that month's percentage.
+CIS: forecast labour is GROSS, so the labour column now pays gross x 80% and the
+CIS column takes gross x 20%. It was paying the full gross AND charging CIS at
+net x 20/80 on top - 56,172 of cash out over thirteen weeks that did not exist.
+Xero bills are already net and are unchanged.

@@ -533,6 +533,21 @@ export default function CashFlow() {
     // closer to the truth than a generic month end and it degrades predictably.
     const isApplied = (fc) => !!(fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd)
 
+    const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
+    // TWO BASES, and mixing them is the whole problem.
+    //
+    // XERO BILLS are already NET - Xero deducts CIS when the bill is entered, so Amount
+    // Due is what the subcontractor gets. The CIS on top is net x r/(1-r).
+    const cisFromNet = (net) => cisRate > 0 ? net * (cisRate / (1 - cisRate)) : 0
+    // FORECAST LABOUR is GROSS - it is the value of the work, before the deduction. So
+    // the CIS is simply gross x r, and what actually leaves the bank for the
+    // subcontractor is gross x (1-r). Treating gross as net inflated BOTH: the labour
+    // column showed the full gross as if it were all payable, and the CIS was worked out
+    // at 20/80 of a figure that already included the tax. On 224,686 of labour that was
+    // 56,172 of cash out that does not exist.
+    const cisFromGross = (g) => cisRate > 0 ? g * cisRate : 0
+    const netOfCis = (g) => g * (1 - cisRate)
+
     // COST CERTIFIED BUT NOT YET INVOICED.
     //
     // Dropping forecast cost at the valuation date assumes the subcontractor invoices have
@@ -554,9 +569,12 @@ export default function CashFlow() {
       const out = []
       for (const fc of (data.projForecasts || [])) {
         if (!fc.latestAppEnd) continue
-        const certified = [...(fc.labourSchedule || []), ...(fc.matItems || [])]
-          .filter(x => x.date && x.date <= fc.latestAppEnd)
-          .reduce((t, x) => t + (x.amount || 0), 0)
+        // Compared against Xero bills, which are NET of CIS - so the labour side has to be
+        // netted too or every project would look like it had 20% of labour uninvoiced.
+        // Materials carry no CIS.
+        const certLabour = netOfCis((fc.labourSchedule || []).filter(x => x.date && x.date <= fc.latestAppEnd).reduce((t, x) => t + (x.amount || 0), 0))
+        const certMat = (fc.matItems || []).filter(x => x.date && x.date <= fc.latestAppEnd).reduce((t, x) => t + (x.amount || 0), 0)
+        const certified = certLabour + certMat
         if (certified <= 0) continue
         const k = normName(fc.projectName || '')
         const billed = billByProject[k] || 0
@@ -585,8 +603,7 @@ export default function CashFlow() {
 
     // Rate is a setting - not every trade is on 20%, and a gross-status subcontractor is
     // on nil. From a NET figure, gross = net / (1 - r), so CIS = net * r / (1 - r).
-    const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
-    const cisFromNet = (net) => cisRate > 0 ? net * (cisRate / (1 - cisRate)) : 0
+
 
     // CIS withheld on labour bills is paid to HMRC on the 22nd of the FOLLOWING month.
     // Group by the month the bill is paid, then schedule the HMRC payment.
@@ -625,7 +642,7 @@ export default function CashFlow() {
         for (const l of (fc.labourSchedule || [])) {
           if (!l.date) continue
           const mk = String(l.date).slice(0, 7)
-          cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(l.amount || 0)
+          cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromGross(l.amount || 0)
           cisSrcByMonth[mk] = cisSrcByMonth[mk] || {}
           cisSrcByMonth[mk].forecast = true
         }
@@ -836,7 +853,9 @@ export default function CashFlow() {
         // Behind the valuation date it is no longer forecast - it is a real bill, or it is
         // in the awaiting-invoice figure that has already been swept into week 1.
         const past = (x) => fc.latestAppEnd && x.date && x.date <= fc.latestAppEnd
-        const rawL = (fc.labourSchedule || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        // What actually leaves the bank for the subcontractor. The withheld 20% is a
+        // separate payment to HMRC in the CIS column, on the 22nd of the following month.
+        const rawL = netOfCis((fc.labourSchedule || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0))
         const rawM = (fc.matItems || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
         // Applied to labour first, then materials - a project bill is far more often
         // subcontract labour than a materials invoice.
@@ -1292,7 +1311,7 @@ export default function CashFlow() {
                     <th style={th} title="20% withheld from subcontract labour, paid to HMRC on the 22nd of the month after the labour is paid. Covers bills ticked as CIS AND forecast labour - the forecast labour is already net of any real bill on that project, so nothing is counted twice. PAYE wages in overheads are excluded: employees are not subcontractors.">CIS to HMRC</th>
                     <th style={th} title="Sales from the Commercial project cash flow forecasts, excluding any period already applied for and any project with a real invoice that week.">Project sales</th>
                     <th style={th} title="Materials payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no materials scheduled - the cash flow is then showing income with no cost against it.">Materials out</th>
-                    <th style={th} title="Labour payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no labour scheduled.">Labour out</th>
+                    <th style={th} title="What actually reaches the subcontractor - forecast labour LESS the CIS deduction. The forecast holds gross; the withheld 20% is a separate payment in the CIS to HMRC column on the 22nd of the following month. Empty while Project sales is not means the forecasts have no labour scheduled.">Labour out (net of CIS)</th>
                     <th style={th}>Net</th>
                     <th style={th}>Closing cash</th>
                   </tr>
