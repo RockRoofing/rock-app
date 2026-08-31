@@ -1,7 +1,7 @@
-pkg662 - Forecast balance sheet: use Xero's real month ends
-============================================================
+pkg663 - The Net Assets row was not being found
+================================================
 
-*** SUPERSEDES pkg591 - pkg661. ***
+*** SUPERSEDES pkg591 - pkg662. ***
 *** SIX NEW FILES - create these in GitHub:
       pages/business-financials/payment-performance.js
       pages/business-financials/forecast-balance-sheet.js
@@ -15,55 +15,46 @@ pkg662 - Forecast balance sheet: use Xero's real month ends
 CHANGED FILES (replace)
 -----------------------
   lib/xero.js
-  pages/api/business-financials.js
   pages/business-financials/forecast-balance-sheet.js
   ... and the rest of the set as before
 
 
-WHAT THE CONSTANT 952,337 TOLD US
----------------------------------
-"Out by" was IDENTICAL in all twelve months. That is not a modelling drift - a drift
-grows. A constant means the error is entirely in the OPENING figures, and the
-roll-forward itself is fine, which matched the test I ran when building it.
+STILL WRONG, AND HERE IS WHY
+----------------------------
+The actual months are still showing MY summed figure, not Xero's - net assets
+1,083,146 at Jul against a real 56,460, and "Out by" still constant.
 
-The cause: I summed every row of Xero's balance sheet and called it equity. XERO
-RETURNS LIABILITIES AS POSITIVE FIGURES under their own headings, so that sum is
-assets PLUS liabilities instead of assets MINUS liabilities. Your creditors at
-31 Jul are 533,399 - double-counted, that is the order of the error.
+pkg662 IS deployed (the new note about ACTUAL months is on your screenshot), so
+the fetch ran. What did not happen is the MATCH: my parser only looked for a
+handful of exact labels at two levels of nesting. If Xero words the row
+differently, or nests it one level deeper, nothing matched - and the page fell
+back to my own sum silently, which is the very fault it was meant to fix.
 
-    31 Jul 2026   Xero net assets    56,459.73
-                  my model          991,136.00
-
-
-THE FIX - AND IT IS THE ONE YOU SUGGESTED
-------------------------------------------
-Xero's Balance Sheet report takes periods=11&timeframe=MONTH and returns twelve
-real month-end columns in ONE call - the same shape as the PDF you sent. So there
-is no need to reconstruct anything.
-
-  ACTUAL MONTHS now show Xero's OWN "Net Assets" total. Not summed by me, taken
-  from the report. They are fact, they tie by definition, and "Out by" reads 0.
-
-      Dec 25  249,639.83     Apr 26  251,938.21
-      Jan 26  204,640.21     May 26  133,000.18
-      Feb 26  181,949.54     Jun 26  119,572.72
-      Mar 26  180,394.83     Jul 26   56,459.73
-
-  FORECAST MONTHS re-base onto the LAST ACTUAL, so they start from the truth
-  rather than from twelve months of accumulated error:
-
-      Jul 26 actual   56,460
-      Aug           -36,773  ->   19,687
-      Sept          174,274  ->  193,961
-      Oct            14,462  ->  208,423
-      Nov            81,880  ->  290,303
-
-  Which lands where you said it should - 250-275k - instead of 1.2m.
-
-"OUT BY" NOW ONLY APPLIES TO FORECAST MONTHS. On an actual month both sides are
-Xero's own figure, so a tie there would prove nothing and would hide a real
-forecasting error behind a row of green ticks.
+I checked the date parsing first: "31 Jul 2026" parses correctly, so the columns
+are not the problem.
 
 
-PRESS "READ BALANCE SHEET FROM XERO" on the Balance Sheet tab after deploying -
-it now pulls twelve months instead of one.
+TWO CHANGES
+-----------
+1. EVERY summary row is now captured, at any depth, whatever it is called -
+   rather than a fixed list of labels.
+
+2. The page prefers "Net Assets", then anything containing it, then "Total Capital
+   and Reserves" - which is the same figure from the other side of the sheet, and
+   is what sits underneath it on your PDF. Both routes give 56,459.73.
+
+
+AND IT NOW SHOWS ITS WORKING
+----------------------------
+A check panel at the top of the page:
+
+    Xero balance sheet check - 8 monthly columns, 6 total rows found
+      Columns: 31 Jul 2026 | 30 Jun 2026 | ...
+      Total rows Xero gave:
+        Net Assets: 56,460 | 119,573 | 133,000 | ...
+      Matched to months: 2026-07, 2026-06, ...
+
+Green when it found both, amber when it did not. If the actual months are still
+wrong after this, open that panel and send it - it says outright whether the
+columns came through, which total rows Xero gave, and which months they matched
+to. No more guessing at the shape of somebody else's report.

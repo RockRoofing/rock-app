@@ -84,7 +84,12 @@ export default function ForecastBalanceSheet() {
     // Actual months now come from Xero and tie by definition. Only forecast months are
     // rolled forward, and they roll from the LAST ACTUAL rather than from January.
     const cols = bs.columns || []                       // e.g. ["31 Jul 2026","30 Jun 2026",...]
-    const netAssetsRow = Object.entries(bs.totals || {}).find(([k]) => /^net assets/i.test(k))
+    // Prefer "Net Assets"; fall back to "Total Capital and Reserves", which is the same
+    // figure from the other side of the sheet and is what Xero's PDF shows underneath it.
+    const tEntries = Object.entries(bs.totals || {})
+    const netAssetsRow = tEntries.find(([k]) => /^net assets$/i.test(k.trim()))
+      || tEntries.find(([k]) => /net assets/i.test(k))
+      || tEntries.find(([k]) => /total capital and reserves/i.test(k))
     const actualNet = {}
     if (netAssetsRow) {
       const vals = netAssetsRow[1] || []
@@ -213,7 +218,7 @@ export default function ForecastBalanceSheet() {
         check: useXero ? 0 : (assets + liabs) - reserves,
       })
     })
-    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, hasOpening: accounts.length > 0 }
+    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasOpening: accounts.length > 0 }
   }, [bs, oh, mg, cf, a])
 
   if (!ok) return null
@@ -230,6 +235,27 @@ export default function ForecastBalanceSheet() {
           asserted</strong> - so if the working capital assumptions are wrong, the bank line goes wrong somewhere you can see it.
           Months marked ACTUAL on Budgets use Xero's figures; the rest are forecast.
         </div>
+
+        {/* WHAT XERO ACTUALLY RETURNED. The actual months are still showing my summed
+            figure rather than Xero's, so either the monthly columns or the "Net Assets"
+            total did not come through - and guessing which costs another round trip. */}
+        {!loading && bs && (
+          <details style={{ marginBottom: 14 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: (bs.columns || []).length && Object.keys(bs.totals || {}).length ? '#16a34a' : '#b45309' }}>
+              Xero balance sheet check - {(bs.columns || []).length} monthly columns, {Object.keys(bs.totals || {}).length} total rows found
+            </summary>
+            <div style={{ marginTop: 8, background: '#fff', border: '1px solid #eee', borderRadius: 8, padding: 12, fontSize: 11.5 }}>
+              <div style={{ marginBottom: 6 }}><strong>Columns:</strong> {(bs.columns || []).join(' | ') || <span style={{ color: '#dc2626' }}>none - the report came back with a single column, so periods=11 did not apply</span>}</div>
+              <div><strong>Total rows Xero gave:</strong></div>
+              {Object.keys(bs.totals || {}).length === 0
+                ? <div style={{ color: '#dc2626' }}>none matched - no row labelled &quot;Net Assets&quot; or &quot;Total ...&quot; was found, so the actual months fall back to my own sum</div>
+                : Object.entries(bs.totals).map(([k, v]) => (
+                    <div key={k} style={{ fontFamily: 'monospace', fontSize: 10.5 }}>{k}: {(v || []).map(x => Math.round(x).toLocaleString()).join(' | ')}</div>
+                  ))}
+              <div style={{ marginTop: 6 }}><strong>Matched to months:</strong> {Object.keys(model?.actualNetKeys || {}).join(', ') || <span style={{ color: '#dc2626' }}>none</span>}</div>
+            </div>
+          </details>
+        )}
 
         {loading && <div style={{ color: '#999', padding: 30 }}>Loading...</div>}
 
