@@ -271,7 +271,7 @@ export default function CashFlow() {
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true })
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true, riskWeeks: 0 })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
   // { [key]: true }. Bills key on id, receivables on invoice number - the same key the
@@ -350,6 +350,7 @@ export default function CashFlow() {
         legacyMatDays: fc.legacyMatDays ?? 30,
         cisRate: fc.cisRate ?? 20,
         cisOnForecast: fc.cisOnForecast !== false,
+        riskWeeks: fc.riskWeeks ?? 0,
         cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
       })
       // Seed local bill payment-date overrides from what's saved.
@@ -386,6 +387,7 @@ export default function CashFlow() {
         legacyMatDays: Number(finance.legacyMatDays ?? 30),
         cisRate: Number(finance.cisRate ?? 20),
         cisOnForecast: finance.cisOnForecast !== false,
+        riskWeeks: Number(finance.riskWeeks) || 0,
         cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
       }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
@@ -518,12 +520,17 @@ export default function CashFlow() {
     // CIS withheld on labour bills is paid to HMRC on the 22nd of the FOLLOWING month.
     // Group by the month the bill is paid, then schedule the HMRC payment.
     const cisByPayMonth = {}
+    // Where each month's CIS came from - a real ticked bill, or predicted off forecast
+    // labour. Predicted CIS is an estimate and must say so, the same as VAT does.
+    const cisSrcByMonth = {}
     for (const i of (data.bills || [])) {
       if (!cisBill(i)) continue
       const pd = billOverrides[i.id] || i.payDate || i.dueDate || ''
       if (!pd) continue
       const mk = pd.slice(0, 7)
       cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(i.amountDue || 0)
+      cisSrcByMonth[mk] = cisSrcByMonth[mk] || {}
+      cisSrcByMonth[mk].bill = true
     }
     // CIS ON FORECAST LABOUR.
     //
@@ -548,6 +555,8 @@ export default function CashFlow() {
           if (!l.date) continue
           const mk = String(l.date).slice(0, 7)
           cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(l.amount || 0)
+          cisSrcByMonth[mk] = cisSrcByMonth[mk] || {}
+          cisSrcByMonth[mk].forecast = true
         }
       }
     }
@@ -556,9 +565,11 @@ export default function CashFlow() {
     const cisPayments = Object.entries(cisByPayMonth).map(([mk, amt]) => {
       const [yy, mm] = mk.split('-').map(Number)   // mm is 1-based
       const payMonth = new Date(yy, mm, 22)         // mm (0-based next month), day 22
-      return { date: isoDay(payMonth), amount: amt }
+      return { date: isoDay(payMonth), amount: amt, src: cisSrcByMonth[mk] || {} }
     })
 
+    // Weeks to delay every receipt by. 0 = the plan as entered.
+    const riskDays = (Number(finance.riskWeeks) || 0) * 7
     const rows = []
     // Bill allowance already consumed, per month per project - prevents one bill netting
     // against the same forecast money in more than one week.
@@ -569,6 +580,19 @@ export default function CashFlow() {
       const wkEnd = new Date(wkStart.getTime() + 6 * 86400000)
       const s = isoDay(wkStart), e = isoDay(wkEnd)
       const inWk = (dstr) => dstr >= s && dstr <= e
+      // RISK SHIFT - push money IN back by N weeks, leaving money OUT where it is.
+      //
+      // That asymmetry is the point: customers paying late does not make your suppliers,
+      // your labour or HMRC wait. Shifting both would just slide the whole picture and
+      // show nothing. Applied by testing an EARLIER date against this week, which moves
+      // the receipt later without touching the stored dates.
+      const inWkIn = (dstr) => {
+        if (!dstr) return false
+        if (!riskDays) return inWk(dstr)
+        const d = new Date(dstr); d.setDate(d.getDate() + riskDays)
+        const shifted = isoDay(d)
+        return shifted >= s && shifted <= e
+      }
       // OVERDUE LANDS IN WEEK 1, for money out as well as money in.
       //
       // A date before the horizon is not "never" - it is late, and late money out is the
@@ -596,7 +620,7 @@ export default function CashFlow() {
         if (excluded[invKey(i)]) continue
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) arrInvoices += (i.amountDue || 0)
-        else if (inWk(d)) invoicesIn += (i.amountDue || 0)
+        else if (inWkIn(d)) invoicesIn += (i.amountDue || 0)
       }
       const overdueIn = w === 0
         ? (data.receivables || []).filter(i => { const d = i.expectedDate || i.dueDate || ''; return d && d < s }).reduce((a, i) => a + (i.amountDue || 0), 0)
@@ -606,7 +630,7 @@ export default function CashFlow() {
       for (const r of retEvents) {
         if (!r.date) continue
         if (isArrears(r.date)) arrRet += r.amount
-        else if (inWk(r.date)) retIn += r.amount
+        else if (inWkIn(r.date)) retIn += r.amount
       }
       // VAT: any month whose month-end falls in this week.
       let vatIn = 0
@@ -637,7 +661,10 @@ export default function CashFlow() {
         .map(([code, amount]) => ({ code, name: (data.overheadNames || {})[code] || code, amount: Math.round(amount) }))
         .sort((a, b) => b.amount - a.amount)
       const commOut = commEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
-      const cisOut = cisPayments.filter(c => inWk(c.date)).reduce((a, c) => a + c.amount, 0)
+      const inWkCis = cisPayments.filter(c => inWk(c.date))
+      const cisOut = inWkCis.reduce((a, c) => a + c.amount, 0)
+      // Any forecast-derived contribution makes the week's figure an estimate.
+      const cisEstimated = inWkCis.some(c => c.src && c.src.forecast)
 
       // Project cash flow forecast for this week, with GAP-FILL overlap: a project's
       // forecast SALES are suppressed in any week it has a real invoice; its forecast
@@ -691,7 +718,7 @@ export default function CashFlow() {
         if (costsSpent(fc)) continue
 
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
-        const sIn = (hasInvoice || salesSpent(fc)) ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const sIn = (hasInvoice || salesSpent(fc)) ? 0 : (fc.salesSchedule || []).filter(x => inWkIn(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         // NET THE BILL OFF, do not throw the whole forecast away.
         //
         // hasBill was all-or-nothing: ONE real bill on a project killed every forecast
@@ -752,7 +779,7 @@ export default function CashFlow() {
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
-        vatEstimated, vatSrcs,
+        vatEstimated, vatSrcs, cisEstimated,
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
@@ -1053,6 +1080,9 @@ export default function CashFlow() {
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Used to estimate the VAT reclaim on future materials and overhead spend, for months with no filed return. Set to 0 to turn the estimate off.">VAT rate % (reclaim estimate)</div>
                       <input type="number" value={finance.vatRate} onChange={e => setFinance(f => ({ ...f, vatRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="RISK TEST. Delays every receipt - invoices, retention and forecast sales - by this many weeks, leaving money OUT where it is. Customers paying late does not make your suppliers, your labour or HMRC wait, which is the whole point of the test.">Risk: pay me later (weeks)</div>
+                      <input type="number" min={0} max={13} value={finance.riskWeeks} onChange={e => setFinance(f => ({ ...f, riskWeeks: e.target.value }))}
+                        style={{ ...inpS, width: 70, borderColor: (Number(finance.riskWeeks) || 0) > 0 ? '#dc2626' : undefined }} /></div>
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Deduction rate applied to subcontract labour. Set to 0 if everyone you use holds gross status.">CIS rate %</div>
                       <input type="number" value={finance.cisRate} onChange={e => setFinance(f => ({ ...f, cisRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Predict CIS on FORECAST labour as well as on ticked bills. Forecast labour is already net of any real bill on that project, so nothing is counted twice. PAYE wages in the Budgets overheads are never included - they are employees, not subcontractors.">CIS on forecast labour</div>
@@ -1186,7 +1216,13 @@ export default function CashFlow() {
                         {r.vatOut ? gbp(-r.vatOut) : '-'}
                         {r.vatOut && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
                       </td>
-                      <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
+                      {/* Marked "est" where any part came from FORECAST labour rather
+                          than a real ticked bill - same treatment as VAT. */}
+                      <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}
+                        title={r.cisEstimated ? 'Includes CIS predicted from forecast labour, not just from bills already in Xero.' : (r.cisOut ? 'From bills ticked as CIS labour.' : '')}>
+                        {r.cisOut ? gbp(-r.cisOut) : '-'}
+                        {r.cisOut && r.cisEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
+                      </td>
                       {/* Three columns, not one net figure. If Materials out and Labour
                           out sit at nil while Project sales runs high, the cost side of
                           the forecast is missing - which a netted column hides completely. */}
@@ -1294,6 +1330,70 @@ export default function CashFlow() {
                 </tfoot>
               </table>
             </div>
+
+            {/* PROJECT CASH FLOWS - what the Project sales / Materials / Labour columns
+                are made of, across the whole 13 weeks rather than one week at a time.
+                Built from the same forecast rows, so it always agrees with the table
+                above. */}
+            {(() => {
+              const byProj = {}
+              for (const r of forecast) {
+                for (const b of (r.fcBreak || [])) {
+                  const k = b.name || b.no || '(unnamed)'
+                  const e = byProj[k] || (byProj[k] = { name: k, sales: 0, labour: 0, mat: 0, weeks: 0 })
+                  e.sales += b.sales || 0; e.labour += b.labour || 0; e.mat += b.mat || 0
+                  if ((b.sales || 0) || (b.labour || 0) || (b.mat || 0)) e.weeks += 1
+                }
+              }
+              const list = Object.values(byProj).sort((a, b) => b.sales - a.sales)
+              if (!list.length) return null
+              const t = list.reduce((a, x) => ({ sales: a.sales + x.sales, labour: a.labour + x.labour, mat: a.mat + x.mat }), { sales: 0, labour: 0, mat: 0 })
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Project cash flows in these 13 weeks</div>
+                  <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
+                    From the Commercial project forecasts, net of any real invoice or bill. Cost % is materials plus labour over sales - a roofing period should run 75-85%, and anything far below that has cost missing from its forecast.
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Project</th>
+                      <th style={th}>Weeks</th>
+                      <th style={th}>Sales in</th>
+                      <th style={th}>Materials out</th>
+                      <th style={th}>Labour out</th>
+                      <th style={th}>Net</th>
+                      <th style={th}>Cost %</th>
+                    </tr></thead>
+                    <tbody>
+                      {list.map((x, i) => {
+                        const cost = x.mat + x.labour
+                        const pc = x.sales > 0 ? (cost / x.sales) * 100 : null
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                            <td style={{ ...td, textAlign: 'left' }}>{x.name}</td>
+                            <td style={{ ...td, color: '#999' }}>{x.weeks}</td>
+                            <td style={{ ...td, color: '#0f766e' }}>{x.sales ? gbp(x.sales) : '-'}</td>
+                            <td style={{ ...td, color: x.mat ? '#dc2626' : '#c00' }}>{x.mat ? gbp(-x.mat) : 'none'}</td>
+                            <td style={{ ...td, color: x.labour ? '#dc2626' : '#c00' }}>{x.labour ? gbp(-x.labour) : 'none'}</td>
+                            <td style={{ ...td, fontWeight: 600, color: (x.sales - cost) < 0 ? '#dc2626' : INK }}>{gbp(x.sales - cost)}</td>
+                            <td style={{ ...td, fontWeight: 700, color: pc == null ? '#999' : pc < 50 ? '#dc2626' : '#16a34a' }}>{pc == null ? '-' : `${pc.toFixed(0)}%`}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot><tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
+                      <td style={{ ...td, textAlign: 'left' }}>Total ({list.length})</td>
+                      <td style={td}></td>
+                      <td style={{ ...td, color: '#0f766e' }}>{gbp(t.sales)}</td>
+                      <td style={{ ...td, color: '#dc2626' }}>{gbp(-t.mat)}</td>
+                      <td style={{ ...td, color: '#dc2626' }}>{gbp(-t.labour)}</td>
+                      <td style={td}>{gbp(t.sales - t.mat - t.labour)}</td>
+                      <td style={td}>{t.sales > 0 ? `${(((t.mat + t.labour) / t.sales) * 100).toFixed(0)}%` : '-'}</td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+              )
+            })()}
 
             {/* INVOICES OWED - mirrors the Invoices Owed page. The expected date posts to
                 the SAME endpoint that page uses (invoice:meta), so setting it here shows

@@ -1,16 +1,18 @@
-pkg639 - "CASH FLOW TO BE UPDATED", and a correction to pkg638
-===============================================================
+pkg640 - Project cash flows table, CIS estimates labelled, risk delay
+======================================================================
 
-*** SUPERSEDES pkg591 - pkg638. ***
+*** SUPERSEDES pkg591 - pkg639. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
 
+THREE OF YOUR FOUR ARE HERE. The PDF is not - see the last section.
+
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js
   pages/business-financials/cashflow.js
+  pages/project-cashflow.js
   pages/business-financials/balance-sheet.js
   pages/api/business-financials.js
   pages/business-financials.js
@@ -21,52 +23,60 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-1. A CORRECTION - pkg638 DROPPED COSTS IT SHOULD HAVE KEPT
-----------------------------------------------------------
-I applied one rule to sales and costs together. They are not the same:
+1. PROJECT CASH FLOWS TABLE
+---------------------------
+Below the forecast: every project contributing to the 13 weeks, with sales in,
+materials out, labour out, net and COST %.
 
-  applied for                sales DROP   costs DROP   (real invoice + real bills)
-  elapsed, not applied for   sales DROP   costs KEEP
-  still future               sales keep   costs keep
+Built from the same fcBreak rows the weekly drill-down uses, so it agrees with the
+Project sales / Materials / Labour columns by construction rather than by luck.
 
-If a period ends without being applied for you have not EARNED the money - so
-dropping the sales is right, and conservative. But the WORK happened, so the
-subcontractor invoice and the materials bill are still coming. Dropping those too
-made the forecast look BETTER than reality, which is the one direction a cash flow
-must never err in.
-
-Costs now drop only when a real application replaces them. An elapsed period keeps
-its costs until the actual bill arrives, at which point the month netting removes
-them - nothing counted twice, nothing silently gone.
+Cost % is red below 50% and a missing schedule reads "none" - so a forecast with
+income and no cost against it is obvious across the whole quarter, not just in the
+week you happen to open.
 
 
-2. "CASH FLOW TO BE UPDATED"
-----------------------------
-Superseding happened SILENTLY. A period quietly left the plan and nobody was told
-the remaining work had not been re-forecast.
+2. CIS MARKED AS ESTIMATED
+--------------------------
+A week whose CIS came partly from FORECAST labour now shows "est", the same as
+VAT. CIS from a bill already ticked in Xero is not marked - that is real.
 
-The project's bar now goes DARK RED and a badge appears under the project name:
-
-    CASH FLOW TO BE UPDATED
-
-Two triggers, both meaning go and redo it:
-
-  an application was raised AFTER the forecast was last saved
-      - the position has moved and the forecast predates it
-  a forecast period ENDED without being applied for
-      - it has slipped, its sales are now dropped, the work needs re-planning
-
-Hovering the badge or the bar says which, and names the application. A project
-with everything still in the future stays clean.
+Hovering says which: "Includes CIS predicted from forecast labour" or "From bills
+ticked as CIS labour".
 
 
-WHY DARK RED RATHER THAN THE GREY "SUPERSEDED"
-----------------------------------------------
-Grey says "this period is done". Dark red says "the plan is out of date and it is
-on you". Those are different messages and only one of them prompts action.
+3. RISK - PAY ME LATER (WEEKS)
+------------------------------
+Delays every RECEIPT by N weeks: invoices, retention and forecast sales.
+
+    0 weeks   an invoice due 10/09 lands in the week of 10/09
+    2 weeks   ... the week of 24/09
+    4 weeks   ... the week of 08/10
+
+MONEY OUT IS NOT MOVED, and that asymmetry is the whole point. Customers paying
+late does not make your suppliers, your labour or HMRC wait. Shifting both would
+slide the entire picture and show you nothing.
+
+The box turns red while a delay is applied, so a risk run cannot be mistaken for
+the plan. It does not touch any stored date.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-todayKey was declared BELOW the memos that now read it. A const is not hoisted, so
-that is a temporal dead zone - it would have thrown on first render. Moved above.
+4. THE PDF - NOT BUILT, AND HERE IS WHY
+---------------------------------------
+"PDF every tab into one document with tick options" is a build in itself, not a
+change to an existing page. There are two honest routes:
+
+  A. PRINT STYLESHEET. A /business-financials/report page that renders the ticked
+     tabs one after another, styled for print, and you use the browser's Print to
+     PDF. Fastest, looks like the screen, and page breaks need care. No new
+     dependency.
+
+  B. SERVER-SIDE with pdf-lib, which you already use. Full control of layout,
+     headers, page numbers, and it can be emailed or scheduled. But every tab's
+     figures have to be re-derived server-side - the tables are currently built in
+     the browser from several API calls each - so it is the larger piece by some
+     distance.
+
+B is the better product and roughly a day's work; A gets you something usable much
+sooner. Tell me which and I will scope it properly rather than start it half-built
+at the end of a long session.
