@@ -127,7 +127,7 @@ export default function ForecastMarginPage() {
         {!loading && months.length > 0 && (
           <>
             <div style={{ display: 'flex', gap: 12, margin: '18px 0', flexWrap: 'wrap' }}>
-              <Box label="Forecast revenue" value={gbp(totals.revenue)} />
+              <Box label="Forecast revenue" value={gbp(totals.revenue)} sub="gross of retention" />
               <Box label="Materials" value={gbp(-totals.materials)} colour="#dc2626" />
               <Box label="Labour" value={gbp(-totals.labour)} colour="#dc2626" />
               <Box label="Gross margin" value={gbp(tMargin)} colour={tMargin < 0 ? '#dc2626' : '#16a34a'} strong

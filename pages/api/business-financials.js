@@ -984,9 +984,29 @@ export default async function handler(req, res) {
               // next, because costs spread while revenue did not.
               //
               // Falls back to the period end only where a forecast has no schedule.
-              revenueByMonth: (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length && fc.salesSchedule.some(x => x.month))
-                ? fc.salesSchedule.filter(x => x.month).map(x => ({ month: x.month, amount: Number(x.amount) || 0 }))
-                : (fc.to ? [{ month: String(fc.to).slice(0, 7), amount: Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0 }] : []),
+              // GROSS OF RETENTION, for the P&L.
+              //
+              // salesSchedule carries revenueThisPeriod, which is NET of retention. Right
+              // for the cash flow - retention is not received - but wrong for a P&L, where
+              // retention is a DEBTOR, not a reduction in revenue. You have earned it at
+              // the valuation date; you simply have not been paid it.
+              //
+              // Grossed up using the forecast's OWN retentionPct rather than an assumed
+              // rate. Stored as a FRACTION on some records and a PERCENTAGE on others -
+              // the same trap as elsewhere - so anything under 1 is treated as a fraction.
+              revenueByMonth: (() => {
+                const rp = Number(fc.retentionPct) || 0
+                const r = rp > 0 && rp < 1 ? rp : rp / 100
+                const up = (net) => (r > 0 && r < 1) ? net / (1 - r) : net
+                if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length && fc.salesSchedule.some(x => x.month)) {
+                  return fc.salesSchedule.filter(x => x.month).map(x => ({ month: x.month, amount: up(Number(x.amount) || 0) }))
+                }
+                return fc.to ? [{ month: String(fc.to).slice(0, 7), amount: up(Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0) }] : []
+              })(),
+              // The net figure too, so the difference is the retention and anything that
+              // wants it can see both rather than re-deriving one from the other.
+              revenueNet: (Array.isArray(fc.salesSchedule) ? fc.salesSchedule : []).reduce((t, x) => t + (Number(x.amount) || 0), 0),
+              retentionPct: Number(fc.retentionPct) || 0,
               revenueTo: fc.to || '',
               revenue: Number(fc.revenueThisPeriod) || Number(fc.thisCertTotal) || 0,
               materials: (Array.isArray(fc.matItems) && fc.matItems.length)

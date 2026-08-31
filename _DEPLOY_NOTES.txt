@@ -1,7 +1,7 @@
-pkg656 - Invoices in drop-down, like Overheads out
-===================================================
+pkg657 - P&L revenue is now GROSS of retention
+===============================================
 
-*** SUPERSEDES pkg591 - pkg655. ***
+*** SUPERSEDES pkg591 - pkg656. ***
 *** FIVE NEW FILES - create these in GitHub:
       pages/business-financials/forecast-balance-sheet.js
       pages/business-financials/forecast-pl.js
@@ -13,10 +13,12 @@ pkg656 - Invoices in drop-down, like Overheads out
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js       <- the drop-down
+  pages/api/business-financials.js            <- the fix
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-margin.js
+  pages/business-financials/cashflow.js
   pages/project-cashflow.js
   pages/applications.js
-  pages/api/business-financials.js
   pages/api/project-cashflow.js
   components/BizNav.js
   pages/_app.js
@@ -27,42 +29,49 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-CLICK ANY INVOICES IN FIGURE
+YOU ARE RIGHT, AND IT WAS A REAL FAULT
+---------------------------------------
+Both pages read salesSchedule.amount, which is revenueThisPeriod - NET of
+retention. Correct for the cash flow, because retention is not received. Wrong for
+the P&L, where retention is a DEBTOR: earned at the valuation date, simply not yet
+paid.
+
+    J248, one period
+      certified gross            39,304.99
+      salesSchedule carried      38,125.84   <- what the P&L was using
+      understated by              1,179.15   = 3%, on every period
+
+Now grossed up using each forecast's OWN retentionPct, not an assumed rate:
+
+    stored as 3     -> 38,125.84 -> 39,304.99
+    stored as 0.03  -> 38,125.84 -> 39,304.99
+    stored as 0     -> unchanged
+
+That handles the fraction-versus-percentage trap in both directions - retentionPct
+is a fraction on some records and a percentage on others.
+
+
+THE THREE STATEMENTS NOW TIE
 ----------------------------
-    Invoices due in w/c 07 Sept
-      Wates     INV-901   J247 Kilburn        10/09/26 (expected)   21,997
-      Selsdon   INV-884   J243 Christchurch   12/09/26 (due date)    9,488
-      Torsion   INV-877   J250 Plot 2000      09/09/26 (due date)    4,000
-      Total (3)                                                     35,485
+  P&L revenue     39,304.99 gross, in the valuation month
+  Balance sheet   debtor 38,125.84 + retention held 1,179.15 = 39,304.99
+  Cash flow       38,125.84 on the payment date; the retention arrives later
 
-Customer, invoice number, project, and the amount. Built from the same rows the
-column is summed from, so the detail always adds up to the figure above it.
+Revenue equals what is collected plus what is held back, which is what makes the
+three-way tie. Before this the P&L was 3% light against a debtors figure that DID
+include retention - so "Out by" on the forecast balance sheet would have shown a
+difference growing month on month, and it would have been genuinely hard to trace.
 
+The cash flow is UNCHANGED and still uses the net figure - that is right there.
 
-THE DATE COLUMN IS THE USEFUL PART
-----------------------------------
-It says WHICH date put the invoice in that week:
-
-  (expected)   a date you set on the Invoices owed table
-  (due date)   Xero's due date, because no expected date has been set
-
-That distinction matters when a week looks optimistic. An invoice sitting on
-Xero's due date is an assumption that the customer pays on time; one on an
-expected date is a judgement somebody has actually made. The column could not
-show you which before.
-
-Set an expected date in the table below and the invoice moves to the week you
-really expect it - and, because that field is shared, it updates the Invoices
-Owed page too.
+Both pages now say "gross of retention" on the revenue line, so the two figures
+never look like they ought to agree.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg655 - click the Bills out figure on the overdue row to see the suppliers,
-projects and references behind it, colour coded by what you owe, what is owed to
-you, and cost certified but not yet invoiced.
-
-pkg654 - red banner on the project cash flow for forecasts that cannot be
-scheduled because they have no dates.
-
-pkg653 - CIS on gross forecast labour: pay gross x 80%, HMRC takes gross x 20%.
+AND ON YOUR ORIGINAL QUESTION
+-----------------------------
+The P&L and the cash flow will still not match, for three reasons that are all
+correct: the P&L takes revenue in the month VALUED while the cash flow takes it in
+the week PAID; the P&L runs Dec-Nov while the cash flow is 13 weeks; and the cash
+flow nets real invoices off and drops superseded periods. Same money, different
+questions.

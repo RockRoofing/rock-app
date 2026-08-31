@@ -161,7 +161,10 @@ export default function ForecastPL() {
                   </tr>
                 </thead>
                 <tbody>
-                  <Line label="Revenue" rows={model.rows} pick={r => r.revenue} colour="#0f766e" total={model.t.revenue} />
+                  {/* GROSS of retention. Retention is a debtor, not a reduction in
+                      revenue - earned at the valuation date, just not yet received. The
+                      cash flow uses the net figure, which is right there and wrong here. */}
+                  <Line label="Revenue (gross of retention)" rows={model.rows} pick={r => r.revenue} colour="#0f766e" total={model.t.revenue} />
                   <Line label="Cost of sale" rows={model.rows} pick={r => -r.cos} colour="#dc2626" total={-model.t.cos} />
                   {/* Materials and labour only exist separately on FORECAST months - Xero
                       gives one cost-of-sales total for a closed month, not the split. */}
