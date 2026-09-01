@@ -945,6 +945,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // see appCalendarUsable, which already guards this.
   // [{ date, amount, note }] - receipts on a specific day, outside the monthly spread.
   const [salesAdvances, setSalesAdvances] = useState([])
+  const [savedSpreadKeys, setSavedSpreadKeys] = useState([])
   const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30, cycle: 'project', startDate: '' })  // sales cash received
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   // null = follow the calculation. Anything else is a manual figure that wins.
@@ -986,7 +987,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null); setAwaitLabour(null); setAwaitMaterials(null); setSalesAdvances([])
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null); setAwaitLabour(null); setAwaitMaterials(null); setSalesAdvances([]); setSavedSpreadKeys([])
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -1020,6 +1021,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30, cycle: 'applications', startDate: '' })
           setSalesAdvances(Array.isArray(editing.salesAdvances) ? editing.salesAdvances : [])
+          // The keys the spread was SAVED against. Compared with the columns now in use so
+          // the warning fires only where they genuinely differ - on most projects the
+          // application falls inside its own month and nothing changes at all.
+          setSavedSpreadKeys(Object.keys(editing.salesSpread || {}).sort())
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
@@ -1551,13 +1556,24 @@ function HypAppModal({ modal, onClose, onSaved }) {
   useEffect(() => {
     if (!periodMonths.length) return
     const fix = (spread) => {
-      const cur = periodMonths.every(m => spread[m] != null) && Object.keys(spread).length === periodMonths.length
+      // Compare the KEYS, not how many there are.
+      //
+      // Two old keys and two new keys read as "unchanged" even when they are different
+      // months - so Winnersh carried 40% from its old August column into September, gave
+      // the new October column an even 50%, and totalled 90%. Ten per cent of the period
+      // simply disappeared, and the row still looked plausible.
+      const cur = periodMonths.every(m => spread[m] != null)
+        && Object.keys(spread).sort().join(',') === periodMonths.slice().sort().join(',')
       if (cur) return spread
       const even = evenSplit(periodMonths.length)
       const next = {}; periodMonths.forEach((m, i) => { next[m] = spread[m] != null ? spread[m] : even[i] })
       // If months were added/removed, re-even only when totals look wrong.
       const tot = periodMonths.reduce((s, m) => s + num(next[m]), 0)
-      if (Object.keys(spread).length !== periodMonths.length || tot === 0) periodMonths.forEach((m, i) => { next[m] = even[i] })
+      // Re-even whenever the columns are not the ones the spread was saved against, or the
+      // carried-over figures do not add up. Anything else leaves a partial spread that
+      // quietly loses revenue.
+      const keysDiffer = Object.keys(spread).sort().join(',') !== periodMonths.slice().sort().join(',')
+      if (keysDiffer || tot === 0 || Math.abs(tot - 100) > 0.5) periodMonths.forEach((m, i) => { next[m] = even[i] })
       return next
     }
     setSalesSpread(s => fix(s))
@@ -2019,12 +2035,28 @@ function HypAppModal({ modal, onClose, onSaved }) {
                       the old calendar-month keys no longer lines up and has been evened
                       out. Silently replacing somebody's 60/40 with 50/50 would be a poor
                       way to treat a deliberate decision. */}
-                  {appCalendarUsable && salesCycle === 'project' && (
+                  {appCalendarUsable && salesCycle === 'project' && savedSpreadKeys.length > 0
+                    && savedSpreadKeys.join(',') !== periodMonths.join(',') && (
                     <div style={{ fontSize: 11, color: '#b45309', marginBottom: 6 }}>
                       Columns are now the applications that COVER this period. If your percentages look evened out, they were saved against
                       the old calendar-month columns - set them again and Save.
                     </div>
                   )}
+                  {/* A spread that does not total 100 loses revenue silently - Winnersh
+                      sat at 90% and the row still looked plausible. The Total column goes
+                      red per row, but a header-level warning is harder to miss. */}
+                  {(() => {
+                    const st = periodMonths.reduce((a, m) => a + num(salesSpread[m]), 0)
+                    const lt = periodMonths.reduce((a, m) => a + num(labourSpread[m]), 0)
+                    const bad = Math.abs(st - 100) > 0.5 || Math.abs(lt - 100) > 0.5
+                    if (!bad) return null
+                    return (
+                      <div style={{ fontSize: 11.5, color: '#b91c1c', fontWeight: 700, marginBottom: 6 }}>
+                        {Math.abs(st - 100) > 0.5 && <>Sales spread totals {Math.round(st)}% - {gbp(revenueThisPeriod * (100 - st) / 100)} of this period is not in the forecast. </>}
+                        {Math.abs(lt - 100) > 0.5 && <>Labour spread totals {Math.round(lt)}%.</>}
+                      </div>
+                    )
+                  })()}
                   <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {(salesCycle === 'applications' || salesCycle === 'project') ? 'sales and labour' : 'labour'} falls in each {appCalendarUsable ? 'application' : 'month'}. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle === 'weekly' || salesCycle === 'fortnightly' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
                   <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead><tr style={{ color: '#999' }}>

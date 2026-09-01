@@ -1,11 +1,8 @@
-pkg684 - The wrong applications were being used
-================================================
+pkg686 - Winnersh was 10% short - my bug from pkg684
+=====================================================
 
-*** SUPERSEDES pkg591 - pkg683. ***
+*** SUPERSEDES pkg591 - pkg685. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
-
-*** AFTER DEPLOYING: RE-ENTER THE SPREAD PERCENTAGES ON PROJECT-CYCLE
-    FORECASTS. See the last section - the page warns you. ***
 
 
 CHANGED FILES (replace)
@@ -14,47 +11,37 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-YOU WERE RIGHT - IT WAS THE WRONG WAY AROUND
-----------------------------------------------
-The spread used the calendar months the period TOUCHES. Winnersh runs 24/08 to
-11/09, which touches August and September, so it used the 09/08 and 09/09
-applications.
+THE SPREAD TOTALLED 90%
+-----------------------
+    saved      2026-08: 60,  2026-09: 40
+    columns    2026-09,      2026-10
+    result     2026-09: 40 (carried from the old AUGUST column)
+               2026-10: 50 (evened)
+               total 90%  ->  4,176.84 of the period simply gone
 
-BUT THE 09/08 APPLICATION WAS SUBMITTED A FORTNIGHT BEFORE THE WORK STARTED. Work
-done from 24 August cannot be in it - it belongs to 09/09. And the two days from
-the 9th to the 11th of September belong to 09/10, which was not in the list at
-all. That is the missing tail you spotted.
+The re-even guard compared how MANY keys there were, not WHICH:
 
-    period 24/08/26 to 11/09/26, applications on the 9th
-      BEFORE   App 09/08/26   App 09/09/26
-      AFTER    App to 09/09/26   App to 10/09/26... i.e. 09/09 and 09/10
+    Object.keys(spread).length === periodMonths.length
 
-An application valued on date V covers everything UP TO V. So the ones that matter
-are those with V on or after the period START, up to and including the first V
-that reaches the period END.
+Two old keys, two new keys, so it decided nothing had changed - and part-carried
+percentages into columns they were never meant for. Entirely my fault from
+pkg684, and it looked plausible: 16,707 in October was a believable figure.
 
-Header now reads "App to 09/09/26", because it covers work up to that date - which
-is the thing that was being misread.
+Now compares the KEYS themselves, and re-evens whenever they differ OR the
+carried-over figures do not add to 100.
 
-
-YOU WILL NEED TO RE-ENTER THE PERCENTAGES
------------------------------------------
-The columns are different applications now, so a spread saved against the old
-month keys no longer lines up and gets evened out. Your 60/40 will come back as
-50/50.
-
-The page says so in amber above the grid rather than letting it happen quietly -
-silently replacing a deliberate 60/40 would be a poor way to treat a decision you
-made.
-
-Only affects forecasts on the Project application dates cycle with a calendar. End
-of month + days is unchanged, because there the calendar month IS the period.
+    keys changed     -> 50 / 50, total 100%
+    keys unchanged   -> 60 / 40 kept, total 100%
+    column added     -> 33 / 33 / 34, total 100%
 
 
-A CIRCULARITY CAUGHT IN BUILD
------------------------------
-appCalendarUsable reads periodMonths, and periodMonths now needs to know whether
-the calendar is usable. Left as-is that is a value depending on itself. The usable
-test now runs against the raw calendar months, which is the right basis anyway:
-the question is whether the project HAS a calendar, not which applications one
-particular period lands on.
+AND IT NOW SAYS WHEN A SPREAD DOES NOT ADD UP
+-----------------------------------------------
+    Sales spread totals 90% - GBP 4,176.84 of this period is not in the forecast.
+
+The per-row Total already went red, but a red 90% is easy to read past. Naming the
+money makes it much harder to ignore - and that is what would have caught this
+without you having to spot it.
+
+OPEN WINNERSH, set the two percentages, Save. The columns are right now
+(App to 09/09/26 and App to 09/10/26); it was only the figures in them.
