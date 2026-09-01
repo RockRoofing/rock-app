@@ -46,7 +46,37 @@ export default function MonthlyCashFlow() {
     const end = new Date(ly, lm, 0)  // last day of final month
 
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
-    const commEvents = commitmentEvents(data.cashCommitments, start, end)
+    // BALANCE SHEET ITEMS too - PAYE/CIS arrears, loan and HP capital, corporation tax.
+    // The 13-week has carried these since pkg627; this page only ever had the vehicle
+    // commitments, so the Financing column read empty while real money was leaving.
+    //
+    // Same rule: payments stop once the liability is cleared, not at the end month.
+    const bsEvents = []
+    {
+      const monthsList = []
+      const cur = new Date(start.getFullYear(), start.getMonth(), 1)
+      const last = new Date(end.getFullYear(), end.getMonth(), 1)
+      while (cur <= last) { monthsList.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1) }
+      for (const it of (data.bsItems || [])) {
+        if (it.inForecast === false) continue
+        const monthly = Number(it.monthly) || 0
+        if (!monthly) continue
+        let left = Number(it.liability) || 0
+        const capped = left > 0
+        for (const d of monthsList) {
+          const y = d.getFullYear(), m = d.getMonth()
+          const mk2 = `${y}-${pad(m + 1)}`
+          if (it.start && mk2 < it.start) continue
+          if (it.end && mk2 > it.end) continue
+          if (capped && left <= 0) break
+          const amt = capped ? Math.min(monthly, left) : monthly
+          if (amt <= 0) break
+          if (capped) left -= amt
+          bsEvents.push({ date: `${mk2}-${pad(clampDay(y, m, Number(it.day || 28)))}`, amount: amt, name: it.name || 'Financing' })
+        }
+      }
+    }
+    const commEvents = [...commitmentEvents(data.cashCommitments, start, end), ...bsEvents]
     const retEvents = retentionEvents(data.retentionEntries)
 
     // VAT per month (positive = refund in, negative = payment out).
@@ -81,7 +111,19 @@ export default function MonthlyCashFlow() {
     for (const mk of months) {
       const invoicesIn = (data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
       const retIn = retEvents.filter(r => inMonth(r.date, mk)).reduce((a, r) => a + r.amount, 0)
-      const vatRaw = vatByMonth[mk] || 0
+      // FORWARD VAT RECLAIM, as the 13-week does. vatByMonth only ever held filed returns
+      // and the current estimate, so every future month showed nothing - on a twelve-month
+      // view that is most of the page. Most sales are reverse charge and carry no output
+      // VAT while materials and overheads carry input VAT, so the position is a persistent
+      // refund and showing nil understates cash in every month past the last return.
+      const vatRate = Number((data.financeCfg || {}).vatRate ?? 20) / 100
+      let vatEst = 0
+      if (vatByMonth[mk] == null && vatRate > 0) {
+        const spend = (data.bills || []).filter(b => inMonth(b.payDate || b.dueDate, mk)).reduce((a, b) => a + Math.abs(b.amountDue || 0), 0)
+          + (data.projForecasts || []).reduce((a, fc) => a + (fc.matItems || []).filter(x => inMonth(x.date, mk)).reduce((t, x) => t + Math.abs(x.amount || 0), 0), 0)
+        vatEst = (spend * vatRate) / (1 + vatRate)
+      }
+      const vatRaw = vatByMonth[mk] != null ? vatByMonth[mk] : vatEst
       const vatIn = vatRaw > 0 ? vatRaw : 0
       const vatOut = vatRaw < 0 ? -vatRaw : 0
       const billsOut = (data.bills || []).filter(i => inMonth(i.payDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
@@ -228,6 +270,25 @@ export default function MonthlyCashFlow() {
             </Card>
 
             <div style={{ marginTop: 18, background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'auto' }}>
+{(() => {
+                // A NET project figure of a million pounds implies four to five million of
+                // turnover at a normal margin. Saying so is more use than leaving it to be
+                // inferred from a curve that only ever rises.
+                // `forecast`, not `rows` - rows is the local inside the memo and is not in
+                // scope out here. It compiles and throws on render.
+                const sales = forecast.reduce((a, r) => a + (r.projSalesIn || 0), 0)
+                const cost = forecast.reduce((a, r) => a + (r.projMatOut || 0) + (r.projLabOut || 0), 0)
+                if (!(sales > 0)) return null
+                const pc = (cost / sales) * 100
+                if (pc >= 70) return null
+                return (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#b91c1c' }}>
+                    <strong>Cost is only {pc.toFixed(0)}% of project sales over the year.</strong>{' '}
+                    Roofing runs 75-85%. At 80% the cost on {gbp(sales)} would be {gbp(sales * 0.8)}, against {gbp(cost)} forecast -
+                    roughly {gbp(sales * 0.8 - cost)} missing. That is why the closing balance climbs and never comes back down.
+                  </div>
+                )
+              })()}
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #eee' }}>

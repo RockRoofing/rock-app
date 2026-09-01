@@ -1,8 +1,11 @@
-pkg690 - Labour and materials were hidden inside "Project forecast"
-====================================================================
+pkg691 - Why the closing cash never comes down
+===============================================
 
-*** SUPERSEDES pkg591 - pkg689. ***
+*** SUPERSEDES pkg591 - pkg690. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
+
+*** YOUR SCREENSHOT IS PRE-pkg690 - still one "Project forecast" column. The
+    CIS work from pkg688 is not in it either. ***
 
 
 CHANGED FILES (replace)
@@ -11,32 +14,47 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-THEY WERE BALANCING INSIDE THE COLUMN - THE SECOND OF YOUR TWO GUESSES
-------------------------------------------------------------------------
-    gbp(sum('projSalesIn') - sum('projCostOut'))
+THE ANSWER TO YOUR QUESTION
+---------------------------
+    project forecast, NET of cost, over 12 months   1,007,553
 
-"Project forecast" was a NET figure. The 166,381 in September is sales LESS labour
-LESS materials, in one number. Checked against your table:
+At a 20-25% margin that implies turnover of FOUR TO FIVE MILLION:
 
-    invoices 451,383 + project 166,381 - bills/oh/cis 313,789 = 303,975
-    shown net 303,976
+    at 20%   5,037,765
+    at 25%   4,030,212
 
-So the cost was always in the arithmetic - just never on screen. Which is exactly
-the fault the 13-week had before pkg615, and it matters more here: a month with
-250,000 of sales and 84,000 of cost looks identical to one with 166,381 of sales
-and no cost at all, and the curve only ever rises either way.
+You do not turn over that. So the netted figure is not a margin - it is sales with
+most of the cost missing. That is why closing cash climbs to 736k and never comes
+back down, and why it cannot be reconciled to a 100k profit.
 
-NOW THREE COLUMNS: Project sales, Materials out, Labour out (net of CIS). Missing
-cost shows as "none" in red rather than quietly reducing a net figure.
+pkg690 splits the column into Project sales / Materials out / Labour out. This
+package adds a banner that says it outright when cost falls below 70% of sales:
 
-THE NET IS UNCHANGED. Nothing about the totals moves - this is what was already
-being calculated, made visible.
+    Cost is only 34% of project sales over the year. Roofing runs 75-85%. At 80%
+    the cost on X would be Y, against Z forecast - roughly N missing. That is why
+    the closing balance climbs and never comes back down.
 
 
-WHAT TO LOOK FOR NOW
---------------------
-Your December question is directly answerable. Dec 26 showed project forecast
-+210,597 net. Split out, if materials in December are large the net will be much
-smaller or negative - which is the dip you expected. If Materials out reads "none"
-across December and January, the materials are missing from the forecasts rather
-than merely late, and that is a Commercial data job.
+YOUR OTHER THREE POINTS - TWO WERE REAL
+-----------------------------------------
+NO CIS ESTIMATED - fixed in pkg688, not in your screenshot yet. Forecast labour
+now generates CIS at gross x 20%, landing the month after the labour.
+
+NO VAT ESTIMATED - real, and now fixed. vatByMonth only ever held filed returns
+and the current estimate, so every future month showed nil - on a twelve-month
+view that is most of the page. Now estimates the reclaim from forecast materials
+and bills at spend x 20/120, exactly as the 13-week does.
+
+NO COMMITMENTS - real, and now fixed. This page only ever read the vehicle
+commitments; the Balance Sheet items - PAYE/CIS arrears, HP capital, corporation
+tax - were never included. Your 5,000 a month of PAYE arrears was not in the
+twelve-month view at all.
+
+NO RETENTION IN - you are right, that is correct behaviour. Retention with no
+release date cannot be scheduled. The 13-week's amber banner lists them.
+
+
+A BUG CAUGHT IN BUILD
+---------------------
+The new banner used `rows`, which is the local inside the memo - out in the render
+it is `forecast`. Compiles, throws on render.
