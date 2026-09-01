@@ -1,7 +1,7 @@
-pkg676 - Why saving did not clear the red banner
-=================================================
+pkg677 - The preview was describing a date the forecast never uses
+===================================================================
 
-*** SUPERSEDES pkg591 - pkg675. ***
+*** SUPERSEDES pkg591 - pkg676. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,48 +11,34 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-YOU DIAGNOSED IT - THE END OF MONTH CYCLE NEVER SET A VALUATION DATE
----------------------------------------------------------------------
-    return { month: mk, date, amount: rev * pct }     <- no appDate
+GOOD NEWS - IT WAS TREATING EACH MONTH AS A PERIOD ALL ALONG
+--------------------------------------------------------------
+Moseley Hall, 01/02/27 to 10/05/27, spread 40/30/25/5, EOM+35. The schedule the
+forecast actually builds is:
 
-So a forecast on that cycle had no valuation date NO MATTER HOW OFTEN IT WAS
-SAVED. My banner was telling you to do something that could not work, which is
-worse than not warning at all.
+    Feb 27  40%  ->  cash 04/04/27
+    Mar 27  30%  ->  cash 05/05/27
+    Apr 27  25%  ->  cash 04/06/27
+    May 27   5%  ->  cash 05/07/27
 
-On an end-of-month cycle the valuation IS the month end - that is what the cash
-date is derived from - so it can simply be stated:
+Four payments, one per month, exactly as it should.
 
-    J248, period 02/11-13/11
-      before  no appDate -> valuation fell back to the period end, 13/11
-      after   30/11
+THE LINE UNDERNEATH WAS LYING. It read "cash on 05/07/27" - and that figure was
+not from the schedule at all. It was the PERIOD END, 10/05, plus 35 days, computed
+separately:
 
-    and on J244's four-month period:
-      Sep -> valued 30/09,  Oct -> 31/10,  Nov -> 30/11,  Dec -> 31/12
-      before, ALL FOUR were cut off at the period end, 18/12
+    const cash = paymentDate(cycling ? (term.startDate || refDate) : refDate, term)
 
-Save J248 and 8335 once more after deploying and the banner should clear.
+The "val ... then N more" preview was only ever wired up for the Project
+application dates cycle. Every other cycle fell through to that single made-up
+date.
 
+WORSE, IT LOOKED PLAUSIBLE. Period end + 35 happened to land on 05/07/27, which is
+also the last instalment - so it read like a sensible answer while describing
+something the forecast does not use.
 
-WAUNGRON vs MARKET DRAYTON - THE BANNER IS RIGHT
--------------------------------------------------
-    13-week window   31/08/26 to 29/11/26
-    J244 Waungron    first cash 27/10  INSIDE  -> not listed
-    J240 Market Dr.  first cash 04/12  OUTSIDE -> listed
+Now it shows the real schedule:
 
-Waungron has later instalments beyond the window, but it is not excluded because
-part of it lands inside. Market Drayton's earliest cash is already past the end.
+    4 payments: 04/04/27, 05/05/27, 04/06/27...
 
-
-MATERIALS PAID ON DELIVERY - ALREADY SUPPORTED
------------------------------------------------
-No new option needed. Every materials LINE has its own delivery date and its own
-term, which is what "Materials terms are set per line below (per supplier)" means.
-
-    Renshaw materials delivered 14/09
-      days + 0    ->  paid 14/09   (on delivery)
-      days + 7    ->  paid 21/09
-      EOM + 30    ->  paid 30/10   (normal terms)
-
-So for Renshaw and Kilburn: set the first delivery line to days + 0 and leave the
-later lines on their normal term. First app paid on delivery, everything after on
-the application cycle - exactly what you described, with what is already there.
+Same treatment the labour line has always had, which is why that one was right.

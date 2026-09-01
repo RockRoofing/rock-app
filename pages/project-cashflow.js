@@ -2259,7 +2259,16 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
                   : 'From Edit Project Details.'))
           : cycling
             ? `first cash ${fmtD(cash)}${term.startDate ? '' : ' (from period start - set a date)'}`
-            : `cash on ${fmtD(cash)}`}
+            // THE REAL SCHEDULE, not a single date computed from the period end.
+            //
+            // This showed one date derived from refDate, so a four-month spread on End of
+            // month + days read "cash on 05/07/27" - the period end plus the term - when
+            // the schedule actually has four payments, one per month. The forecast was
+            // right; the line under it was describing something else entirely, which made
+            // it look as though the cycle was ignoring the monthly spread.
+            : (previewDates && previewDates.length > 1
+                ? `${previewDates.length} payments: ${previewDates.slice(0, 3).map(x => fmtD(x.date)).join(', ')}${previewDates.length > 3 ? '...' : ''}`
+                : `cash on ${fmtD((previewDates && previewDates[0] && previewDates[0].date) || cash)}`)}
       </div>
     </div>
   )
