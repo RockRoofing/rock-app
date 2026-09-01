@@ -864,7 +864,11 @@ export default async function handler(req, res) {
       // Fallback: all outstanding receivables (previous behaviour).
       receivables = (recStore.items || []).map(i => {
         const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
-        return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
+        // expectedConfirmed comes through too. The Invoices Owed page has recorded whether
+        // a date was agreed with the customer or merely typed, and nothing downstream was
+        // reading it - so a confirmed date and a guess carried identical weight in the
+        // forecast.
+        return { ...i, expectedDate: (meta && meta.expectedDate) || '', expectedConfirmed: !!(meta && meta.expectedConfirmed) }
       })
     }
 

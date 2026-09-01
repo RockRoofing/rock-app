@@ -988,7 +988,7 @@ export default function CashFlow() {
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
           invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
             project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate,
-            offset: offsetFor(i),
+            confirmed: !!i.expectedConfirmed, offset: offsetFor(i),
             // The full invoice, so a part-paid one is obvious - the column only ever
             // showed what is still outstanding.
             total: i.total || 0 })
@@ -1847,7 +1847,13 @@ export default function CashFlow() {
                                 {/* Whether this is a date you set or Xero's due date - the
                                     difference matters when a week looks optimistic. */}
                                 <td style={{ padding: '3px 6px', color: x.expected ? '#0f766e' : '#999' }}>
-                                  {x.due ? fmtDMY(x.due) : '-'}{x.expected ? ' (expected)' : ' (due date)'}
+                                  {x.due ? fmtDMY(x.due) : '-'}
+                                  {/* Three states, not two. A date agreed with the customer is
+                                      worth more than one somebody typed, and far more than
+                                      Xero's due date. */}
+                                  {x.confirmed
+                                    ? <span style={{ color: '#16a34a', fontWeight: 700 }}> confirmed</span>
+                                    : x.expected ? ' (expected)' : ' (due date)'}
                                   {/* On the arrears row every date has passed, so say how
                                       long by - "12/06 (due date)" does not convey that it
                                       is eleven weeks late. */}

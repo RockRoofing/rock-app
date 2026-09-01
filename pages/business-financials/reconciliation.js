@@ -133,6 +133,7 @@ export default function Reconciliation() {
     return {
       runRate, hot, fcByMonth,
       invTotal, invNoProject, invNoExpected, invOverdue, wrongType,
+      unconfirmed: recs.filter(i => !i.expectedConfirmed),
       billTotal, billNoProject,
       fcSales, fcMat, fcLabGross, fcCost: fcMat + fcLabGross,
       costPc: fcSales > 0 ? ((fcMat + fcLabGross) / fcSales) * 100 : null,
@@ -220,6 +221,11 @@ export default function Reconciliation() {
               <Flag bad={model.noDates > 0}
                 detail={model.noDates ? `${model.noDates} forecast(s) have no dated sales lines and contribute nothing to any cash flow.` : 'All forecasts have dated sales lines.'}>
                 Forecasts have dated sales lines
+              </Flag>
+
+              <Flag bad={model.unconfirmed.length > 0}
+                detail={`${model.unconfirmed.length} invoices worth ${gbp(model.unconfirmed.reduce((t, i) => t + num(i.amountDue), 0))} have a date that has NOT been confirmed with the customer - either typed as an estimate or left on Xero's due date. That is the part of the forecast nobody has actually agreed.`}>
+                Payment dates confirmed with the customer
               </Flag>
 
               <Flag bad={model.invNoExpected.length > 0}

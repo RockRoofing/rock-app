@@ -1,65 +1,55 @@
-pkg703 - The 12-month was starting from ZERO
-=============================================
+pkg704 - "Confirmed" was going nowhere
+=======================================
 
-*** SUPERSEDES pkg591 - pkg702. ***
+*** SUPERSEDES pkg591 - pkg703. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js
+  pages/api/business-financials.js
+  pages/business-financials/cashflow.js
+  pages/business-financials/reconciliation.js
   ... and the rest of the set as before
 
 
-YES - I UNDERSTAND, AND YOUR IDENTITY ARGUMENT IS THE RIGHT TEST
-------------------------------------------------------------------
-Closing cash = opening + profit - the increase in working capital. You cannot show
-50k of net assets and 700k of cash unless 650k of working capital has been
-RELEASED. The Forecast Balance Sheet shows debtors RISING. Both cannot be true.
+YOU FOUND A REAL ONE - THOUGH NOT THE 144,137
+-----------------------------------------------
+expectedConfirmed is recorded on the Invoices Owed page and NOTHING ELSE READ IT.
+The API did not even pass it through. So a date you had agreed with the customer
+and a date somebody typed as a guess carried exactly the same weight everywhere.
 
-So I used your test - the same month on two pages:
+Now passed through, and the Invoices in drill-down shows three states instead of
+two:
 
-    Forecast balance sheet, bank at Nov 26     220,652
-    12-month cash flow, closing at Nov 26      651,597
-    difference                                 430,945
+    confirmed        agreed with the customer
+    (expected)       typed, not confirmed
+    (due date)       Xero's date, nobody has looked
 
-The balance sheet is constrained: it ties to reserves and "Out by" reads ties. The
-12-month just adds up receipts and payments. So the 12-month is the one that is
-wrong, and by 430,945.
-
-
-AND MOST OF IT IS ON YOUR SCREENSHOT: "Opening cash 0"
---------------------------------------------------------
-    openBank = startCash !== '' ? Number(startCash) : (data.cashAtBank || 0)
-
-data.cashAtBank is the Xero bank summary's CLOSING BOOK BALANCE, which can be
-months stale - and where it is missing, the page starts at ZERO. Your actual bank
-at Jul 26 is -286,808.
-
-ON A RUNNING BALANCE THE OPENING FIGURE NEVER WASHES OUT. Every one of the twelve
-months is wrong by the same amount and the closing position inherits all of it.
-
-    opening 0        -> Nov 26 closing 651,597
-    opening -286,808 -> Nov 26 closing 364,789
-    balance sheet says                 220,652
-    remaining gap                      144,137
-
-So the opening balance is about two thirds of it. The 12-month now opens from the
-MANUAL BALANCES - the same source the 13-week has used since pkg609, because the
-book balance is not what is in the account.
+New check on Reconcile sizes the exposure: how much of the ledger rests on a date
+nobody has agreed.
 
 
-THE REMAINING 144,137
----------------------
-Smaller, and worth finding rather than guessing at. The page now carries the
-identity check on screen:
+WHY IT IS NOT THE 144,137 THOUGH
+----------------------------------
+Both pages collect the SAME invoices - they would only disagree on WHEN. A timing
+difference inside twelve months washes out by November, and the gap is in the
+TOTAL, not the phasing. So confirmation changes which weeks you can trust, not the
+closing balance.
 
-    Cash moves X over the twelve months, from A to B. Y of that is collecting
-    invoices and retention that already existed. Cash can only rise far above your
-    profit if working capital FALLS by the difference. Check that against the
-    Forecast Balance Sheet: if debtors are rising there while cash rises here, the
-    two pages disagree and one of them is wrong.
 
-Deploy this, then send me the Nov 26 figure from both pages again. If they are
-within a few thousand the model is sound. If 144,137 is still there, it is one
-thing and we will find it.
+BUT LOOK AT THIS WHILE YOU ARE THERE
+--------------------------------------
+    invoices with an expected date    30    199,763
+    invoices on Xero due date only    15    355,547
+    total ledger                      45    555,310
+
+TWO THIRDS OF YOUR LEDGER BY VALUE has no expected date and is sitting on Xero's
+due date - and fifteen invoices carry more value than the thirty that have been
+dated. Whatever the 144,137 turns out to be, those fifteen are worth an hour more
+than anything else on this list.
+
+
+STILL OUTSTANDING: deploy pkg703's opening-balance fix and send me Nov 26 from
+both the 12-month and the Forecast Balance Sheet. That comparison is what will
+locate the remaining gap.
