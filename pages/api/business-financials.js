@@ -45,7 +45,7 @@ const CATEGORY_OF = (code, config) => {
 // are the saved configs.
 const nowMonthKeyServer = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 
-function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides) {
+function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides, actualMonths) {
   const availableSet = new Set(availableMonths)
   const d = new Date()
   const nowKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -54,6 +54,9 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
   const fyMonthList = (endYear) => { const out = [`${endYear - 1}-12`]; for (let m = 1; m <= 11; m++) out.push(`${endYear}-${String(m).padStart(2, '0')}`); return out }
   const curFyMonths = fyMonthList(curFyEnd)
   const isCompleteMo = (mo) => mo < nowKey && availableSet.has(mo)
+  // Which months the user has actually SWITCHED to actual on Budgets. Absent (an older
+  // caller) falls back to the old behaviour so nothing else changes.
+  const actualSet = new Set(Array.isArray(actualMonths) ? actualMonths : (availableMonths || []))
   const actualOfCode = (code, mo) => {
     const m = actualsByCode[code] || {}
     if (mo in m) return m[mo]
@@ -84,7 +87,11 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
   for (const code of codes) {
     out[code] = {}
     for (const mo of curFyMonths) {
-      if (isCompleteMo(mo)) { out[code][mo] = actualOfCode(code, mo); continue }
+      // A month is only COMPLETE if it has been switched to actual. Treating any past
+      // month with Xero data as complete returned actuals-to-date - fine for a cash flow,
+      // where it is what is left to pay, but wrong for a P&L. August read 12,198 against a
+      // 54,370 budget because only a fortnight of invoices had been entered.
+      if (isCompleteMo(mo) && actualSet.has(mo)) { out[code][mo] = actualOfCode(code, mo); continue }
       const ov = forecastOverrides[code]?.[mo]
       if (ov != null && ov !== '') { out[code][mo] = Number(ov); continue }
       const base = baseForecastOf(code)
@@ -224,7 +231,8 @@ export default async function handler(req, res) {
     // Per-code, per-month PREDICTED spend for the CURRENT financial year (mirrors the
     // Budgets page so the Cash Schedule can use each month's predicted figure).
     const { predicted: predictedByCodeMonth, currentFyMonths: curFyMonths } = computePredictedByCodeMonth(
-      overheadAccounts.map(a => a.code), actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides
+      overheadAccounts.map(a => a.code), actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides,
+      actualMonthsStored != null ? actualMonthsStored : null
     )
 
     return res.json({

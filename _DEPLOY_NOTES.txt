@@ -1,60 +1,57 @@
-pkg691 - Why the closing cash never comes down
-===============================================
+pkg692 - August: missing revenue and understated overheads
+===========================================================
 
-*** SUPERSEDES pkg591 - pkg690. ***
+*** SUPERSEDES pkg591 - pkg691. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
-
-*** YOUR SCREENSHOT IS PRE-pkg690 - still one "Project forecast" column. The
-    CIS work from pkg688 is not in it either. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js
+  pages/api/business-financials.js
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-balance-sheet.js
   ... and the rest of the set as before
 
 
-THE ANSWER TO YOUR QUESTION
----------------------------
-    project forecast, NET of cost, over 12 months   1,007,553
+1. REAL INVOICES WERE IGNORED IN A FORECAST MONTH
+--------------------------------------------------
+A forecast month took revenue from the project forecasts ONLY. August showed NIL
+against roughly 270,000 of invoices sitting in Xero - raised, real, and simply in
+a month nobody had switched to actual yet.
 
-At a 20-25% margin that implies turnover of FOUR TO FIVE MILLION:
+An invoice is revenue on the date it is RAISED, whether or not the month has been
+closed. Now included, on the invoice date rather than the due date.
 
-    at 20%   5,037,765
-    at 25%   4,030,212
+NETTED, NOT ADDED. Where a month has both, the invoice has replaced the forecast:
 
-You do not turn over that. So the netted figure is not a margin - it is sales with
-most of the cost missing. That is why closing cash climbs to 736k and never comes
-back down, and why it cannot be reconciled to a 100k profit.
+    forecast 300,000, invoiced 270,000  ->  revenue 300,000, not 570,000
 
-pkg690 splits the column into Project sales / Materials out / Labour out. This
-package adds a banner that says it outright when cost falls below 70% of sales:
-
-    Cost is only 34% of project sales over the year. Roofing runs 75-85%. At 80%
-    the cost on X would be Y, against Z forecast - roughly N missing. That is why
-    the closing balance climbs and never comes back down.
+The forecast BALANCE SHEET does the same, or it would build debtors from forecasts
+alone and diverge from the P&L - which is precisely what "Out by" exists to catch.
 
 
-YOUR OTHER THREE POINTS - TWO WERE REAL
------------------------------------------
-NO CIS ESTIMATED - fixed in pkg688, not in your screenshot yet. Forecast labour
-now generates CIS at gross x 20%, landing the month after the labour.
+2. OVERHEADS WERE ACTUALS-TO-DATE, NOT THE BUDGET
+--------------------------------------------------
+    isCompleteMo = mo < nowKey && availableSet.has(mo)
 
-NO VAT ESTIMATED - real, and now fixed. vatByMonth only ever held filed returns
-and the current estimate, so every future month showed nil - on a twelve-month
-view that is most of the page. Now estimates the reclaim from forecast materials
-and bills at spend x 20/120, exactly as the 13-week does.
+August is before September and has Xero data, so it counted as COMPLETE and
+returned what had posted so far - 12,198 against your 54,370 budget, because only
+a fortnight of invoices had been entered.
 
-NO COMMITMENTS - real, and now fixed. This page only ever read the vehicle
-commitments; the Balance Sheet items - PAYE/CIS arrears, HP capital, corporation
-tax - were never included. Your 5,000 a month of PAYE arrears was not in the
-twelve-month view at all.
+Right for a cash flow, where it is what is left to pay. Wrong for a P&L.
 
-NO RETENTION IN - you are right, that is correct behaviour. Retention with no
-release date cannot be scheduled. The 13-week's amber banner lists them.
+A month is now complete only once it has been SWITCHED TO ACTUAL on Budgets - the
+same switch that already decides everything else. Fixed at source, so the Forecast
+P&L, the Forecast Balance Sheet and the 12-month all pick it up.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-The new banner used `rows`, which is the local inside the memo - out in the render
-it is `forecast`. Compiles, throws on render.
+3. THE FLAT -876,101 FINANCING LINE IS CORRECT
+-----------------------------------------------
+It is the balancing figure - fixed assets, WIP, inventory, prepayments, deferred
+tax, everything not modelled separately. On ACTUAL months it balances to Xero
+exactly, which is why net assets tie. On forecast months it moves only by the
+tracked repayments:
+
+    Jul -876,101  ->  Nov -849,181  =  26,920 repaid over four months
+
+That is your PAYE/CIS and HP schedule, and it is the only part being forecast.

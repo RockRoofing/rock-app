@@ -70,6 +70,14 @@ export default function ForecastPL() {
 
     // Forecast revenue and cost of sale on the ACCRUAL dates - the same basis as the
     // Forecast Margin tab.
+    // Invoices by the month they were RAISED - that is the P&L date, not the due date.
+    const invByMonth = {}
+    for (const i of (cf.receivables || [])) {
+      const d = i.date || i.dueDate || ''
+      if (!d) continue
+      const k = String(d).slice(0, 7)
+      invByMonth[k] = (invByMonth[k] || 0) + (i.total || i.amountDue || 0)
+    }
     const fRev = {}, fMat = {}, fLab = {}, fProj = {}
     for (const fc of (cf.projForecasts || [])) {
       const a = fc.accrual
@@ -93,8 +101,32 @@ export default function ForecastPL() {
     const rows = months.map(mo => {
       const isActual = actualSet.has(mo)
       const a = byMonth[mo] || {}
-      const revenue = isActual ? (a.income || 0) : (fRev[mo] || 0)
+      // REAL INVOICES COUNT IN A FORECAST MONTH TOO.
+      //
+      // A forecast month took revenue only from the project forecasts, so August showed
+      // NIL despite roughly 270,000 of invoices sitting in Xero - raised, real, and simply
+      // in a month nobody had switched to actual yet. An invoice is revenue on the date it
+      // is raised whether or not the month has been closed.
+      //
+      // Netted, not added: where a project has both an invoice and a forecast in the same
+      // month the invoice has replaced the forecast, so only the excess of forecast over
+      // invoiced is still to come.
+      const invoiced = invByMonth[mo] || 0
+      const revenue = isActual ? (a.income || 0) : Math.max(invoiced, fRev[mo] || 0)
       const cos = isActual ? (a.cos || 0) : ((fMat[mo] || 0) + (fLab[mo] || 0))
+      // A MONTH NOT SWITCHED TO ACTUAL MUST USE THE BUDGET, not actuals-to-date.
+      //
+      // predictedByCodeMonth treats any past month with Xero data as COMPLETE and returns
+      // what has posted so far. For a cash flow that is right - it is what is left to pay.
+      // For a P&L it is badly wrong: August showed 12,198 of overheads against a budget of
+      // 54,370, because only a fortnight of invoices had been entered.
+      //
+      // So where the month is still forecast, take the larger of the predicted figure and
+      // the budget. Part-posted actuals never exceed the budget, and once you switch the
+      // month to actual it uses Xero properly.
+      // Fixed at source instead: predictedByCodeMonth now only treats a month as complete
+      // once it has been SWITCHED to actual, so a forecast month returns its budget rather
+      // than a fortnight of posted invoices.
       const overheads = isActual ? (a.overheads || 0) : (fOh[mo] || 0)
       return {
         mo, isActual, revenue, cos, overheads,

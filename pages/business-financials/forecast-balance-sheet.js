@@ -133,6 +133,16 @@ export default function ForecastBalanceSheet() {
     // ---- P&L, the same composition the Forecast P&L tab uses --------------------------
     const byMonth = {}
     for (const m of (mg.months || [])) byMonth[m.month] = m
+    // Same as the P&L: an invoice raised in a forecast month IS revenue that month.
+    // Without this the balance sheet builds debtors from forecasts alone and diverges from
+    // the P&L, which is exactly what "Out by" exists to catch.
+    const invByMonth = {}
+    for (const i of (cf.receivables || [])) {
+      const d = i.date || i.dueDate || ''
+      if (!d) continue
+      const k = String(d).slice(0, 7)
+      invByMonth[k] = (invByMonth[k] || 0) + (i.total || i.amountDue || 0)
+    }
     const fRev = {}, fCos = {}
     for (const fc of (cf.projForecasts || [])) {
       const acc = fc.accrual
@@ -188,7 +198,7 @@ export default function ForecastBalanceSheet() {
     for (const mo of months) {
       const isActual = actualSet.has(mo)
       const m = byMonth[mo] || {}
-      revOf.push(isActual ? (m.income || 0) : (fRev[mo] || 0))
+      revOf.push(isActual ? (m.income || 0) : Math.max(invByMonth[mo] || 0, fRev[mo] || 0))
       cosOf.push(isActual ? (m.cos || 0) : (fCos[mo] || 0))
       ohOf.push(isActual ? (m.overheads || 0) : (fOh[mo] || 0))
     }
