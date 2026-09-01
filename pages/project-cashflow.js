@@ -916,6 +916,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   //
   // Falls back to eom+30 automatically where the project has no application calendar -
   // see appCalendarUsable, which already guards this.
+  // [{ date, amount, note }] - receipts on a specific day, outside the monthly spread.
+  const [salesAdvances, setSalesAdvances] = useState([])
   const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30, cycle: 'project', startDate: '' })  // sales cash received
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   // null = follow the calculation. Anything else is a manual figure that wins.
@@ -957,7 +959,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null); setAwaitLabour(null); setAwaitMaterials(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null); setAwaitLabour(null); setAwaitMaterials(null); setSalesAdvances([])
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -990,6 +992,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setMcdPct(editing.mcdPct || 0); setRetPct(editing.retentionPct != null ? editing.retentionPct : 5)
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30, cycle: 'applications', startDate: '' })
+          setSalesAdvances(Array.isArray(editing.salesAdvances) ? editing.salesAdvances : [])
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
@@ -1533,8 +1536,25 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // so "fortnightly, 30 days from application" gives an application every 14 days and
   // cash 30 days after each.
   const salesSchedule = useMemo(() => {
-    const rev = revenueThisPeriod
-    if (!(rev > 0)) return []
+    // DATED RECEIPTS COME OFF THE TOP.
+    //
+    // Not another cycle - a supplement to whichever one is chosen. Materials paid on
+    // delivery and the rest of the works on application terms is TWO payment behaviours
+    // in one period, and a single cycle cannot express that. These are taken out first
+    // and the remainder spreads as normal.
+    const advances = (salesAdvances || []).filter(a => a.date && (num(a.amount) > 0))
+    const advTotal = advances.reduce((t, a) => t + num(a.amount), 0)
+    const advLines = advances.map(a => ({
+      month: String(a.date).slice(0, 7),
+      appDate: a.date,          // received on the day, so it is valued on the day
+      date: a.date,
+      amount: num(a.amount),
+      fixed: true,
+    }))
+    // Never let the dated receipts exceed the period's revenue - the remainder would go
+    // negative and spread as a credit, which is nonsense.
+    const rev = Math.max(0, revenueThisPeriod - advTotal)
+    if (!(rev > 0)) return advLines
     const cycle = (salesTerm && salesTerm.cycle) || 'applications'
 
     if (cycle === 'weekly' || cycle === 'fortnightly') {
@@ -1572,14 +1592,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
       // sales at all, which is far worse than an approximate date - and now that this is
       // the default cycle, it would have hit every project without a calendar set.
       if (!appCalendarUsable) {
-        return periodMonths.map(mk => ({
+        return [...advLines, ...periodMonths.map(mk => ({
           month: mk,
           appDate: monthEndOf(mk) || to || '',
           date: paymentDate(monthEndOf(mk) || to || '', { basis: salesTerm.basis || 'eom', days: num(salesTerm.days) }),
           amount: rev * (num(salesSpread[mk]) / 100),
-        })).filter(x => x.date)
+        })).filter(x => x.date)]
       }
-      return periodMonths.map(mk => {
+      return [...advLines, ...periodMonths.map(mk => {
         const dts = resolveAppDates(mk, appCalendar || {})
         const cash = salesTerm.payOn === 'due' ? (dts.paymentDate || dts.finalDate) : (dts.finalDate || dts.paymentDate)
         return {
@@ -1588,7 +1608,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           date: cash,
           amount: rev * (num(salesSpread[mk]) / 100),
         }
-      }).filter(s => s.date && s.amount > 0.5)
+      })].filter(s => s.date && s.amount > 0.5)
     }
 
     // END OF MONTH + days. Each spread month's portion, timed off that month's end.
@@ -1596,7 +1616,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
     // screen now says what it does.
     if (!periodMonths.length) return []
     const days = num(salesTerm.days)
-    return periodMonths.map(mk => {
+    return [...advLines, ...periodMonths.map(mk => {
       const pct = num(salesSpread[mk]) / 100
       const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
       // THE MONTH END IS THE VALUATION DATE on this cycle.
@@ -1609,7 +1629,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       // On an end-of-month cycle the valuation IS the month end - that is what the cash
       // date is derived from - so it can be stated rather than left blank.
       return { month: mk, appDate: monthEndOf(mk), date, amount: rev * pct }
-    }).filter(s => s.amount > 0.5)
+    })].filter(s => s.amount > 0.5)
   }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm, from, to, appCalendar, appCalendarUsable])
 
   // Labour cash schedule: each spread month's portion, timed by the labour term.
@@ -1702,6 +1722,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
       matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m), term: m.term || { basis: 'eom', days: 30 }, payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 }) })),
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
       salesTerm, labourTerm,
+      salesAdvances: (salesAdvances || []).filter(a => a.date && num(a.amount) > 0)
+        .map(a => ({ date: a.date, amount: num(a.amount), note: String(a.note || '').slice(0, 80) })),
       // null means the saved figure was calculated; a number means somebody typed it.
       labourOverride: labourOverride == null ? null : num(labourOverride),
       // Materials on site CLAIMED, cumulative - the next forecast reads this as its
@@ -1921,6 +1943,51 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   calendar={appCalendar} calendarUsable={appCalendarUsable} previewDates={salesSchedule} />
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
+
+                {/* RECEIPTS ON A SPECIFIC DAY, outside the monthly spread.
+                    Materials paid on delivery and the works on application terms is TWO
+                    payment behaviours in one period - a single cycle cannot express that.
+                    These come off the top and the remainder spreads as normal. */}
+                <div style={{ width: '100%', borderTop: '1px dashed #e6e3dc', marginTop: 8, paddingTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: INK }}>Received on a specific day</div>
+                    <span style={{ fontSize: 10.5, color: '#9a958c' }}>
+                      e.g. materials paid on delivery. Taken off the period first; the rest follows the cycle above.
+                    </span>
+                  </div>
+                  {(salesAdvances || []).map((a, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
+                      <input type="date" value={a.date || ''}
+                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, date: e.target.value } : x))}
+                        style={{ ...inpS, width: 140 }} />
+                      <span style={{ color: '#bbb' }}>&pound;</span>
+                      <input type="number" value={a.amount ?? ''} placeholder="0.00"
+                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                        style={{ ...inpS, width: 110, textAlign: 'right' }} />
+                      <input value={a.note || ''} placeholder="what for - e.g. materials on delivery"
+                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, note: e.target.value } : x))}
+                        style={{ ...inpS, width: 230 }} />
+                      <button onClick={() => setSalesAdvances(v => v.filter((_, j) => j !== i))}
+                        style={{ border: 'none', background: 'none', color: '#c66', cursor: 'pointer', fontSize: 16 }}>&times;</button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+                    <button onClick={() => setSalesAdvances(v => [...(v || []), { date: '', amount: '', note: '' }])}
+                      style={{ background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer' }}>+ Add a dated receipt</button>
+                    {(salesAdvances || []).some(a => a.date && num(a.amount) > 0) && (() => {
+                      const t = (salesAdvances || []).filter(a => a.date && num(a.amount) > 0).reduce((x, a) => x + num(a.amount), 0)
+                      const over = t > revenueThisPeriod + 0.5
+                      return (
+                        <span style={{ fontSize: 10.5, color: over ? '#dc2626' : '#8a857c', fontWeight: over ? 700 : 400 }}>
+                          {gbp(t)} of {gbp(revenueThisPeriod)} on fixed dates
+                          {over
+                            ? ' - MORE than this period, so the remainder would go negative. Reduce it.'
+                            : ` - ${gbp(Math.max(0, revenueThisPeriod - t))} spreads across the months`}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                </div>
               </div>
 
               {/* Monthly spread of sales + labour across the calendar months the period covers */}

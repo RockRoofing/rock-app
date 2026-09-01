@@ -1,7 +1,7 @@
-pkg677 - The preview was describing a date the forecast never uses
-===================================================================
+pkg678 - Sales received on a specific day
+==========================================
 
-*** SUPERSEDES pkg591 - pkg676. ***
+*** SUPERSEDES pkg591 - pkg677. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,34 +11,38 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-GOOD NEWS - IT WAS TREATING EACH MONTH AS A PERIOD ALL ALONG
---------------------------------------------------------------
-Moseley Hall, 01/02/27 to 10/05/27, spread 40/30/25/5, EOM+35. The schedule the
-forecast actually builds is:
+NOT ANOTHER CYCLE - A SUPPLEMENT TO WHICHEVER ONE YOU PICK
+------------------------------------------------------------
+Materials paid on delivery while the works follow application terms is TWO payment
+behaviours in one period. No single cycle can express that, so adding a fifth
+option would have forced you to choose one and lose the other.
 
-    Feb 27  40%  ->  cash 04/04/27
-    Mar 27  30%  ->  cash 05/05/27
-    Apr 27  25%  ->  cash 04/06/27
-    May 27   5%  ->  cash 05/07/27
+"Received on a specific day" sits under Sales received. Each line is a date, an
+amount and a note. They come OFF THE TOP; the remainder spreads by the cycle you
+have chosen.
 
-Four payments, one per month, exactly as it should.
+    Moseley Hall, revenue 284,478.29
+      14/02/27   80,000.00   materials on delivery
+      remainder 204,478.29 spreads Feb/Mar/Apr/May at 40/30/25/5
+        Feb 81,791   Mar 61,343   Apr 51,120   May 10,224
 
-THE LINE UNDERNEATH WAS LYING. It read "cash on 05/07/27" - and that figure was
-not from the schedule at all. It was the PERIOD END, 10/05, plus 35 days, computed
-separately:
+A dated receipt is VALUED on the day it is received, so the P&L and the balance
+sheet see it in the right month too - not just the cash flow.
 
-    const cash = paymentDate(cycling ? (term.startDate || refDate) : refDate, term)
 
-The "val ... then N more" preview was only ever wired up for the Project
-application dates cycle. Every other cycle fell through to that single made-up
-date.
+IT WILL NOT LET YOU OVER-ALLOCATE
+---------------------------------
+Put more on fixed dates than the period is worth and the remainder would go
+negative and spread as a credit. The line under the editor turns red and says so:
 
-WORSE, IT LOOKED PLAUSIBLE. Period end + 35 happened to land on 05/07/27, which is
-also the last instalment - so it read like a sensible answer while describing
-something the forecast does not use.
+    120,000 of 84,478 on fixed dates - MORE than this period, so the remainder
+    would go negative. Reduce it.
 
-Now it shows the real schedule:
+Otherwise it tells you what is left to spread, so the two halves always add up in
+front of you.
 
-    4 payments: 04/04/27, 05/05/27, 04/06/27...
 
-Same treatment the labour line has always had, which is why that one was right.
+FOR RENSHAW AND KILBURN specifically: add one dated receipt for the materials
+payment on its delivery date, leave the cycle on Project application dates, and
+the works carry on following the app calendar. First app paid on delivery,
+everything after on terms - which is what you described.
