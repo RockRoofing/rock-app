@@ -1,60 +1,55 @@
-pkg700 - Revenue and cost were landing in different financial years
-====================================================================
+pkg701 - Draft applications counted as sales, and the overhead gap found
+=========================================================================
 
-*** SUPERSEDES pkg591 - pkg699. ***
+*** SUPERSEDES pkg591 - pkg700. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-balance-sheet.js
+  pages/api/business-financials.js
+  pages/project-cashflow.js
   ... and the rest of the set as before
 
 
-I WAS WRONG ABOUT THE FORECASTS - AND YOUR CSV PROVES IT
-----------------------------------------------------------
-    your forecasts as stored:  sales 1,371,624   cost 920,154   GM 33%
+1. THE 507k "ACTUAL SALES" - DRAFTS WERE IN IT
+------------------------------------------------
+    if (!a.dueDate || !a.thisCert) continue
+    note(..., 'actual', `App ${a.appNumber}${a.status === 'draft' ? ' (draft)' : ''}`, ...)
 
-Exactly the 28-35% you said to expect. The forecasts are RIGHT. I should not have
-suggested otherwise on the strength of a run-rate comparison that cannot see a
-lumpy contract book.
+It knew perfectly well the application was a draft - it printed "(draft)" in the
+label - and counted it as an actual sale anyway. An application you have started
+but not sent has certified nothing and invoiced nothing.
 
+Drafts are now excluded. The row is also RENAMED to what it actually is:
 
-WHAT IS ACTUALLY WRONG - A TIMING SPLIT
------------------------------------------
-    revenue was bucketed by the SALES SCHEDULE MONTH
-    cost was bucketed by DELIVERY DATE and LABOUR WINDOW END
+    "Applied for / month (sent apps, gross)"
 
-On a period valued in November with materials delivered in December, the REVENUE
-landed in this financial year and the COST landed in the next. Same work, two
-years, and a gross margin ten points too high.
-
-    valued inside FY to Nov 26   sales 602,044   cost 373,669
-    valued after Nov 26          sales 769,580   cost 546,485
-
-The P&L was showing 1,039,548 of revenue in those months - it was reaching into
-work valued outside the year while its cost stayed behind.
-
-COST IS NOW HELD AGAINST THE PERIOD IT BELONGS TO, capped at the valuation date.
-December work stays in FY27, both sides of it.
+You are right that it is not an invoiced figure - it is the certificate gross,
+which is the correct P&L basis but is NOT the same as what has been invoiced. The
+label said "Actual Sales" and invited exactly that reading.
 
 
-AND A SILENT DROP
------------------
-    if (x.date && x.amount)
+2. THE OVERHEADS GAP - FOUND, AND IT IS A DIFFERENT ACCOUNT LIST
+-----------------------------------------------------------------
+    Aug  budgets 54,370   P&L 42,962   short 11,408
+    Sep  budgets 54,870   P&L 43,462   short 11,408
+    Oct  budgets 55,861   P&L 54,910   short    951
+    Nov  budgets 46,134   P&L 45,183   short    951
 
-A cost line with no date was skipped entirely - not deferred, DROPPED. It now
-falls to the period end. That is cost that was disappearing from the P&L and the
-balance sheet with nothing on screen to say so.
+Identical within each pair - a fixed SET of accounts missing, not a rounding.
 
-Both fixes applied to the Forecast Balance Sheet too, or it would build reserves
-from a margin the P&L no longer shows and "Out by" would flag a difference with no
-obvious cause.
+    Budgets page   seeds from catConfig - every account categorised as overheads
+    Cash flow      seeds from ohBudgets - only accounts with a BUDGET TYPED IN
+
+So any overhead account without a budget was missing from the Forecast P&L, the
+Forecast Balance Sheet and the 12-month entirely, while the Budgets page counted
+it. The two pages can only agree if they count the same accounts, and now they do.
+
+That also explains why the gap CHANGES between September and October - the missing
+accounts use a different forecast method in those months.
 
 
-WHAT TO EXPECT
---------------
-Gross margin on the forecast months should fall to something near 33%, the FY
-total should drop well below 49,006, and the year will probably show a LOSS -
-which is consistent with the eight actual months you can verify.
+AFTER DEPLOYING, the four forecast months should match the Budgets page exactly.
+If they still differ, the remaining gap is a forecast-method difference rather
+than a missing account, and that is worth knowing on its own.

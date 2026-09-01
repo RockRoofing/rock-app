@@ -268,6 +268,10 @@ export default function ProjectCashflow() {
       if (only && `L:${jobNoOfXeroId[String(xid)] || ''}` !== only) continue
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
+        // A DRAFT APPLICATION IS NOT AN ACTUAL SALE. It has not been sent, nothing has
+        // been certified and no invoice exists - counting it as actual put work you were
+        // still preparing into the month's sales figure.
+        if (a.status === 'draft') continue
         add(a.dueDate, 'actualIn', a.thisCert)
         note(a.endDate, a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert, a.thisCertGross != null ? a.thisCertGross : a.thisCert)
       }
@@ -586,7 +590,10 @@ export default function ProjectCashflow() {
                           <>
                             <BandRow label="Forecasted Sales / month" colour="#0f766e"
                               kinds={['forecast']} pick={m => m.forecast} top={HEADER_H + ROW_H2 * 6} />
-                            <BandRow label="Actual Sales / month" colour="#15803d"
+                            {/* Sent applications only. The label says what it is, because a
+                                certified value and an invoiced value are not the same thing
+                                and the row was being read as the latter. */}
+                            <BandRow label="Applied for / month (sent apps, gross)" colour="#15803d"
                               kinds={['actual']} pick={m => m.actual} top={HEADER_H + ROW_H2 * 6 + BAND_H} />
                           </>
                         )

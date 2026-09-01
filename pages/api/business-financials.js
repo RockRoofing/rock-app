@@ -879,7 +879,20 @@ export default async function handler(req, res) {
     // Per-month predicted overhead spend (same as Budgets page) so the forecast times
     // each overhead using that month's predicted figure, not one flat budget.
     const ohActualsByCode = {}
+    // SEEDED THE SAME WAY THE BUDGETS PAGE DOES.
+    //
+    // This started from the BUDGETS keys only - so an overhead account with no budget
+    // typed against it was missing from the P&L altogether, while the Budgets page counted
+    // it. That is the constant gap: 11,408 a month in Aug and Sept, 951 in Oct and Nov,
+    // identical within each pair because it is a fixed set of accounts, and changing
+    // between them because the forecast method differs.
+    //
+    // Now seeded from catConfig as well, which is where the Budgets page starts. The two
+    // pages can only agree if they are counting the same accounts.
     const ohCodes = new Set(Object.keys(ohBudgets || {}))
+    for (const [code] of Object.entries(catConfig || {})) {
+      if (CATEGORY_OF(code, catConfig) === 'overheads') ohCodes.add(String(code))
+    }
     for (const mo of Object.keys(bm)) {
       for (const code of Object.keys(bm[mo].byCode || {})) {
         if (CATEGORY_OF(code, catConfig) === 'overheads') ohCodes.add(String(code))
