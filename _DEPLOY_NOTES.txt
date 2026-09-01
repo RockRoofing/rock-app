@@ -1,7 +1,7 @@
-pkg681 - Financing and Materials drop-downs, and visible carets
-================================================================
+pkg682 - Where Winnersh's other 25,061 went
+============================================
 
-*** SUPERSEDES pkg591 - pkg680. ***
+*** SUPERSEDES pkg591 - pkg681. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,45 +11,39 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-1. THE CARETS
--------------
-At 9px grey they were nearly invisible whether open or shut, and with two rows
-expanded you could not tell which. Now:
+THE 16,707 IS RIGHT - IT IS THE SEPTEMBER APPLICATION
+-------------------------------------------------------
+    revenue this period   41,768.37   spread Aug 60 / Sep 40
+      Aug line  valued 09/08  cash 08/09   25,061.02
+      Sep line  valued 09/09  cash 08/10   16,707.35   <- what you can see, in Oct
 
-    closed   9px, #bbb
-    open    12px, BOLD, #1a1a19
-
-One shared Caret component drives all seven columns, so they cannot drift apart
-again - which is how the overheads one ended up styled differently from the rest.
+So the figure showing is the September application paying on 08/10, exactly as
+your 9th-of-the-month cycle says it should. MISSING is August's 25,061 due 08/09.
 
 
-2. FINANCING & TAX
-------------------
-    Item                    Type                   Date        Amount
-    PAYE/CIS arrears        liability repayment    22/09/26    -5,000
-    Van HP - Ford Transit   recurring commitment   01/09/26    -1,200
-    Corporation tax         liability repayment    30/09/26      -410
-    Total (3)                                                  -6,610
+ALMOST CERTAINLY THE INVOICE NETTING - AND IT WAS INVISIBLE
+-------------------------------------------------------------
+If August's application has been raised and invoiced, the forecast line is netted
+off and that money sits in INVOICES IN instead. Correct behaviour - counting both
+would double it - but silent, and indistinguishable from a line that was never
+there.
 
-THE TYPE COLUMN MATTERS. A liability repayment reduces what you owe and never
-touches the P&L; a recurring commitment is ordinary spend. Two different things
-sharing one column, and nothing said which was which.
+The per-week project drill now says so:
 
+    Replaced by real invoices this week: J242-Winnersh £25,061
+    - forecast sales came out because the invoice is already in Invoices in.
+      Nothing is lost; it has moved column.
 
-3. MATERIALS OUT
-----------------
-    Project                Delivered   Pays        Amount
-    J190 - Russell Hill    05/10/26    15/12/26   -42,441
-    J244 - Waungron        01/10/26    30/11/26    -5,000
+Open w/c 07 Sept and check. If Winnersh appears in that line, the model is right
+and the money is in Invoices in. If it does NOT, something else is dropping it and
+I want to know.
 
-TWO DATES, DELIBERATELY. Delivered is when the cost is INCURRED - what the P&L and
-the application use. Pays is delivery plus that supplier's terms, which is what
-this column schedules. They are routinely six to ten weeks apart and the column
-only ever showed one of them. "est" flags a payment date that was assumed because
-the line carried no term.
+Either way it reconciles: 25,061 invoice + 16,707 forecast = 41,768.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-Balance sheet items carry `label`, commitments carry `name`. The drill read only
-`label`, so every vehicle commitment would have shown as "(unnamed)". Reads both.
+ALSO - EMPTY MONTHS REMOVED
+---------------------------
+Winnersh was showing "Nov 26 -" with nothing in it. A month bucket was being
+created and then rendered empty, which made a project look as though it had a
+month with no money rather than no month at all. Only months with a figure now
+appear.

@@ -1080,6 +1080,7 @@ export default function CashFlow() {
       let fcSalesIn = 0, fcLabourOut = 0, fcMatOut = 0
       // WHICH PROJECTS make up the week, so the figure can be checked rather than trusted.
       const fcBreak = []
+      const netted = []
       for (const fc of (data.projForecasts || [])) {
         // SUPERSEDED - the period has already been applied for, so the money is now a
         // real invoice sitting in `receivables`. Counting the forecast as well is the
@@ -1104,6 +1105,10 @@ export default function CashFlow() {
           + ((carry && firstDate && inWkIn(firstDate)) ? carry : 0)
         const offS = Math.min(rawS, invThisWk)
         const sIn = Math.max(0, rawS - offS)
+        // Remember what the netting took out. A project's forecast line vanishing because
+        // a real invoice covers it is correct, but invisible - and indistinguishable from
+        // a line that was never there.
+        if (offS > 0) netted.push({ name: projLabel(fc), amount: offS })
         if (offS > 0 && fc.projectNo) {
           if (!invUsed[wkMonth]) invUsed[wkMonth] = {}
           invUsed[wkMonth][String(fc.projectNo)] = (invUsed[wkMonth][String(fc.projectNo)] || 0) + offS
@@ -1208,6 +1213,7 @@ export default function CashFlow() {
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
+        netted,
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -2051,6 +2057,13 @@ export default function CashFlow() {
                           </tbody>
                         </table>
                         <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          {(forecast[openFcWk].netted || []).length > 0 && (
+                            <div style={{ marginBottom: 6, color: '#0f766e' }}>
+                              <strong>Replaced by real invoices this week:</strong>{' '}
+                              {forecast[openFcWk].netted.map(x => `${x.name} ${gbp(x.amount)}`).join(', ')}
+                              {' '}- forecast sales came out because the invoice is already in Invoices in. Nothing is lost; it has moved column.
+                            </div>
+                          )}
                           Cost % is materials plus labour over sales. A roofing period should run 75-85%. Anything far below that, or showing &quot;none&quot;, has no cost scheduled against it in the Commercial forecast - so the cash flow counts the income and not the spend.
                         </div>
                       </td>
@@ -2237,7 +2250,12 @@ export default function CashFlow() {
                             <td style={{ ...td, fontWeight: 600, color: (x.sales - cost) < 0 ? '#dc2626' : INK }}>{gbp(x.sales - cost)}</td>
                             <td style={{ ...td, fontWeight: 700, color: pc == null ? '#999' : pc < 50 ? '#dc2626' : '#16a34a' }}>{pc == null ? '-' : `${pc.toFixed(0)}%`}</td>
                           </tr>
-                          {openProj === x.name && Object.keys(x.months).sort().map(mk => {
+                          {/* Only months with something in them. An empty "Nov 26 -" row
+                              is noise, and it made a project look as though it had a month
+                              with nothing in it rather than no month at all. */}
+                          {openProj === x.name && Object.keys(x.months).sort()
+                            .filter(mk => { const m = x.months[mk]; return (m.sales || 0) || (m.mat || 0) || (m.labour || 0) })
+                            .map(mk => {
                             const m = x.months[mk]
                             const c = m.mat + m.labour
                             const mp = m.sales > 0 ? (c / m.sales) * 100 : null
