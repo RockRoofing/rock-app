@@ -1198,6 +1198,21 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // was overridden instead of its percentages being filled in - which is a perfectly
   // reasonable way to work, and the chain has to carry it or that money gets claimed
   // twice. A real application always measures everything, so there it is the same number.
+  // MEASURED WORKS ONLY - the prior with materials on site stripped out.
+  //
+  // Gross claimed rightly INCLUDES materials on site: you claimed it and you get paid on
+  // it. But "how much contract is left" is a works question, and contract + variations
+  // does not contain MOS - so comparing the two understated the remaining works by the
+  // whole MOS balance. Claim 100k of which 80k is materials and the page said 35k of a
+  // 135k contract remained when 115k of work did.
+  //
+  // Same computation, MOS set to nil. Nothing else in the chain changes.
+  const priorWorksOnly = useMemo(() => {
+    if (!priorRows.length && !priorVarsForCert.length) return 0
+    const s2 = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: mosLine(0), mcdPct: num(mcdPct), retentionPct: num(retPct), ...mcdBasis }, 0)
+    return s2.grossCurrent
+  }, [priorRows, priorVarsForCert, mcdPct, retPct, contractTerms])
+
   const prevGrossAuto = prior && prior.grossClaimed != null ? prior.grossClaimed : priorMeasuredGross
 
   // PREVIOUSLY CLAIMED, TYPED. Blank = use the calculation above.
@@ -1212,6 +1227,12 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // What you know for certain is the cash claimed. This lets you say so, exactly as the
   // applications screen already allows.
   const prevGross = prevGrossOverride === null || prevGrossOverride === '' ? prevGrossAuto : num(prevGrossOverride)
+
+  // Split the prior into WORKS and MATERIALS ON SITE, so each question is answered
+  // against the right basis: cash against gross, remaining contract against works.
+  const mosClaimed = Math.max(0, priorMeasuredGross - priorWorksOnly)
+  const worksClaimed = Math.max(0, prevGross - mosClaimed)
+
 
   // SHOW THE ARITHMETIC on the revenue box, with the actual rates.
   //
@@ -1806,9 +1827,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
                     revenue on the next application, which reads like a broken calculation
                     rather than an over-claim. 158,000 claimed on a 135,000 contract should
                     have been flagged at the point it happened. */}
-                {salesBudgetTotal > 0 && prevGross > salesBudgetTotal + 1 && (
+                {salesBudgetTotal > 0 && worksClaimed > salesBudgetTotal + 1 && (
                   <div style={{ width: '100%', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 4, fontSize: 12, color: '#b91c1c' }}>
-                    <strong>Already claimed {gbp(prevGross)} against a contract of {gbp(salesBudgetTotal)}</strong> - over by {gbp(prevGross - salesBudgetTotal)}.
+                    <strong>Works claimed {gbp(worksClaimed)} against a contract of {gbp(salesBudgetTotal)}</strong> - over by {gbp(worksClaimed - salesBudgetTotal)}.
                     {' '}That is why this period offers a negative figure: the excess unwinds here. Check the materials on site on the earlier application, or type what has really been claimed into &quot;Previously claimed&quot; below.
                   </div>
                 )}
@@ -1820,7 +1841,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
                     later application deducts too much. This is the escape hatch, same as
                     the applications screen has. */}
                 <OverrideBox label="Previously claimed (gross)" calculated={prevGrossAuto} override={prevGrossOverride} setOverride={setPrevGrossOverride}
-                  colour="#334155" autoNote={`From ${priorLabel}`}
+                  colour="#334155"
+                  // Splits the prior so it is clear what is measured work and what is an
+                  // advance on materials - they behave differently from here on, and the
+                  // single gross figure hid the difference.
+                  autoNote={mosClaimed > 0
+                    ? `From ${priorLabel} - ${gbp(worksClaimed)} works + ${gbp(mosClaimed)} materials on site`
+                    : `From ${priorLabel}`}
                   sub2="Type what has actually been claimed if an earlier period's revenue was overridden" />
                 {/* SAVED vs LIVE. The bar on the timeline reads the SAVED
                     revenueThisPeriod; this box calculates live. They drift apart the
@@ -1835,7 +1862,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
                   colour="#0f766e"
                   autoNote={`${gbp(grossIncrement)} gross${num(mcdPct) > 0 ? `, less MCD ${num(mcdPct)}%` : ''}${retPctShown > 0 ? `, less retention ${retPctShown}%` : ', no retention set'}`}
-                  sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} of contract left after ${priorLabel} (gross, before deductions)`} />
+                  sub2={`${gbp(Math.max(0, salesBudgetTotal - worksClaimed))} of works left after ${priorLabel}${mosClaimed > 0 ? ` (plus ${gbp(mosClaimed)} materials on site claimed)` : ''}`} />
                 <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
                   colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - prevLabour))} left after ${priorLabel}`} />
                 <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior))} left after ${priorLabel}`} />

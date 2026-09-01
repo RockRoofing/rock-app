@@ -1,63 +1,56 @@
-pkg672 - Costs follow the project period too
-=============================================
+pkg673 - Materials on site kept separate from measured works
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg671. ***
+*** SUPERSEDES pkg591 - pkg672. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
-
-
-*** READ THE "DO I NEED TO REDO MY CASH FLOWS" SECTION - SHORT ANSWER, NO
-    DELETING, BUT SOME NEED ONE CLICK. THE PAGE NAMES THEM. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
+  pages/project-cashflow.js
   ... and the rest of the set as before
 
 
-YOU ARE RIGHT AND IT IS A CONCEPTUAL FIX
-----------------------------------------
-An application is labour + materials in a project period, valued at the valuation
-date, and the remainder is the margin at that date. So cost belongs to the PROJECT
-PERIOD, not the calendar month.
+YOUR QUESTION - YES, 100k COMES THROUGH, AND THAT IS RIGHT
+-----------------------------------------------------------
+Gross claimed includes materials on site. You claimed 100k and you get paid on
+100k, so for cash it is correct and unchanged.
 
-Costs were netted against real bills over a calendar MONTH. Where a valuation
-period and a month did not line up - which is most of them - an August bill could
-offset a September period.
+THE PROBLEM WAS EVERYTHING MEASURED AGAINST IT. salesBudgetTotal is contract works
+plus variations - it does NOT contain MOS, because MOS is an advance on work not
+yet done. Comparing the two understated remaining works by the whole MOS balance:
 
-Now:
-  - cost is cut off at THAT PERIOD'S valuation date, not a month end
-  - bills net against the period the cost was incurred in
-  - the uncovered remainder CARRIES to the next application, exactly as sales do
+    contract + variations   135,000
+    claimed                 100,000  (20,000 works + 80,000 materials on site)
 
-    J240, valued 31/08, forecast cost 88,000, bills received 62,000
-      26,000 carries into the next period
+    BEFORE  "35,000 of contract left"     wrong - works+MOS against works
+    AFTER   "115,000 of works left (plus 80,000 materials on site claimed)"
 
-CASH DATES ARE UNCHANGED. A bill still pays on eom+X. This is about which period a
-cost BELONGS to, not when it leaves the bank - which is precisely the gap WIP
-exists to hold.
+At the exact moment you build the next forecast - your Step 2 - it was telling you
+35,000 of work remained when 115,000 did.
 
 
-DO I NEED TO REDO MY CASH FLOWS? NO - BUT SOME NEED ONE CLICK
---------------------------------------------------------------
-NOTHING NEEDS DELETING OR RE-ENTERING. This changes how the cash flow READS your
-forecasts, not what is stored in them.
+THE OVER-CLAIM WARNING WAS MISFIRING FOR THE SAME REASON
+---------------------------------------------------------
+It tested gross against contract. Claim 120,000 of materials on a 135,000 job and
+it announced you were over-claimed when you had done 20,000 of work. It now tests
+WORKS against contract.
 
-BUT: the valuation date is written when a forecast is SAVED. Any forecast saved
-BEFORE you switched that project to "Project application dates" has no appDate on
-its sales lines - so the boundary silently falls back to the PERIOD END, which can
-be weeks later and puts the money in the wrong period.
+WHICH ALSO EXPLAINS J248. I put that 158,000-against-135,000 down to a double
+count. Materials on site is the more likely explanation, and worth re-checking
+now the two are separated.
 
-THE PAGE NOW NAMES THEM. A red banner at the top of the Cash Flow lists every
-forecast with no valuation date:
 
-    4 forecasts have no valuation date - open each one and press Save.
-    J240 - Market Drayton, J244 - Waungron, J246 - Albert Bartlett, ...
+THE PANEL SPLITS IT
+-------------------
+    Previously claimed (gross)   158,928.94
+    From App 18 - 96,000 works + 62,928.94 materials on site
 
-Open each, press Save, done. It picks up the project's own application calendar on
-the way through - no re-entering, no deleting. When the banner disappears, every
-forecast is being read on its own valuation dates.
+Cash against gross, remaining contract against works. Both questions answered on
+the right basis, and the difference visible rather than buried in one figure.
 
-If you would rather not click through them, tell me and I will write a one-off
-migration that re-derives appDate for every saved forecast from its project's
-calendar. I have not done that unprompted because it rewrites saved records.
+
+ON YOUR STEP 1 AND 2 - one nuance worth holding onto. Materials on site is what
+you CLAIM; delivery is what you PAY. Same materials, different dates, and the
+forecast keeps both - which is why a materials figure can sit in a valuation
+period and leave the bank two months later. That gap is exactly what WIP holds.
