@@ -1,49 +1,48 @@
-pkg688 - The 12-month page was running the OLD engine
-======================================================
+pkg689 - Total available cash on the chart
+===========================================
 
-*** SUPERSEDES pkg591 - pkg687. ***
+*** SUPERSEDES pkg591 - pkg688. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
-*** pages/business-financials/monthly.js is NEW TO THIS SET - replace it ***
+*** monthly.js is in this set too - replace it ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js       <- brought up to date
   pages/business-financials/cashflow.js
+  pages/business-financials/monthly.js
   ... and the rest of the set as before
 
 
-BEFORE YOU READ THE 12-MONTH, IT HAD DRIFTED BADLY
-----------------------------------------------------
-It has its own copy of the forecast logic and none of this session's work was in
-it. It was still on the pre-pkg618 rules:
+THE SECOND LINE
+---------------
+Dashed teal, under the gold cash line: bank + card headroom + overdraft +
+invoice finance availability.
 
-    one invoice killed a project's ENTIRE month of sales
-    one bill killed a project's ENTIRE month of costs
-    no CIS on forecast labour at all
-    no valuation-date boundary
-    labour treated as net when it is gross
+    closing cash   overdraft headroom   TOTAL AVAILABLE
+        30,000              60,000            219,032
+       -25,000              35,000            139,032
+       200,000              60,000            389,032
 
-So it could not have agreed with the 13-week even on the weeks they share, and it
-would have answered your December/January question wrongly.
+THE OVERDRAFT HEADROOM MOVES WITH THE BALANCE. Drawn overdraft already shows as a
+negative bank figure, so the headroom is the limit LESS what is used - counting
+the full limit on top would count the drawn part twice. On a week the balance goes
+to -25,000 the available line correctly tightens rather than staying flat.
 
-Now netted rather than discarded on both sides, labour paid at gross x 80%, the
-valuation date as the boundary, and CIS at gross x 20% landing the month AFTER the
-labour:
+Card and invoice finance headroom are held constant across the weeks. Their drawn
+amounts do not change within the forecast, and modelling a drawdown you have not
+decided on would be false precision.
 
-    month     labour gross   paid to subbie   CIS to HMRC
-    Sept 26         60,000           48,000             0
-    Oct 26          45,000           36,000        12,000
-    Nov 26          30,000           24,000         9,000
-    Dec 26               0                0         6,000
-
-That lag is worth seeing over twelve months - the 13-week already did it, the
-monthly page did not do it at all.
+INVOICE FINANCE COMES FROM THE IF PAGE - the position it publishes, which is the
+one you reconciled against Bibby. Not a second calculation that could disagree.
 
 
-WHAT YOU ARE LOOKING FOR
-------------------------
-December and January should now show the materials that fall just past the 13-week
-horizon - we counted 188,342 of them earlier. If the cash position dips there and
-recovers, the model is behaving. If it does not dip, the materials are still
-missing from the forecasts rather than being late.
+DRAWN UNDER THE CASH LINE, AND DASHED
+--------------------------------------
+Deliberately. Available is what you could pay out if you drew everything; it is
+not money you have, and it should not look like it. The caption says so: the gap
+between the two lines is borrowing capacity, not cash.
+
+
+NEGOTIATED PROJECTS - left out, as you said. When you come back to it the question
+will be whether a negotiated job's forecast sales should count toward availability
+at all, given Bibby will not fund an invoice that does not exist yet.

@@ -1243,16 +1243,41 @@ export default function CashFlow() {
   // The arrears row is not a week, so it is folded into week 1 for the CHART - plotted as
   // its own point it would read as a fourteenth week and stretch the axis. The table keeps
   // them separate, which is where the distinction matters.
+  // TOTAL AVAILABLE CASH, week by week.
+  //
+  // Bank plus every facility you could still draw on. Cash alone answers "what is in the
+  // account"; this answers "what could I actually pay out" - and on a week the balance dips
+  // they are very different questions.
+  //
+  // The overdraft headroom MOVES with the balance: drawn overdraft shows as a negative bank
+  // figure, so headroom is the limit less what is already used. Card and invoice finance
+  // headroom are taken as they stand - the drawn amounts do not change week to week within
+  // the forecast, and pretending otherwise would be false precision.
+  const facilityHeadroom = (() => {
+    const cardLimits = finance.cardLimits || {}
+    const anyPerCard = (data?.balances?.accounts || []).some(a => a.isCard && (Number(cardLimits[a.name]) || 0) > 0)
+    const cards = anyPerCard
+      ? (data?.balances?.accounts || []).filter(a => a.isCard).reduce((t, a) => {
+          const lim = Number(cardLimits[a.name]) || 0
+          return t + Math.max(0, lim - Math.abs(Math.min(0, a.balance || 0)))
+        }, 0)
+      : Math.max(0, (Number(finance.ccLimit) || 0) - Math.abs(Math.min(0, (data?.balances?.cardTotal) || 0)))
+    const ifAvail = data?.ifAvailability ? Math.max(0, data.ifAvailability.availability || 0) : 0
+    return { cards, ifAvail, odLimit: Number(finance.overdraftLimit) || 0 }
+  })()
+
   const chartData = (() => {
     const out = []
     for (const r of forecast) {
-      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      const avail = (c) => c + facilityHeadroom.cards + facilityHeadroom.ifAvail
+        + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
       if (prev && prev._arr) {
-        out[out.length - 1] = { wk: r.wk, closing: r.closing, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
         continue
       }
-      out.push({ wk: r.wk, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
+      out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
     }
     return out
   })()
@@ -1589,7 +1614,7 @@ export default function CashFlow() {
               )
             })()}
 
-            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero.">
+            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero. The dashed line is what you could pay out if you drew everything - bank plus card headroom, overdraft and invoice finance availability. Drawing it does not make you better off, so the gap between the two lines is borrowing capacity, not cash.">
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -1597,6 +1622,11 @@ export default function CashFlow() {
                   <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={54} />
                   <Tooltip formatter={(v) => gbp(v)} />
                   <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="3 3" />
+                  {/* Dashed, and drawn UNDER the cash line so cash stays the headline.
+                      Available is what you could pay out if you drew everything - useful,
+                      but not money you have, and it should not look like it is. */}
+                  <Line type="monotone" dataKey="available" name="Total available (incl. facilities)"
+                    stroke="#0f766e" strokeWidth={1.6} strokeDasharray="5 4" dot={false} />
                   <Line type="monotone" dataKey="closing" name="Closing cash" stroke={GOLD} strokeWidth={2.5} dot={{ r: 2 }} />
                 </ComposedChart>
               </ResponsiveContainer>
