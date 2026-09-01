@@ -111,8 +111,16 @@ export default function ForecastPL() {
       // Netted, not added: where a project has both an invoice and a forecast in the same
       // month the invoice has replaced the forecast, so only the excess of forecast over
       // invoiced is still to come.
+      // REVERTED. Adding real invoices to a forecast month's revenue was wrong: there is
+      // no matching COST, because those periods have been applied for and their forecast
+      // costs correctly dropped. August came out at 412,604 of revenue against 5,446 of
+      // cost - a 99% margin - and put 380,000 of imaginary profit on the year.
+      //
+      // A half-actual month cannot be fixed by patching one side of it. The mechanism
+      // already exists: switch the month to ACTUAL on Budgets and Xero supplies both.
+      // The warning below says so rather than the page guessing.
       const invoiced = invByMonth[mo] || 0
-      const revenue = isActual ? (a.income || 0) : Math.max(invoiced, fRev[mo] || 0)
+      const revenue = isActual ? (a.income || 0) : (fRev[mo] || 0)
       const cos = isActual ? (a.cos || 0) : ((fMat[mo] || 0) + (fLab[mo] || 0))
       // A MONTH NOT SWITCHED TO ACTUAL MUST USE THE BUDGET, not actuals-to-date.
       //
@@ -129,7 +137,7 @@ export default function ForecastPL() {
       // than a fortnight of posted invoices.
       const overheads = isActual ? (a.overheads || 0) : (fOh[mo] || 0)
       return {
-        mo, isActual, revenue, cos, overheads,
+        mo, isActual, revenue, cos, overheads, invoiced,
         materials: isActual ? null : (fMat[mo] || 0),
         labour: isActual ? null : (fLab[mo] || 0),
         gross: revenue - cos,
@@ -161,6 +169,26 @@ export default function ForecastPL() {
           rule of its own. Actual months take income, cost of sales and overheads from Xero; forecast months take revenue and cost of sale
           from the project forecasts on an accrual basis, and overheads from the Budgets grid.
         </div>
+
+        {/* A FORECAST MONTH WITH REAL INVOICES IN IT is half closed, and neither half is
+            right: the forecast has let go of the period but Xero's figures are not being
+            used yet. Switching the month to ACTUAL takes revenue AND cost from Xero
+            together, which is the only way it ties. */}
+        {!loading && model && (() => {
+          const half = model.rows.filter(r => !r.isActual && (r.invoiced || 0) > 1000 && r.mo <= new Date().toISOString().slice(0, 7))
+          if (!half.length) return null
+          return (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '11px 15px', marginBottom: 16, fontSize: 12.5, color: '#92400e', maxWidth: 900 }}>
+              <strong>Switch {half.map(r => r.label).join(', ')} to Actual on the Budgets tab.</strong>
+              <div style={{ marginTop: 4 }}>
+                {half.map(r => `${r.label} has ${gbp(r.invoiced)} of invoices raised in Xero`).join('; ')} - but the month is still marked
+                forecast, so this page uses the project forecasts instead. Those periods have already been applied for, so their revenue has
+                gone while the real invoices are not being counted. The month reads low until you switch it, and switching takes revenue AND
+                cost from Xero together - which is the only way the two sides tie.
+              </div>
+            </div>
+          )
+        })()}
 
         {loading && <div style={{ color: '#999', padding: 30 }}>Loading...</div>}
 

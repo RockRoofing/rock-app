@@ -84,7 +84,15 @@ export default function Reconciliation() {
     // applied-for guard - a lookup that silently found nothing.
     const invKeys = new Set()
     for (const i of recs) { if (i.projectNo) invKeys.add('no:' + String(i.projectNo)); if (i.projectName) invKeys.add('nm:' + normName(i.projectName)) }
-    const unmatchable = byProject.filter(p => !invKeys.has('no:' + String(p.no)) && !invKeys.has('nm:' + normName(p.name)))
+    // ONLY THE ONES WHERE IT MATTERS.
+    //
+    // A project with no outstanding invoice is completely normal - you have been paid, or
+    // have not billed yet. Flagging those made the check fire on nine healthy projects and
+    // say nothing useful. It only matters where a period has been APPLIED FOR: there the
+    // code compares certified against invoiced, and with no invoice to find it cannot tell
+    // "paid in full" from "could not match".
+    const unmatchable = byProject.filter(p => p.applied
+      && !invKeys.has('no:' + String(p.no)) && !invKeys.has('nm:' + normName(p.name)))
 
     const openBank = (cf.manualBalances || []).filter(b => b.kind !== 'card').reduce((t, b) => t + num(b.balance), 0)
 
@@ -155,8 +163,8 @@ export default function Reconciliation() {
 
               <Flag bad={model.unmatchable.length > 0}
                 detail={model.unmatchable.length
-                  ? `${model.unmatchable.length} forecast${model.unmatchable.length === 1 ? '' : 's'} cannot be matched to any invoice by number or name: ${model.unmatchable.slice(0, 6).map(p => p.name).join(', ')}. Anything comparing certified against invoiced is guessing for these.`
-                  : 'Every forecast can be matched to invoices by number or name.'}>
+                  ? `${model.unmatchable.length} APPLIED-FOR forecast${model.unmatchable.length === 1 ? '' : 's'} have no matching invoice: ${model.unmatchable.slice(0, 6).map(p => p.name).join(', ')}. The application was raised but nothing is on the ledger, so certified-against-invoiced cannot be judged.`
+                  : 'Every applied-for forecast has invoices on the ledger. Projects with no outstanding invoice are ignored - being paid up is not a fault.'}>
                 Forecasts can be matched to the invoice ledger
               </Flag>
 

@@ -1,55 +1,77 @@
-pkg696 - Supplier bills were sitting in Invoices Owed
-======================================================
+pkg697 - Reverting my P&L change, and what your CSVs actually show
+===================================================================
 
-*** SUPERSEDES pkg591 - pkg695. ***
-*** SEVEN NEW FILES - create these in GitHub (reconciliation.js is one of them) ***
-
-
-*** AFTER DEPLOYING: PRESS SYNC ON THE INVOICES OWED PAGE. ***
+*** SUPERSEDES pkg591 - pkg696. ***
+*** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/reconciliation.js
   ... and the rest of the set as before
 
 
-YOU FOUND IT
-------------
-Supplier invoices in the Invoices in drill-down is not a display problem. The
-receivables STORE contains ACCPAY bills.
+1. I BROKE THE P&L - REVERTED
+------------------------------
+    Aug 26   revenue 412,604   cost of sale 5,446   gross margin 99%
+    FY net profit 79,770 -> 461,610
 
-    /Invoices?Type=ACCPAY&where=Status=="AUTHORISED"
+I added real invoices to revenue on a forecast month without any matching COST -
+those periods have been applied for, so their forecast costs correctly dropped.
+Revenue from Xero, cost from a forecast that no longer exists. 380,000 of
+imaginary profit.
 
-Xero does not filter on a bare Type query parameter - it belongs inside the where
-clause. So both fetches returned BOTH types. There is a defensive filter in the
-code now (`if (inv.Type && inv.Type !== type) continue`), but anything stored
-BEFORE that guard existed is still in bank:outstanding-receivables, and that is
-what you are looking at.
+A HALF-ACTUAL MONTH CANNOT BE FIXED BY PATCHING ONE SIDE. The mechanism already
+exists and it is the right one:
 
-A BILL COUNTED AS MONEY IN IS WRONG TWICE OVER. It inflates the arrears row, and
-the same bill is already in Bills out. Removing it takes the overstatement off
-both sides - which is very likely most of your 434,338 and a good part of the 700k.
+    Switch Aug 26 to Actual on the Budgets tab. Xero then supplies revenue AND
+    cost together, which is the only way they tie.
 
-
-TWO THINGS DONE
----------------
-1. FILTERED AT THE POINT OF USE. The cash flow now skips anything that is not
-   ACCREC, so a stale store cannot poison the forecast even before you re-sync.
-
-2. THE RECONCILE PAGE CHECKS FOR IT:
-
-     X Invoices owed contains only sales invoices
-       23 entries in the invoices-owed store are SUPPLIER bills, worth GBP 214,000.
-       They are being counted as money in AND as money out. Press Sync on the
-       Invoices Owed page to rebuild it.
+The page now says exactly that, naming the month and the value of invoices sitting
+in it, instead of quietly guessing.
 
 
-ON YOUR OTHER QUESTION - the projected cash balance uses expectedDate first and
-falls back to Xero's due date only where no expected date is set. The Invoices in
-drill-down marks which is which: "(expected)" or "(due date)".
+2. THE "CANNOT BE MATCHED" CHECK WAS WRONG - MY FAULT
+-------------------------------------------------------
+Your CSVs settle it. The project labels match perfectly on both sides:
 
-PRESS SYNC ON INVOICES OWED after deploying. The filter protects the forecast, but
-only a re-sync cleans the underlying store - and the Bills to Pay store is worth
-syncing too, for the same reason.
+    invoices   J243-Christchurch Primary School, J190-Russell Hill, J246-...
+    forecasts  J243-Christchurch Primary School, J190-Russell Hill, J246-...
+
+Those nine simply have NO OUTSTANDING INVOICE - you have been paid, or have not
+billed yet. Perfectly healthy, and the check was calling it a fault.
+
+It now only fires where a period has been APPLIED FOR and there is still no
+invoice - which is the only case where the comparison actually matters. On your
+data that is ZERO, so the check goes green.
+
+
+3. THE COST GAP IS REAL, AND IT IS THE LAST BIG ONE
+-----------------------------------------------------
+    all 16 forecasts   sales 1,371,624   cost 920,154   = 67%
+    at 80% cost would be 1,097,299 - short by 177,145
+
+Worst offenders from your own CSV:
+
+    J242-Winnersh          sales  37,592   cost  11,502   31%
+    J250-Plot 2000         sales   5,000   cost   2,200   44%
+    J246-Albert Bartlett   sales  52,710   cost  24,875   47%
+    J248-Renshaw House     sales  37,762   cost  17,424   46%   no materials at all
+    J243-Christchurch      sales  11,998   cost       0    0%   nothing at all
+
+AND THE CASH GAP IS BIGGER THAN THE MARGIN GAP, because labour there is gross of
+CIS - the cash out is 80% of it, plus the CIS a month later.
+
+That 177,145 is not a bug. It is cost that is not in the forecasts, and it is the
+single largest remaining reason the cash position looks high.
+
+
+4. BILLS WITHOUT A PROJECT - 7 of 122, worth 9,415. Immaterial; they simply will
+   not net against forecast cost. Not worth chasing.
+
+
+5. PRESS "READ BALANCE SHEET FROM XERO" - the amber banner on the Forecast BS is
+   still showing, so that page is running on figures fetched before the monthly
+   breakdown existed.

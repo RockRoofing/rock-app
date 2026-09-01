@@ -198,7 +198,8 @@ export default function ForecastBalanceSheet() {
     for (const mo of months) {
       const isActual = actualSet.has(mo)
       const m = byMonth[mo] || {}
-      revOf.push(isActual ? (m.income || 0) : Math.max(invByMonth[mo] || 0, fRev[mo] || 0))
+      // Reverted with the P&L - same reason. Revenue without its cost is not revenue.
+      revOf.push(isActual ? (m.income || 0) : (fRev[mo] || 0))
       cosOf.push(isActual ? (m.cos || 0) : (fCos[mo] || 0))
       ohOf.push(isActual ? (m.overheads || 0) : (fOh[mo] || 0))
     }
