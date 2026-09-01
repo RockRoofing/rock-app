@@ -1,55 +1,61 @@
-pkg704 - "Confirmed" was going nowhere
-=======================================
+pkg705 - Found it: the whole ledger was landing in month one
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg703. ***
+*** SUPERSEDES pkg591 - pkg704. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
+
+
+*** DO THIS FIRST: PRESS "READ BALANCE SHEET FROM XERO" ON THE BALANCE SHEET TAB.
+    Your screenshot still shows the amber banner, which means the BS component
+    lines are NOT anchored to Xero - only Net Assets is. The Bank row of -187,303
+    is a MODELLED number, so the comparison you just ran was model against model. ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/business-financials/monthly.js
   pages/api/business-financials.js
-  pages/business-financials/cashflow.js
-  pages/business-financials/reconciliation.js
   ... and the rest of the set as before
 
 
-YOU FOUND A REAL ONE - THOUGH NOT THE 144,137
------------------------------------------------
-expectedConfirmed is recorded on the Invoices Owed page and NOTHING ELSE READ IT.
-The API did not even pass it through. So a date you had agreed with the customer
-and a date somebody typed as a guess carried exactly the same weight everywhere.
+THE 841,401
+-----------
+    12-month, first three months
+      Sept 26   invoices in  451,368
+      Oct 26                  95,794
+      Nov 26                       0
 
-Now passed through, and the Invoices in drill-down shows three states instead of
-two:
+547,162 of a 555,310 ledger collected in three months - 81% of everything you are
+owed, in ONE month.
 
-    confirmed        agreed with the customer
-    (expected)       typed, not confirmed
-    (due date)       Xero's date, nobody has looked
+WHY: 15 invoices worth 355,547 have no expected date, so they sit on Xero's due
+date. For an overdue invoice that date is in the PAST, and everything in the past
+falls into month one.
 
-New check on Reconcile sizes the exposure: how much of the ledger rests on a date
-nobody has agreed.
+The balance sheet never does this - it spreads collection over DEBTOR DAYS. Two
+pages guessing differently about the same invoices.
 
-
-WHY IT IS NOT THE 144,137 THOUGH
-----------------------------------
-Both pages collect the SAME invoices - they would only disagree on WHEN. A timing
-difference inside twelve months washes out by November, and the gap is in the
-TOTAL, not the phasing. So confirmation changes which weeks you can trust, not the
-closing balance.
+AND YOU WERE RIGHT THAT IT SHOULD CORRECT ITSELF LATER - it would, if this were a
+timing difference. It is not. The money is collected EARLY, not twice, so the gap
+opens in month one and persists to the end. That is exactly why it never came back
+down, and why your instinct that something was structurally wrong was correct.
 
 
-BUT LOOK AT THIS WHILE YOU ARE THERE
---------------------------------------
-    invoices with an expected date    30    199,763
-    invoices on Xero due date only    15    355,547
-    total ledger                      45    555,310
+THE FIX
+-------
+Where you have SET a date, it is used as-is - nothing changes. Where you have not,
+an overdue invoice is spread across the debtor-day window rather than assumed to
+arrive at once:
 
-TWO THIRDS OF YOUR LEDGER BY VALUE has no expected date and is sitting on Xero's
-due date - and fifteen invoices carry more value than the thirty that have been
-dated. Whatever the 144,137 turns out to be, those fifteen are worth an hour more
-than anything else on this list.
+    355,547 over 2 months -> Sept 177,774, Oct 177,774
+    September invoices in falls from 451,368 to about 273,595
+
+It now reads the debtor-day setting from the SAME config the Forecast Balance
+Sheet uses, so the two pages cannot drift apart on this again.
 
 
-STILL OUTSTANDING: deploy pkg703's opening-balance fix and send me Nov 26 from
-both the 12-month and the Forecast Balance Sheet. That comparison is what will
-locate the remaining gap.
+THIS IS AN ASSUMPTION TOO
+-------------------------
+A less flattering one, but still a guess. The real answer is dates on those
+fifteen invoices - they are two thirds of your ledger by value, and until they are
+dated no cash flow can be better than an estimate.

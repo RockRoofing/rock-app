@@ -1143,6 +1143,10 @@ export default async function handler(req, res) {
       manualBalances,
       cfExcluded,
       bsItems,
+      // The debtor-day assumption, so the 12-month spreads undated invoices on the SAME
+      // basis the Forecast Balance Sheet uses. Two pages guessing differently about the
+      // same invoices is what made them disagree by 841,401.
+      bsAssumptions: await redis.get('config:bs-assumptions').then(v => v || null).catch(() => null),
       custOffsets,
       // MEASURED payment behaviour per customer, so the cash flow can show what the data
       // says next to whatever has been typed over it. Computed here rather than on the

@@ -119,12 +119,39 @@ export default function MonthlyCashFlow() {
 
     const inMonth = (dstr, mk) => (dstr || '').slice(0, 7) === mk
 
+    const todayKey = new Date().toISOString().slice(0, 10)
+    // Debtor days rounded up to whole months - the same assumption the balance sheet uses,
+    // so the two pages stop disagreeing about the same invoices.
+    const spreadMonths = Math.max(1, Math.ceil((Number(data.bsAssumptions?.debtorDays) || 45) / 30))
+
     const rows = []
     // Carried between months so CIS lands the month after the labour it came from.
     let fcLabGrossPrev = 0
     let running = openBank
     for (const mk of months) {
-      const invoicesIn = (data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
+      // AN OVERDUE INVOICE WITH NO EXPECTED DATE DOES NOT ARRIVE THIS MONTH.
+      //
+      // Two thirds of the ledger by value has no expected date, so it sits on Xero's due
+      // date - which for an overdue invoice is in the PAST, and everything in the past
+      // lands in month one. September was collecting 451,368 of a 555,310 ledger: 81% of
+      // everything you are owed, in one month, on dates nobody has looked at.
+      //
+      // The balance sheet spreads collection over debtor days and never does this, which
+      // is most of why the two pages disagree by 841,401 at November - and it does not
+      // correct later, because the money is collected EARLY rather than twice.
+      //
+      // Where a date has been SET, it is used as-is. Where one has not, an overdue invoice
+      // is spread over the debtor-day window from today rather than assumed to arrive at
+      // once. That is an assumption too, but a far less flattering one.
+      const invoicesIn = (data.receivables || []).reduce((a, i) => {
+        const set = !!i.expectedDate
+        const d = i.expectedDate || i.dueDate || ''
+        if (!d) return a
+        if (set || d >= todayKey) return a + (inMonth(d, mk) ? (i.amountDue || 0) : 0)
+        // Undated AND overdue - spread evenly across the next `spreadMonths` months.
+        const idx = months.indexOf(mk)
+        return a + ((idx >= 0 && idx < spreadMonths) ? (i.amountDue || 0) / spreadMonths : 0)
+      }, 0)
       const retIn = retEvents.filter(r => inMonth(r.date, mk)).reduce((a, r) => a + r.amount, 0)
       // FORWARD VAT RECLAIM, as the 13-week does. vatByMonth only ever held filed returns
       // and the current estimate, so every future month showed nothing - on a twelve-month
