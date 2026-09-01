@@ -40,7 +40,22 @@ export default function MonthlyCashFlow() {
 
   const forecast = useMemo(() => {
     if (!data) return []
-    const openBank = startCash !== '' ? Number(startCash) : (data.cashAtBank || 0)
+    // OPENING FROM THE MANUAL BALANCES, the same source the 13-week uses.
+    //
+    // This took data.cashAtBank - the Xero bank summary's closing balance, which is a BOOK
+    // balance and can be months stale. The 13-week has used the manual balances you type as
+    // its primary source since pkg609 precisely because the book balance is not what is in
+    // the account.
+    //
+    // On a running balance the opening figure never washes out: every one of the twelve
+    // months is wrong by the same amount, and the closing position inherits all of it. That
+    // is a large part of why this page and the Forecast Balance Sheet disagree on the same
+    // month by 430,945.
+    const manualBank = (data.manualBalances || [])
+      .filter(b => b && b.kind !== 'card')
+      .reduce((t, b) => t + (Number(b.balance) || 0), 0)
+    const hasManual = (data.manualBalances || []).some(b => b && b.kind !== 'card')
+    const openBank = startCash !== '' ? Number(startCash) : (hasManual ? manualBank : (data.cashAtBank || 0))
     const start = new Date(months[0] + '-01T00:00:00')
     const [ly, lm] = months[months.length - 1].split('-').map(Number)
     const end = new Date(ly, lm, 0)  // last day of final month
@@ -297,6 +312,30 @@ export default function MonthlyCashFlow() {
                       Some of that gap is real and expected: a twelve-month window collects revenue for work ALREADY DONE, whose cost was paid
                       before the window opened. So the percentage here is always lower than your true margin and cannot be read as one. Worth
                       checking only where a month shows sales with &quot;none&quot; against both materials and labour AND no bills either.
+                    </div>
+                  </div>
+                )
+              })()}
+{(() => {
+                // THE IDENTITY CHECK.
+                //
+                // Over twelve months: closing cash = opening + profit - the increase in
+                // working capital. If cash rises far more than profit, debtors must have
+                // FALLEN by the difference. The Forecast Balance Sheet shows debtors
+                // rising - so both cannot be true, and saying so is more use than leaving
+                // it to be spotted three pages apart.
+                const open = forecast.length ? (forecast[0].closing - forecast[0].net) : 0
+                const close = forecast.length ? forecast[forecast.length - 1].closing : 0
+                const rise = close - open
+                const collected = forecast.reduce((a, r) => a + (r.invoicesIn || 0) + (r.retIn || 0), 0)
+                if (Math.abs(rise) < 50000) return null
+                return (
+                  <div style={{ background: '#f4f7fb', border: '1px solid #d8e3ef', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#334155' }}>
+                    <strong>Cash moves {gbp(rise)} over the twelve months, from {gbp(open)} to {gbp(close)}.</strong>
+                    <div style={{ marginTop: 4 }}>
+                      {gbp(collected)} of that is collecting invoices and retention that already existed. Cash can only rise far above your
+                      profit if working capital FALLS by the difference - debtors collected and not replaced. Check that against the Forecast
+                      Balance Sheet: if debtors are rising there while cash rises here, the two pages disagree and one of them is wrong.
                     </div>
                   </div>
                 )

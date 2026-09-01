@@ -268,10 +268,17 @@ export default function ProjectCashflow() {
       if (only && `L:${jobNoOfXeroId[String(xid)] || ''}` !== only) continue
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
-        // A DRAFT APPLICATION IS NOT AN ACTUAL SALE. It has not been sent, nothing has
-        // been certified and no invoice exists - counting it as actual put work you were
-        // still preparing into the month's sales figure.
-        if (a.status === 'draft') continue
+        // SENT APPLICATIONS ONLY, tested positively.
+        //
+        // An application is written as 'draft' and becomes 'sent' when it is issued, so
+        // excluding drafts happens to give the same answer today. But "not draft" and
+        // "sent" are different tests, and the first one silently admits any status added
+        // later - a dismissed or cancelled application would walk straight into the sales
+        // figure. Requiring 'sent' cannot do that.
+        // Matches lib/applications.js, which already uses `a.status && a.status !== 'draft'`
+        // - it too refuses to count a record with no status. Being consistent with the
+        // rest of the app matters more than being lenient here.
+        if (a.status !== 'sent') continue
         add(a.dueDate, 'actualIn', a.thisCert)
         note(a.endDate, a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert, a.thisCertGross != null ? a.thisCertGross : a.thisCert)
       }

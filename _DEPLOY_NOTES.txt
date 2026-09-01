@@ -1,55 +1,65 @@
-pkg701 - Draft applications counted as sales, and the overhead gap found
-=========================================================================
+pkg703 - The 12-month was starting from ZERO
+=============================================
 
-*** SUPERSEDES pkg591 - pkg700. ***
+*** SUPERSEDES pkg591 - pkg702. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js
-  pages/project-cashflow.js
+  pages/business-financials/monthly.js
   ... and the rest of the set as before
 
 
-1. THE 507k "ACTUAL SALES" - DRAFTS WERE IN IT
-------------------------------------------------
-    if (!a.dueDate || !a.thisCert) continue
-    note(..., 'actual', `App ${a.appNumber}${a.status === 'draft' ? ' (draft)' : ''}`, ...)
+YES - I UNDERSTAND, AND YOUR IDENTITY ARGUMENT IS THE RIGHT TEST
+------------------------------------------------------------------
+Closing cash = opening + profit - the increase in working capital. You cannot show
+50k of net assets and 700k of cash unless 650k of working capital has been
+RELEASED. The Forecast Balance Sheet shows debtors RISING. Both cannot be true.
 
-It knew perfectly well the application was a draft - it printed "(draft)" in the
-label - and counted it as an actual sale anyway. An application you have started
-but not sent has certified nothing and invoiced nothing.
+So I used your test - the same month on two pages:
 
-Drafts are now excluded. The row is also RENAMED to what it actually is:
+    Forecast balance sheet, bank at Nov 26     220,652
+    12-month cash flow, closing at Nov 26      651,597
+    difference                                 430,945
 
-    "Applied for / month (sent apps, gross)"
-
-You are right that it is not an invoiced figure - it is the certificate gross,
-which is the correct P&L basis but is NOT the same as what has been invoiced. The
-label said "Actual Sales" and invited exactly that reading.
-
-
-2. THE OVERHEADS GAP - FOUND, AND IT IS A DIFFERENT ACCOUNT LIST
------------------------------------------------------------------
-    Aug  budgets 54,370   P&L 42,962   short 11,408
-    Sep  budgets 54,870   P&L 43,462   short 11,408
-    Oct  budgets 55,861   P&L 54,910   short    951
-    Nov  budgets 46,134   P&L 45,183   short    951
-
-Identical within each pair - a fixed SET of accounts missing, not a rounding.
-
-    Budgets page   seeds from catConfig - every account categorised as overheads
-    Cash flow      seeds from ohBudgets - only accounts with a BUDGET TYPED IN
-
-So any overhead account without a budget was missing from the Forecast P&L, the
-Forecast Balance Sheet and the 12-month entirely, while the Budgets page counted
-it. The two pages can only agree if they count the same accounts, and now they do.
-
-That also explains why the gap CHANGES between September and October - the missing
-accounts use a different forecast method in those months.
+The balance sheet is constrained: it ties to reserves and "Out by" reads ties. The
+12-month just adds up receipts and payments. So the 12-month is the one that is
+wrong, and by 430,945.
 
 
-AFTER DEPLOYING, the four forecast months should match the Budgets page exactly.
-If they still differ, the remaining gap is a forecast-method difference rather
-than a missing account, and that is worth knowing on its own.
+AND MOST OF IT IS ON YOUR SCREENSHOT: "Opening cash 0"
+--------------------------------------------------------
+    openBank = startCash !== '' ? Number(startCash) : (data.cashAtBank || 0)
+
+data.cashAtBank is the Xero bank summary's CLOSING BOOK BALANCE, which can be
+months stale - and where it is missing, the page starts at ZERO. Your actual bank
+at Jul 26 is -286,808.
+
+ON A RUNNING BALANCE THE OPENING FIGURE NEVER WASHES OUT. Every one of the twelve
+months is wrong by the same amount and the closing position inherits all of it.
+
+    opening 0        -> Nov 26 closing 651,597
+    opening -286,808 -> Nov 26 closing 364,789
+    balance sheet says                 220,652
+    remaining gap                      144,137
+
+So the opening balance is about two thirds of it. The 12-month now opens from the
+MANUAL BALANCES - the same source the 13-week has used since pkg609, because the
+book balance is not what is in the account.
+
+
+THE REMAINING 144,137
+---------------------
+Smaller, and worth finding rather than guessing at. The page now carries the
+identity check on screen:
+
+    Cash moves X over the twelve months, from A to B. Y of that is collecting
+    invoices and retention that already existed. Cash can only rise far above your
+    profit if working capital FALLS by the difference. Check that against the
+    Forecast Balance Sheet: if debtors are rising there while cash rises here, the
+    two pages disagree and one of them is wrong.
+
+Deploy this, then send me the Nov 26 figure from both pages again. If they are
+within a few thousand the model is sound. If 144,137 is still there, it is one
+thing and we will find it.
