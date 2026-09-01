@@ -75,6 +75,8 @@ export default function MonthlyCashFlow() {
     const inMonth = (dstr, mk) => (dstr || '').slice(0, 7) === mk
 
     const rows = []
+    // Carried between months so CIS lands the month after the labour it came from.
+    let fcLabGrossPrev = 0
     let running = openBank
     for (const mk of months) {
       const invoicesIn = (data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
@@ -87,18 +89,60 @@ export default function MonthlyCashFlow() {
       const commOut = commEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inMonth(c.date, mk)).reduce((a, c) => a + c.amount, 0)
 
-      // Project forecasts, gap-filled: suppress sales where a real invoice exists for
-      // that project this month; suppress costs where a real bill exists.
-      const projNosWithInvoice = new Set((data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk) && i.projectNo).map(i => String(i.projectNo)))
-      const projNamesWithBill = new Set((data.bills || []).filter(b => inMonth(b.payDate || b.dueDate, mk) && b.project).map(b => normName(b.project)))
-      let fcSalesIn = 0, fcCostOut = 0
-      for (const fc of (data.projForecasts || [])) {
-        if (!(fc.projectNo && projNosWithInvoice.has(String(fc.projectNo)))) fcSalesIn += (fc.salesSchedule || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
-        if (!(fc.projectName && projNamesWithBill.has(normName(fc.projectName)))) {
-          fcCostOut += (fc.labourSchedule || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
-          fcCostOut += (fc.matItems || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
-        }
+      // PROJECT FORECASTS - same rules as the 13-week, which this had drifted a long way
+      // from. It was still on the pre-pkg618 all-or-nothing suppression: one invoice killed
+      // a project's whole month of sales, one bill killed its whole month of costs. It also
+      // had no CIS on labour, no valuation boundary, no carry-forward and no payment
+      // performance - so the two pages could not have agreed even on the weeks they share.
+      //
+      // Netted, not discarded, on both sides.
+      const invByProject = {}
+      for (const i of (data.receivables || [])) {
+        if (!i.projectNo || !inMonth(i.expectedDate || i.dueDate, mk)) continue
+        const k = String(i.projectNo)
+        invByProject[k] = (invByProject[k] || 0) + (i.amountDue || 0)
       }
+      const billByProject = {}
+      for (const b of (data.bills || [])) {
+        if (!b.project || !inMonth(b.payDate || b.dueDate, mk)) continue
+        const k = normName(b.project)
+        billByProject[k] = (billByProject[k] || 0) + Math.abs(b.amountDue || 0)
+      }
+      const cisRate = Math.min(0.99, Math.max(0, Number((data.financeCfg || {}).cisRate ?? 20) / 100))
+      const netOfCis = (g) => g * (1 - cisRate)
+      const today = new Date().toISOString().slice(0, 10)
+
+      let fcSalesIn = 0, fcCostOut = 0, fcLabGross = 0
+      for (const fc of (data.projForecasts || [])) {
+        // Applied for -> the real invoice and bills have replaced it.
+        const bound = fc.valDate || fc.latestAppEnd || fc.to || ''
+        if (fc.latestAppEnd && fc.to && fc.to <= fc.latestAppEnd) continue
+
+        const rawS = (bound && bound < today) ? 0
+          : (fc.salesSchedule || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
+        const k = String(fc.projectNo || '')
+        const offS = Math.min(rawS, invByProject[k] || 0)
+        invByProject[k] = Math.max(0, (invByProject[k] || 0) - offS)
+        fcSalesIn += Math.max(0, rawS - offS)
+
+        const past = (x) => bound && x.date && x.date <= bound
+        // Forecast labour is GROSS; what leaves the bank is net of CIS, and the 20% goes
+        // to HMRC separately.
+        const rawLg = (fc.labourSchedule || []).filter(x => inMonth(x.date, mk) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        const rawM = (fc.matItems || []).filter(x => inMonth(x.date, mk) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        const nk = normName(fc.projectName || '')
+        const avail = billByProject[nk] || 0
+        const rawL = netOfCis(rawLg)
+        const offL = Math.min(rawL, avail)
+        const offM = Math.min(rawM, Math.max(0, avail - offL))
+        billByProject[nk] = Math.max(0, avail - offL - offM)
+        fcCostOut += Math.max(0, rawL - offL) + Math.max(0, rawM - offM)
+        fcLabGross += rawLg
+      }
+      // CIS on forecast labour, paid the 22nd of the following month - so it lands in the
+      // month AFTER the labour, which over twelve months is a real timing difference.
+      const cisOnFc = cisRate > 0 ? fcLabGrossPrev * cisRate : 0
+      fcLabGrossPrev = fcLabGross
 
       // Manual lumps for this month.
       let lumpIn = 0, lumpOut = 0
@@ -109,13 +153,13 @@ export default function MonthlyCashFlow() {
       }
 
       const moneyIn = invoicesIn + retIn + vatIn + fcSalesIn + lumpIn
-      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut + lumpOut
+      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + cisOnFc + fcCostOut + lumpOut
       const net = moneyIn - moneyOut
       running += net
       rows.push({
         mk, label: monthShort(mk),
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatIn),
-        bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut + cisOnFc), cisEstimated: cisOnFc > 0,
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut),
         lumpIn: Math.round(lumpIn), lumpOut: Math.round(lumpOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
