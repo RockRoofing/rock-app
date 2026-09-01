@@ -1,57 +1,60 @@
-pkg699 - You were right: the 26% ignored the bills
-===================================================
+pkg700 - Revenue and cost were landing in different financial years
+====================================================================
 
-*** SUPERSEDES pkg591 - pkg698. ***
+*** SUPERSEDES pkg591 - pkg699. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-balance-sheet.js
   ... and the rest of the set as before
 
 
-MY BANNER WAS COMPARING THE WRONG THINGS
-------------------------------------------
-    forecast cost only    358,092   = 26%   <- what it said
-    plus bills out        298,912
-    both together         657,004   = 48%
+I WAS WRONG ABOUT THE FORECASTS - AND YOUR CSV PROVES IT
+----------------------------------------------------------
+    your forecasts as stored:  sales 1,371,624   cost 920,154   GM 33%
 
-Your forecasts hold 920,154 of cost. The 12-month showed 358,092 because
-562,062 HAS ALREADY BEEN NETTED against bills sitting in Xero - which is the
-netting working exactly as intended. September is the clearest case: 263,658 of
-bills, and materials and labour both reading "none".
-
-So yes - it was excluding costs already incurred through bills. Counting the
-forecast side while ignoring the bills that replaced it was never going to give a
-sensible percentage.
+Exactly the 28-35% you said to expect. The forecasts are RIGHT. I should not have
+suggested otherwise on the strength of a run-rate comparison that cannot see a
+lumpy contract book.
 
 
-AND A SECOND REASON THE PERCENTAGE CANNOT BE READ AS A MARGIN
----------------------------------------------------------------
-A twelve-month window collects revenue for work ALREADY DONE, whose cost was paid
-before the window opened. Cost is truncated at the start; revenue is not. The
-percentage will always sit below your true margin and it is not a fault.
+WHAT IS ACTUALLY WRONG - A TIMING SPLIT
+-----------------------------------------
+    revenue was bucketed by the SALES SCHEDULE MONTH
+    cost was bucketed by DELIVERY DATE and LABOUR WINDOW END
 
-Look at it month by month and the artefact is obvious:
+On a period valued in November with materials delivered in December, the REVENUE
+landed in this financial year and the COST landed in the next. Same work, two
+years, and a gross margin ten points too high.
 
-    Sep 26   sales 166,381   cost 263,658   158%
-    Oct 26   sales 285,838   cost  52,522    18%
+    valued inside FY to Nov 26   sales 602,044   cost 373,669
+    valued after Nov 26          sales 769,580   cost 546,485
 
-Same work. September pays for what October bills. In a CASH flow that is correct.
+The P&L was showing 1,039,548 of revenue in those months - it was reaching into
+work valued outside the year while its cost stayed behind.
 
-The banner is now amber rather than red, counts bills, and says all of this.
+COST IS NOW HELD AGAINST THE PERIOD IT BELONGS TO, capped at the valuation date.
+December work stays in FY27, both sides of it.
 
 
-THE REAL GAPS, FROM YOUR CSV - AND THERE ARE ONLY THREE
----------------------------------------------------------
-    J243-Christchurch  14/09-25/09   sales 11,998   NO cost at all
-    J248-Renshaw       21/09-09/10   sales 37,762   labour only, no materials
-    J230-St Chads      09/11-13/11   sales    655   labour only, no materials
+AND A SILENT DROP
+-----------------
+    if (x.date && x.amount)
 
-That is all. Three forecasts, and only one of any size. Your project data is in
-far better shape than the banner was suggesting - the 177,145 "missing" figure I
-quoted earlier was the same mistake, counting forecast cost alone.
+A cost line with no date was skipped entirely - not deferred, DROPPED. It now
+falls to the period end. That is cost that was disappearing from the P&L and the
+balance sheet with nothing on screen to say so.
 
-WHICH LEAVES THE REVENUE OVERSTATEMENT as the one substantial issue outstanding:
-December at 485,102 against a 199,242 monthly average.
+Both fixes applied to the Forecast Balance Sheet too, or it would build reserves
+from a margin the P&L no longer shows and "Out by" would flag a difference with no
+obvious cause.
+
+
+WHAT TO EXPECT
+--------------
+Gross margin on the forecast months should fall to something near 33%, the FY
+total should drop well below 49,006, and the year will probably show a LOSS -
+which is consistent with the eight actual months you can verify.

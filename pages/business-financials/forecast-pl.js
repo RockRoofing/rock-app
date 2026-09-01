@@ -88,8 +88,24 @@ export default function ForecastPL() {
         fRev[r.month] = (fRev[r.month] || 0) + r.amount
         ;(fProj[r.month] = fProj[r.month] || {})[nm] = (fProj[r.month][nm] || 0) + r.amount
       }
-      for (const x of (a.materials || [])) { if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fMat[k] = (fMat[k] || 0) + x.amount } }
-      for (const x of (a.labour || [])) { if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fLab[k] = (fLab[k] || 0) + x.amount } }
+      // COST FOLLOWS THE REVENUE IT SUPPORTS.
+      //
+      // Revenue is bucketed by the sales schedule's month; cost was bucketed by DELIVERY
+      // date and labour window end. On a period valued in November with materials
+      // delivered in December, the revenue landed in this financial year and the cost in
+      // the next - same work, two years, and a gross margin ten points too high.
+      //
+      // Costs are now held against the month of the PERIOD they belong to, capped at the
+      // valuation date. An undated line falls to the period end rather than being dropped
+      // silently, which is how it was disappearing altogether.
+      const bound = (fc.valDate || fc.to || '').slice(0, 7)
+      const put = (bucket, x) => {
+        const own = x.date ? String(x.date).slice(0, 7) : bound
+        const k = (bound && own > bound) ? bound : own
+        if (k && x.amount) bucket[k] = (bucket[k] || 0) + x.amount
+      }
+      for (const x of (a.materials || [])) put(fMat, x)
+      for (const x of (a.labour || [])) put(fLab, x)
     }
 
     // Forecast overheads per month, from the Budgets predicted grid.

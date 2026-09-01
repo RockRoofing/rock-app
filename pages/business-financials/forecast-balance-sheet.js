@@ -148,8 +148,18 @@ export default function ForecastBalanceSheet() {
       const acc = fc.accrual
       if (!acc) continue
       for (const r of (acc.revenueByMonth || [])) if (r.month && r.amount) fRev[r.month] = (fRev[r.month] || 0) + r.amount
-      for (const x of (acc.materials || [])) if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fCos[k] = (fCos[k] || 0) + x.amount }
-      for (const x of (acc.labour || [])) if (x.date && x.amount) { const k = String(x.date).slice(0, 7); fCos[k] = (fCos[k] || 0) + x.amount }
+      // Same as the P&L: cost is held against the period it belongs to, capped at the
+      // valuation date, and an undated line falls to the period end rather than vanishing.
+      // Without this the balance sheet builds reserves from a margin the P&L no longer
+      // shows, and "Out by" would catch it as a difference with no obvious cause.
+      const cbound = (fc.valDate || fc.to || '').slice(0, 7)
+      const putC = (x) => {
+        const own = x.date ? String(x.date).slice(0, 7) : cbound
+        const k = (cbound && own > cbound) ? cbound : own
+        if (k && x.amount) fCos[k] = (fCos[k] || 0) + x.amount
+      }
+      for (const x of (acc.materials || [])) putC(x)
+      for (const x of (acc.labour || [])) putC(x)
     }
     const fOh = {}
     for (const byM of Object.values(oh.predictedByCodeMonth || {})) {
