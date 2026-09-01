@@ -1,47 +1,52 @@
-pkg686 - Winnersh was 10% short - my bug from pkg684
-=====================================================
+pkg687 - "Where the closing balance comes from"
+================================================
 
-*** SUPERSEDES pkg591 - pkg685. ***
+*** SUPERSEDES pkg591 - pkg686. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js
+  pages/business-financials/cashflow.js
   ... and the rest of the set as before
 
 
-THE SPREAD TOTALLED 90%
------------------------
-    saved      2026-08: 60,  2026-09: 40
-    columns    2026-09,      2026-10
-    result     2026-09: 40 (carried from the old AUGUST column)
-               2026-10: 50 (evened)
-               total 90%  ->  4,176.84 of the period simply gone
+THE FASTEST WAY TO FIND IT IS TO STOP HUNTING AND RECONCILE
+-------------------------------------------------------------
+New panel above the customer table:
 
-The re-even guard compared how MANY keys there were, not WHICH:
+    Opening cash                                     30,000
+    Invoices collected (debt you already had)       499,719
+    Retention released                                    0
+    VAT refunds                                      72,010
+    New work billed and collected                   605,589
+    Everything paid out                            -582,000
+    Closing cash                                    625,318
 
-    Object.keys(spread).length === periodMonths.length
+    499,719 of the closing balance is collection of debt that existed on day one.
+    434,338 of it is already overdue and collected in week 1. Strip it out and the
+    quarter's trading movement is 95,599 - the figure to compare with your profit.
 
-Two old keys, two new keys, so it decided nothing had changed - and part-carried
-percentages into columns they were never meant for. Entirely my fault from
-pkg684, and it looked plausible: 16,707 in October was a believable figure.
+THAT IS THE ANSWER TO YOUR QUESTION. The 560k is not a bug. It is your ledger
+being collected. A cash forecast SHOULD show that - but only if the money arrives,
+and 434k of it is already late.
 
-Now compares the KEYS themselves, and re-evens whenever they differ OR the
-carried-over figures do not add to 100.
-
-    keys changed     -> 50 / 50, total 100%
-    keys unchanged   -> 60 / 40 kept, total 100%
-    column added     -> 33 / 33 / 34, total 100%
+Strip it out and the quarter trades at roughly 96k against a 100k annual profit.
+That is high but not absurd, and it points at the two things below rather than at
+a broken calculation.
 
 
-AND IT NOW SAYS WHEN A SPREAD DOES NOT ADD UP
------------------------------------------------
-    Sales spread totals 90% - GBP 4,176.84 of this period is not in the forecast.
+TWO THINGS WORTH CHECKING NEXT, IN ORDER
+-----------------------------------------
+1. IS 434k OF OVERDUE DEBT REALLY ARRIVING IN WEEK 1? That single assumption is
+   most of the balance. Open the overdue row, look at the days-overdue column, and
+   set expected dates on anything not actually coming. Every date you set moves
+   money out of week 1 and the curve flattens.
 
-The per-row Total already went red, but a red 90% is easy to read past. Naming the
-money makes it much harder to ignore - and that is what would have caught this
-without you having to spot it.
+2. COST IS STILL LIGHT. 605,589 of new work carries 419,889 of cost - 69%. Roofing
+   runs 75-85%, so roughly 64,000 of cost is missing from the forecasts. Waungron,
+   Christchurch and Russell Hill all show "none" for both materials and labour in
+   the project table, which is where I would look first.
 
-OPEN WINNERSH, set the two percentages, Save. The columns are right now
-(App to 09/09/26 and App to 09/10/26); it was only the figures in them.
+Neither is a code fault. Both make the forecast too optimistic, and together they
+account for the gap you spotted.

@@ -35,6 +35,20 @@ const todayISO = new Date().toISOString().slice(0, 10)
 // could not tell which was which.
 //
 // One component, so all seven columns behave identically and cannot drift apart.
+// One reconciliation line. Module scope - a component declared inside another remounts on
+// every render.
+function RecRow({ k, v, note, bold }) {
+  return (
+    <tr style={{ borderTop: bold ? '2px solid #ddd' : '1px solid #f2f0ec' }}>
+      <td style={{ padding: '5px 10px', fontWeight: bold ? 700 : 400 }}>
+        {k}{note ? <div style={{ fontSize: 10, color: '#aaa' }}>{note}</div> : null}
+      </td>
+      <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: bold ? 800 : 600, whiteSpace: 'nowrap',
+        color: v < 0 ? '#dc2626' : (bold ? INK : '#0f766e') }}>{gbp(v)}</td>
+    </tr>
+  )
+}
+
 function Caret({ open }) {
   return (
     <span style={{
@@ -2287,6 +2301,51 @@ export default function CashFlow() {
                       <td style={td}>{t.sales > 0 ? `${(((t.mat + t.labour) / t.sales) * 100).toFixed(0)}%` : '-'}</td>
                     </tr></tfoot>
                   </table>
+                </div>
+              )
+            })()}
+
+            {/* WHERE THE CLOSING BALANCE COMES FROM.
+                A 13-week rise is only credible if you can see how much of it is PROFIT and
+                how much is collecting debt you already had. Those are completely different
+                claims - one is trading, the other is a one-off that cannot repeat. */}
+            {(() => {
+              const t = (k) => forecast.reduce((a, r) => a + (r[k] || 0), 0)
+              const openC = forecast.length ? (forecast[0].closing - forecast[0].net) : 0
+              const closeC = forecast.length ? forecast[forecast.length - 1].closing : 0
+              // Money in that is COLLECTION OF EXISTING DEBT rather than new trading.
+              const arrRow = forecast.find(r => r.arrears)
+              const existingDebt = (data.receivables || [])
+                .filter(i => !excluded[invKey(i)])
+                .reduce((a, i) => a + (i.amountDue || 0), 0)
+              const collected = t('invoicesIn')
+              const fromForecast = t('projSalesIn')
+              const retColl = t('retIn')
+              const totalOut = t('moneyOut')
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Where the closing balance comes from</div>
+                  <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
+                    A rise of this size is worth taking apart. Collecting debt you already had is not the same as earning money, and only one of the two can happen twice.
+                  </div>
+                  <table style={{ borderCollapse: 'collapse', fontSize: 12.5, minWidth: 520 }}>
+                    <tbody>
+                      <RecRow k="Opening cash" v={openC} />
+                      <RecRow k="Invoices collected (debt you already had)" v={collected} note={`${gbp(existingDebt)} outstanding at the start`} />
+                      <RecRow k="Retention released" v={retColl} />
+                      <RecRow k="VAT refunds" v={t('vatIn')} />
+                      <RecRow k="New work billed and collected" v={fromForecast} note="from the project forecasts" />
+                      <RecRow k="Everything paid out" v={-totalOut} />
+                      <RecRow k="Closing cash" v={closeC} bold />
+                    </tbody>
+                  </table>
+                  {/* The test that matters. */}
+                  <div style={{ marginTop: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#92400e', maxWidth: 760 }}>
+                    <strong>{gbp(collected + retColl)} of the closing balance is collection of debt that existed on day one.</strong>{' '}
+                    {arrRow && arrRow.invoicesIn > 0 && <>{gbp(arrRow.invoicesIn)} of it is already overdue and is being collected in week 1. </>}
+                    If that money arrives later than assumed, the closing balance falls by the same amount - it does not disappear, it moves.
+                    Strip it out and the quarter's trading movement is <strong>{gbp(closeC - openC - collected - retColl)}</strong>, which is the figure to compare against your profit.
+                  </div>
                 </div>
               )
             })()}
