@@ -1042,6 +1042,16 @@ export default async function handler(req, res) {
               raw: Number(m.amount != null && m.amount !== '' ? m.amount : m.value) || 0,
             })),
             from: fc.from, to: fc.to,
+            // THE VALUATION DATE, taken from the sales schedule where it exists.
+            //
+            // fc.to is the period END the user typed - 13/11 on a period running to the
+            // 13th. The valuation date is when the work is certified, which is what
+            // actually decides whether a period is still forecast. Each sales line already
+            // carries it as appDate; the latest one is the period's boundary.
+            valDate: (() => {
+              const ds = (fc.salesSchedule || []).map(x => x.appDate).filter(Boolean).sort()
+              return ds.length ? ds[ds.length - 1] : (fc.to || '')
+            })(),
             // A person's decision about what is still coming, made when the forecast was
             // last redone. null means "use claimed less spend"; a number means somebody
             // has looked and settled it.

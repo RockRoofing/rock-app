@@ -1,57 +1,52 @@
-pkg668 - Payment behaviour into the cash flow, with a toggle
-=============================================================
+pkg671 - The remainder rolls forward, both directions
+======================================================
 
-*** SUPERSEDES pkg591 - pkg667. ***
+*** SUPERSEDES pkg591 - pkg670. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
   pages/business-financials/cashflow.js
-  pages/api/business-financials.js
   ... and the rest of the set as before
 
 
-THE TOGGLE - "USE PAYMENT PERFORMANCE"
---------------------------------------
-In Facilities, beside the risk setting. OFF BY DEFAULT and deliberately so -
-shifting every receipt by a measured average changes the entire forecast, and that
-should be a decision rather than something that happens the moment data is
-imported.
+YOUR THREE QUESTIONS
+--------------------
+SOURCE OF TRUTH - you reasoned to the right answer, and it is a hybrid. The
+APPLICATION decides WHEN a period stops being forecast (the valuation boundary,
+immune to invoice lag). The INVOICE decides HOW MUCH and WHEN the cash lands (Xero
+as the record). The applied-for-not-yet-invoiced bridge covers the gap between
+them. Using applications for cash timing would mean guessing payment dates;
+using invoices for the boundary would leave the forecast hanging on until
+paperwork appeared.
 
-    off  "due dates"  every invoice assumed paid exactly on terms
-    on   "measured"   each customer shifted by what they actually do
+ROLLING - yes, that is what you meant and it is not what I had built. I dropped
+the whole period. You are describing carrying the REMAINDER, which cannot double
+count because the certified part is already a real invoice. You are right, and it
+is the better model: work not certified this period slipped, it was not cancelled.
 
-The label says which is live, so a forecast can never quietly be one or the other.
-
-
-THE TABLE - EVERYONE WHO OWES YOU MONEY
----------------------------------------
-  Customer   Invoices  Retention  Forecast   Total   Measured  Spread  Days used
-  Wates       216,997     24,000   120,000  360,997      31d     19d   45d (typed)
-  Torsion      38,125          -    87,500  125,625      12d     60d          12d
-  Selsdon      11,998      5,000         -   16,998  no data       -           0d
-
-Invoices, retention AND forecast sales in one place, so you see a customer's whole
-exposure rather than three separate views of it.
-
-BLANK USES THE MEASURED FIGURE, typed overrides it. Shared with the Payment Perf
-tab - change it in either place, it is one store.
-
-SPREAD IS THERE FOR A REASON. Torsion medians 12 days and swings 60. Applying that
-12 will be wrong most months; the column tells you when the average is not worth
-trusting.
+INVOICE GREATER THAN FORECAST - the same rule with the sign flipped. Certify more
+than forecast and you are ahead, so the next period carries less.
 
 
-TWO THINGS THAT HAD TO BE FIXED TO MAKE THE TABLE WORK
-------------------------------------------------------
-RETENTION carried the PROJECT name, not the customer, so those rows would never
-have grouped with that customer's invoices. It now carries both.
+ONE RULE, BOTH DIRECTIONS
+-------------------------
+    period                own    carried in   effective  certified   carried out
+    App 3 valued 30/06  60,000            0      60,000     45,000       15,000
+    App 4 valued 31/07  60,000       15,000      75,000     80,000       -5,000
+    App 5 valued 31/08  60,000       -5,000      55,000          0       55,000
+    App 6 valued 30/09  60,000       55,000     115,000   still to come
+    App 7 valued 31/10  60,000            0      60,000   still to come
 
-FORECAST SALES carried no customer at all. Now taken from the dashboard record, so
-a project's future billing sits with the rest of that customer's money.
+Walked per project in valuation order, stopping at the first open period - so the
+whole accumulated variance lands on the next period you are actually going to bill,
+not spread across all of them.
 
+IT RIDES ON THAT PERIOD'S FIRST SALES DATE, so it appears in the week that money
+was already expected rather than being dumped into week 1.
 
-AN EXPECTED DATE SET BY HAND ALWAYS WINS over both the measured figure and a typed
-override. That is a judgement somebody has made about a specific invoice, and a
-customer average should not overrule it.
+VISIBLE IN THE DRILL-DOWN. A project showing more than its own forecast says
+"incl GBP 55,000 carried forward"; one showing less says "less GBP 5,000 certified
+ahead". A period that quietly grew by 55,000 with no explanation would be worse
+than the problem it fixes.

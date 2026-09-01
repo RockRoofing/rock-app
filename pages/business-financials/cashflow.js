@@ -620,7 +620,103 @@ export default function CashFlow() {
       return out
     })()
     const awaitingTotal = awaitingInvoice.reduce((t, x) => t + x.amount, 0)
-    const salesSpent = (fc) => isApplied(fc) || !!(fc.to && fc.to < todayISO)
+
+    // APPLIED FOR BUT NOT YET INVOICED - the sales-side mirror of the above.
+    //
+    // Once a period has been applied for its forecast sales drop, on the assumption the
+    // invoice has replaced them. Between raising the application and the invoice appearing
+    // in Xero, that money is in NEITHER place - the forecast has let go of it and
+    // receivables has not picked it up. On a 20,859 period with only 12,000 invoiced, the
+    // week silently lost 8,859.
+    //
+    // So sales are dropped only to the extent invoices have actually arrived, and the
+    // shortfall lands in the current week rather than sitting in a month that has gone.
+    const awaitingCash = (() => {
+      const invByProject = {}
+      for (const i of (data.receivables || [])) {
+        if (!i.projectNo || excluded[invKey(i)]) continue
+        const k = String(i.projectNo)
+        invByProject[k] = (invByProject[k] || 0) + (i.amountDue || 0)
+      }
+      const out = []
+      for (const fc of (data.projForecasts || [])) {
+        if (!isApplied(fc)) continue
+        const bound = fc.valDate || fc.to || ''
+        const certified = (fc.salesSchedule || [])
+          .filter(x => (x.appDate || x.date) && (x.appDate || x.date) <= bound)
+          .reduce((t, x) => t + (x.amount || 0), 0)
+        if (certified <= 0) continue
+        const k = String(fc.projectNo || '')
+        const invoiced = invByProject[k] || 0
+        const short = Math.max(0, certified - invoiced)
+        invByProject[k] = Math.max(0, invoiced - certified)   // consume, so two periods cannot both claim it
+        if (short > 0.5) out.push({ name: projLabel(fc), amount: short, upTo: bound })
+      }
+      return out
+    })()
+    const awaitingCashTotal = awaitingCash.reduce((t, x) => t + x.amount, 0)
+
+
+    // THE VALUATION DATE IS THE BOUNDARY, not the period end you typed.
+    //
+    // fc.to is the end of the period - 13/11 on a period running to the 13th. What decides
+    // whether revenue is still forecast is when the work is CERTIFIED, which can be days
+    // or weeks apart. Using the period end meant a period whose valuation had passed
+    // without an application kept its forecast sales.
+    //
+    // It DROPS rather than rolling into the next month, which is what you asked for and is
+    // the conservative treatment: a period valued without being applied for has not been
+    // earned, so it is not cash to come. The work carries into the next application, and
+    // that period's own forecast is where it should appear.
+    const salesSpent = (fc) => {
+      if (isApplied(fc)) return true
+      const bound = fc.valDate || fc.to || ''
+      return !!(bound && bound < todayISO)
+    }
+
+    // CARRY THE VARIANCE FORWARD, PER PROJECT.
+    //
+    // A period certified for LESS than forecast has not lost that work - it slipped, and
+    // it will be certified next period. Dropping the remainder understated every future
+    // month. Certify MORE than forecast and the opposite is true: you are ahead, so the
+    // next period has less left in it.
+    //
+    // One rule, both directions: carry (forecast - certified) into the next period. Only
+    // the REMAINDER moves, so nothing is counted twice - the certified part has already
+    // become a real invoice.
+    //
+    // Certified is measured by what has been INVOICED for that project. The application
+    // decides WHEN a period closes; the invoice decides how much of it was real.
+    const carryIn = {}
+    {
+      const byProject = {}
+      for (const fc of (data.projForecasts || [])) {
+        const k = String(fc.projectKey || fc.projectNo || '')
+        ;(byProject[k] = byProject[k] || []).push(fc)
+      }
+      const invLeft = {}
+      for (const i of (data.receivables || [])) {
+        if (!i.projectNo || excluded[invKey(i)]) continue
+        const k = String(i.projectNo)
+        invLeft[k] = (invLeft[k] || 0) + (i.amountDue || 0)
+      }
+      for (const [, list] of Object.entries(byProject)) {
+        // Oldest valuation first, so the carry walks forward in the order the periods
+        // were actually certified.
+        const ordered = list.slice().sort((a, b) => String(a.valDate || a.to || '').localeCompare(String(b.valDate || b.to || '')))
+        let carry = 0
+        for (const fc of ordered) {
+          carryIn[fc.id || `${fc.projectKey}|${fc.from}|${fc.to}`] = carry
+          if (!salesSpent(fc)) { carry = 0; break }   // reached the open periods - stop
+          const own = (fc.salesSchedule || []).reduce((t, x) => t + (x.amount || 0), 0)
+          const k = String(fc.projectNo || '')
+          const avail = invLeft[k] || 0
+          const certified = Math.min(own + carry, avail)
+          invLeft[k] = Math.max(0, avail - certified)
+          carry = (own + carry) - certified
+        }
+      }
+    }
     // Costs drop ONLY when a real application has replaced them. An elapsed period keeps
     // its costs until the real bill turns up, at which point the month netting removes
     // them - so nothing is double counted and nothing silently disappears.
@@ -765,10 +861,19 @@ export default function CashFlow() {
       const isArrears = (d) => w === 0 && d && d < s
       let invoicesIn = 0, arrInvoices = 0
       const invDetail = []
+      const arrInvDetail = []
       for (const i of (data.receivables || [])) {
         if (excluded[invKey(i)]) continue
         const d = i.expectedDate || i.dueDate || ''
-        if (isArrears(d)) arrInvoices += (i.amountDue || 0)
+        if (isArrears(d)) {
+          arrInvoices += (i.amountDue || 0)
+          // Recorded in the SAME shape as a normal week, so the arrears row's drill-down
+          // works like every other. It was showing "Total (0)" against 434,338 - the
+          // figure was right and the list behind it was never built.
+          arrInvDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
+            project: i.projectName || '', amount: i.amountDue || 0, due: d, expected: !!i.expectedDate,
+            offset: 0, total: i.total || 0 })
+        }
         else if (inWkIn(d, offsetFor(i))) {
           invoicesIn += (i.amountDue || 0)
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
@@ -925,7 +1030,14 @@ export default function CashFlow() {
         if (costsSpent(fc)) continue
 
         const invThisWk = fc.projectNo ? (invByProjectThisWk[String(fc.projectNo)] || 0) : 0
-        const rawS = salesSpent(fc) ? 0 : (fc.salesSchedule || []).filter(x => inWkIn(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        // The carry from earlier periods rides on the FIRST dated sales line of this
+        // period, so it lands in the week that period's money was already due rather than
+        // being spread or dumped in week 1.
+        const lines = salesSpent(fc) ? [] : (fc.salesSchedule || []).filter(x => x.date)
+        const firstDate = lines.map(x => x.date).sort()[0] || ''
+        const carry = carryIn[fc.id || `${fc.projectKey}|${fc.from}|${fc.to}`] || 0
+        const rawS = lines.filter(x => inWkIn(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+          + ((carry && firstDate && inWkIn(firstDate)) ? carry : 0)
         const offS = Math.min(rawS, invThisWk)
         const sIn = Math.max(0, rawS - offS)
         if (offS > 0 && fc.projectNo) {
@@ -965,6 +1077,8 @@ export default function CashFlow() {
         // dashboard cache has not named that job, and the key was the fallback - which
         // is the raw Redis key and means nothing to read.
         if (sIn || lOut || mOut) fcBreak.push({ name: projLabel(fc), no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to, month: s.slice(0, 7),
+          // Carried in from an earlier period that was certified for less than forecast.
+          carry: (carry && firstDate && inWkIn(firstDate)) ? carry : 0,
           matEstimated: (fc.matItems || []).some(m => m.estimatedTerm) })
         // Use the figures already worked out above, net of any real bill. Recomputing them
         // here is how the two got out of step - and `hasBill` no longer exists.
@@ -981,18 +1095,25 @@ export default function CashFlow() {
       // ARREARS ROW, before week 1 only. Everything already past its date, swept forward
       // - the money that is late rather than due. Shown separately so week 1 reads as the
       // week it actually is, and so the size of the arrears is impossible to miss.
-      if (w === 0 && (arrInvoices || arrBills || arrRet || awaitingTotal)) {
-        const arrNet = arrInvoices + arrRet - arrBills - awaitingTotal
+      if (w === 0 && (arrInvoices || arrBills || arrRet || awaitingTotal || awaitingCashTotal)) {
+        const arrNet = arrInvoices + awaitingCashTotal + arrRet - arrBills - awaitingTotal
         running += arrNet
         rows.push({
           wk: 'Overdue - brought forward', arrears: true, weekStart: s,
-          invoicesIn: Math.round(arrInvoices), retIn: Math.round(arrRet), vatIn: 0,
+          invoicesIn: Math.round(arrInvoices + awaitingCashTotal),
+          awaitingCash: Math.round(awaitingCashTotal), awaitingCashList: awaitingCash,
+          retIn: Math.round(arrRet), vatIn: 0,
+          // Shown alongside the real overdue invoices, marked so the two are not confused.
+          invDetail: [...arrInvDetail, ...awaitingCash.map(x => ({
+            name: x.name, ref: 'applied for, not yet invoiced', project: '',
+            amount: x.amount, due: x.upTo, expected: false, offset: 0, total: 0, pending: true,
+          }))].sort((a, b) => b.amount - a.amount),
           vatEstimated: false, vatSrcs: [],
           bills: Math.round(arrBills + awaitingTotal), awaiting: Math.round(awaitingTotal), awaitingList: awaitingInvoice,
           arrBillList, arrInvList,
           overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
           projSalesIn: 0, projCostOut: 0, projNet: 0, projLabourOut: 0, projMatOut: 0, fcBreak: [],
-          moneyIn: Math.round(arrInvoices + arrRet), moneyOut: Math.round(arrBills + awaitingTotal),
+          moneyIn: Math.round(arrInvoices + awaitingCashTotal + arrRet), moneyOut: Math.round(arrBills + awaitingTotal),
           net: Math.round(arrNet), closing: Math.round(running),
         })
       }
@@ -1527,6 +1648,17 @@ export default function CashFlow() {
                                     difference matters when a week looks optimistic. */}
                                 <td style={{ padding: '3px 6px', color: x.expected ? '#0f766e' : '#999' }}>
                                   {x.due ? fmtDMY(x.due) : '-'}{x.expected ? ' (expected)' : ' (due date)'}
+                                  {/* On the arrears row every date has passed, so say how
+                                      long by - "12/06 (due date)" does not convey that it
+                                      is eleven weeks late. */}
+                                  {x.pending && (
+                                    <div style={{ fontSize: 9.5, color: '#7c3aed', fontWeight: 700 }}>certified, invoice not yet in Xero</div>
+                                  )}
+                                  {!x.pending && x.due && x.due < todayISO && (
+                                    <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 700 }}>
+                                      {Math.round((Date.parse(todayISO) - Date.parse(x.due)) / 86400000)} days overdue
+                                    </div>
+                                  )}
                                   {x.offset ? <div style={{ fontSize: 9.5, color: '#b45309' }}>+{x.offset}d - this customer pays late</div> : null}
                                 </td>
                                 {/* Amber where part of it has already been paid - the two
@@ -1739,7 +1871,12 @@ export default function CashFlow() {
                                 <tr key={k} style={{ borderTop: '1px solid #eee' }}>
                                   <td style={{ padding: '3px 6px' }}>{b.name || b.no || '(unnamed)'}</td>
                                   <td style={{ padding: '3px 6px', color: '#999' }}>{b.from ? `${fmtDMY(b.from)} - ${fmtDMY(b.to)}` : '-'}</td>
-                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{b.sales ? gbp(b.sales) : '-'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>
+                                    {b.sales ? gbp(b.sales) : '-'}
+                                    {b.carry ? <div style={{ fontSize: 9.5, color: b.carry > 0 ? '#b45309' : '#16a34a' }}>
+                                      {b.carry > 0 ? `incl ${gbp(b.carry)} carried forward` : `less ${gbp(-b.carry)} certified ahead`}
+                                    </div> : null}
+                                  </td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: b.mat ? '#dc2626' : '#c00' }}
                                     title={b.matEstimated ? 'Legacy forecast - only a delivery date was saved, so the payment date is estimated from the "legacy materials" setting rather than the line\u2019s own term.' : ''}>
                                     {b.mat ? gbp(-b.mat) : 'none'}{b.matEstimated ? <span style={{ color: '#b45309', fontSize: 9 }}> est</span> : null}</td>
