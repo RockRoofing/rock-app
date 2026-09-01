@@ -1,45 +1,60 @@
-pkg683 - The spread grid is labelled by APPLICATION, not calendar month
-========================================================================
+pkg684 - The wrong applications were being used
+================================================
 
-*** SUPERSEDES pkg591 - pkg682. ***
+*** SUPERSEDES pkg591 - pkg683. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
+
+*** AFTER DEPLOYING: RE-ENTER THE SPREAD PERCENTAGES ON PROJECT-CYCLE
+    FORECASTS. See the last section - the page warns you. ***
 
 
 CHANGED FILES (replace)
 -----------------------
   pages/project-cashflow.js
-  pages/business-financials/cashflow.js
   ... and the rest of the set as before
 
 
-THAT IS EXACTLY THE CONFUSION, AND IT IS A LABELLING FAULT
-------------------------------------------------------------
-The grid is keyed by CALENDAR MONTH, but your applications are not calendar
-months. On a 9th-of-the-month cycle the column headed "Aug 26" is the application
-VALUED 09/08 - covering work from 10 July. Calling it "August" invites precisely
-the reading you had, and you were right to question it.
+YOU WERE RIGHT - IT WAS THE WRONG WAY AROUND
+----------------------------------------------
+The spread used the calendar months the period TOUCHES. Winnersh runs 24/08 to
+11/09, which touches August and September, so it used the 09/08 and 09/09
+applications.
 
-Nothing about the maths was wrong. The percentage has always belonged to the
-application; the header just named the wrong thing.
+BUT THE 09/08 APPLICATION WAS SUBMITTED A FORTNIGHT BEFORE THE WORK STARTED. Work
+done from 24 August cannot be in it - it belongs to 09/09. And the two days from
+the 9th to the 11th of September belong to 09/10, which was not in the list at
+all. That is the missing tail you spotted.
 
-    BEFORE   Aug 26          Sep 26
-    AFTER    App 09/08/26    App 09/09/26
-             Aug 26          Sep 26        <- small, for orientation only
+    period 24/08/26 to 11/09/26, applications on the 9th
+      BEFORE   App 09/08/26   App 09/09/26
+      AFTER    App to 09/09/26   App to 10/09/26... i.e. 09/09 and 09/10
 
-The heading and caption follow: "Spread across the period's 2 applications - set
-what % of sales and labour falls in each application."
+An application valued on date V covers everything UP TO V. So the ones that matter
+are those with V on or after the period START, up to and including the first V
+that reaches the period END.
 
-WHERE THERE IS NO APPLICATION CALENDAR it still says the month, because that IS
-what the spread means on an end-of-month cycle. The label now tells you which
-convention is in force rather than assuming you know.
-
-THE STORED KEYS ARE UNCHANGED - still "2026-08" and so on. Display only, no
-migration, nothing to re-save.
+Header now reads "App to 09/09/26", because it covers work up to that date - which
+is the thing that was being misread.
 
 
-AND ON THE BUSINESS FINANCIALS SIDE
------------------------------------
-The project drill-down there groups by the month the CASH lands, which is a
-different thing again - Winnersh's August application appears under September
-because that is when it pays. The caption now says so, so the two pages cannot be
-read as if they meant the same thing.
+YOU WILL NEED TO RE-ENTER THE PERCENTAGES
+-----------------------------------------
+The columns are different applications now, so a spread saved against the old
+month keys no longer lines up and gets evened out. Your 60/40 will come back as
+50/50.
+
+The page says so in amber above the grid rather than letting it happen quietly -
+silently replacing a deliberate 60/40 would be a poor way to treat a decision you
+made.
+
+Only affects forecasts on the Project application dates cycle with a calendar. End
+of month + days is unchanged, because there the calendar month IS the period.
+
+
+A CIRCULARITY CAUGHT IN BUILD
+-----------------------------
+appCalendarUsable reads periodMonths, and periodMonths now needs to know whether
+the calendar is usable. Left as-is that is a value depending on itself. The usable
+test now runs against the raw calendar months, which is the right basis anyway:
+the question is whether the project HAS a calendar, not which applications one
+particular period lands on.

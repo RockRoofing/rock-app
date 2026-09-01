@@ -795,6 +795,33 @@ function paymentDate(refISO, term) {
 const termLabel = (term) => term ? (term.basis === 'eom' ? `EOM + ${num(term.days)}d` : `${num(term.days)} days`) : ''
 
 // Calendar months a period spans, as ['YYYY-MM', ...] (inclusive of both ends).
+// THE APPLICATIONS THAT ACTUALLY COVER A PERIOD.
+//
+// Not the calendar months the period touches - that is a different set and it is wrong.
+// Work done from 24 August is NOT in the application valued 09 August: that one was
+// submitted a fortnight before the work started. It belongs to 09 September.
+//
+// An application valued on date V covers everything up to V. So the ones that matter are
+// those with V on or after the period start, up to and including the first V that reaches
+// the period end - which is what picks up a two-day tail from the 9th to the 11th that was
+// otherwise falling out of the forecast entirely.
+function applicationsCovering(fromISO, toISO, calendar, resolve) {
+  if (!fromISO || !toISO) return []
+  const out = []
+  let [y, m] = fromISO.split('-').map(Number)
+  for (let i = 0; i < 36; i++) {
+    const mk = `${y}-${String(m).padStart(2, '0')}`
+    const dts = resolve(mk, calendar || {})
+    const v = dts && (dts.valDate || dts.appDate)
+    if (v && v >= fromISO) {
+      out.push(mk)
+      if (v >= toISO) break            // this one reaches the end of the period
+    }
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return out
+}
+
 function monthsInPeriod(fromISO, toISO) {
   if (!fromISO || !toISO) return []
   const [fy, fm] = fromISO.split('-').map(Number)
@@ -1482,7 +1509,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const labourUplift = labourOverride == null ? 0 : (labourThisPeriod - labourCalculated)
 
   // Calendar months this period spans, and keep the sales/labour spreads in step.
-  const periodMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
+  const rawMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
 
   // A CALENDAR CAN BE THE MONTHLY OVERRIDE TABLE, not just the three default days.
   //
@@ -1499,11 +1526,28 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const appCalendarUsable = !!(appCalendar && (
     (appCalendar.paymentDay && (appCalendar.valuationDay || appCalendar.applicationDay)) ||
     // Every month of this period has a payment date typed against it.
-    (periodMonths.length > 0 && periodMonths.every(mk => {
+    // Tested against the RAW calendar months, not periodMonths.
+    //
+    // periodMonths now depends on whether the calendar is usable (the spread is per
+    // application on that cycle), so testing it here would be circular - the value would
+    // depend on itself. The raw months are the right basis anyway: the question is whether
+    // this project HAS a calendar, not which applications a particular period lands on.
+    (rawMonths.length > 0 && rawMonths.every(mk => {
       const o = overridesFor(mk)
       return !!(o && o.paymentDate && (o.valuationDate || o.applicationDate))
     }))
   ))
+
+  // On the project cycle the spread is per APPLICATION, so the columns must be the
+  // applications that COVER the period - not the calendar months it happens to touch.
+  const periodMonths = useMemo(() => {
+    if ((salesTerm?.cycle === 'project') && appCalendarUsable) {
+      const a = applicationsCovering(from, to, appCalendar, resolveAppDates)
+      if (a.length) return a
+    }
+    return rawMonths
+  }, [from, to, salesTerm, appCalendar, appCalendarUsable, rawMonths])
+
   useEffect(() => {
     if (!periodMonths.length) return
     const fix = (spread) => {
@@ -1971,6 +2015,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {periodMonths.length > 1 && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} {appCalendarUsable ? 'applications' : 'calendar months'}</div>
+                  {/* The application columns have changed shape, so a spread saved against
+                      the old calendar-month keys no longer lines up and has been evened
+                      out. Silently replacing somebody's 60/40 with 50/50 would be a poor
+                      way to treat a deliberate decision. */}
+                  {appCalendarUsable && salesCycle === 'project' && (
+                    <div style={{ fontSize: 11, color: '#b45309', marginBottom: 6 }}>
+                      Columns are now the applications that COVER this period. If your percentages look evened out, they were saved against
+                      the old calendar-month columns - set them again and Save.
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {(salesCycle === 'applications' || salesCycle === 'project') ? 'sales and labour' : 'labour'} falls in each {appCalendarUsable ? 'application' : 'month'}. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle === 'weekly' || salesCycle === 'fortnightly' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
                   <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead><tr style={{ color: '#999' }}>
@@ -1986,7 +2040,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
                         return (
                           <th key={mk} style={{ padding: '3px 10px', minWidth: 86 }}>
                             {val ? <>
-                              <div style={{ color: '#5b7085' }}>App {fmtD(val)}</div>
+                              {/* "App TO the 9th" - it covers work UP TO that date, which is
+                                  the thing that was being misread. */}
+                              <div style={{ color: '#5b7085' }}>App to {fmtD(val)}</div>
                               <div style={{ fontSize: 9.5, fontWeight: 400, color: '#bbb' }}>{monthShort(mk)}</div>
                             </> : monthShort(mk)}
                           </th>
