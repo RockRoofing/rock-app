@@ -687,6 +687,47 @@ export default function CashFlow() {
     //
     // Certified is measured by what has been INVOICED for that project. The application
     // decides WHEN a period closes; the invoice decides how much of it was real.
+    // COST CARRY, on the SAME project-period rule as sales.
+    //
+    // An application is labour + materials in a project period, valued at the valuation
+    // date - the remainder is the margin at that date. So cost has to be attributed to the
+    // PROJECT PERIOD, not the calendar month: materials landing inside a valuation period
+    // are part of that application, and netting them over a month put them against the
+    // wrong period whenever the two did not line up.
+    //
+    // Cash dates are unaffected - a bill still pays on eom+X. This is about which period
+    // the cost BELONGS to, not when it leaves the bank.
+    const costCarryIn = {}
+    {
+      const byProject = {}
+      for (const fc of (data.projForecasts || [])) {
+        const k = String(fc.projectKey || fc.projectNo || '')
+        ;(byProject[k] = byProject[k] || []).push(fc)
+      }
+      const billLeft = {}
+      for (const b of (data.bills || [])) {
+        if (!b.project || excluded[b.id]) continue
+        const k = normName(b.project)
+        billLeft[k] = (billLeft[k] || 0) + Math.abs(b.amountDue || 0)
+      }
+      for (const [, list] of Object.entries(byProject)) {
+        const ordered = list.slice().sort((a, b) => String(a.valDate || a.to || '').localeCompare(String(b.valDate || b.to || '')))
+        let carry = 0
+        for (const fc of ordered) {
+          costCarryIn[fc.id || `${fc.projectKey}|${fc.from}|${fc.to}`] = carry
+          if (!salesSpent(fc)) { carry = 0; break }
+          const ownL = netOfCis((fc.labourSchedule || []).reduce((t, x) => t + (x.amount || 0), 0))
+          const ownM = (fc.matItems || []).reduce((t, x) => t + (x.amount || 0), 0)
+          const own = ownL + ownM
+          const k = normName(fc.projectName || '')
+          const avail = billLeft[k] || 0
+          const actual = Math.min(own + carry, avail)
+          billLeft[k] = Math.max(0, avail - actual)
+          carry = (own + carry) - actual
+        }
+      }
+    }
+
     const carryIn = {}
     {
       const byProject = {}
@@ -1057,7 +1098,12 @@ export default function CashFlow() {
         const billThisWk = fc.projectName ? (billByProjectThisWk[normName(fc.projectName)] || 0) : 0
         // Behind the valuation date it is no longer forecast - it is a real bill, or it is
         // in the awaiting-invoice figure that has already been swept into week 1.
-        const past = (x) => fc.latestAppEnd && x.date && x.date <= fc.latestAppEnd
+        // Behind THIS PERIOD'S valuation date, not a calendar month end. Cost inside the
+        // valuation window belongs to that application; the carry above handles whatever
+        // was not covered by real bills.
+        const bound = fc.valDate || fc.latestAppEnd || ''
+        const past = (x) => bound && x.date && x.date <= bound
+        const cCarry = costCarryIn[fc.id || `${fc.projectKey}|${fc.from}|${fc.to}`] || 0
         // What actually leaves the bank for the subcontractor. The withheld 20% is a
         // separate payment to HMRC in the CIS column, on the 22nd of the following month.
         const rawL = netOfCis((fc.labourSchedule || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0))
@@ -1066,7 +1112,12 @@ export default function CashFlow() {
         // subcontract labour than a materials invoice.
         const offL = Math.min(rawL, billThisWk)
         const offM = Math.min(rawM, Math.max(0, billThisWk - offL))
-        const lOut = Math.max(0, rawL - offL)
+        // The cost carry rides on the first dated cost line of the period, same as the
+        // sales carry - so it lands in the week that spend was already expected.
+        const costDates = [...(fc.labourSchedule || []), ...(fc.matItems || [])].map(x => x.date).filter(Boolean).sort()
+        const firstCost = costDates[0] || ''
+        const carryHere = (cCarry && firstCost && inWk(firstCost)) ? cCarry : 0
+        const lOut = Math.max(0, rawL - offL) + carryHere
         const mOut = Math.max(0, rawM - offM)
         if (offL + offM > 0) {
           const k = normName(fc.projectName || '')
@@ -1945,6 +1996,32 @@ export default function CashFlow() {
                 </tfoot>
               </table>
             </div>
+
+            {/* FORECASTS WITH NO VALUATION DATE.
+                appDate is written on SAVE, so a forecast saved before the project was
+                switched to application dates has none - and the boundary silently falls
+                back to the period END, which can be weeks out. You cannot tell by looking
+                at the forecast, so the page has to say. */}
+            {(() => {
+              const noVal = (data.projForecasts || []).filter(fc =>
+                !(fc.salesSchedule || []).some(x => x.appDate))
+              if (!noVal.length) return null
+              return (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#b91c1c' }}>
+                  <strong>{noVal.length} forecast{noVal.length === 1 ? '' : 's'} have no valuation date - open each one and press Save.</strong>
+                  <div style={{ marginTop: 4, color: '#7f1d1d' }}>
+                    {[...new Set(noVal.map(f => projLabel(f)))].slice(0, 8).join(', ')}
+                    {noVal.length > 8 ? ' and more' : ''}
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 11, color: '#991b1b' }}>
+                    The valuation date is written when a forecast is SAVED. These were saved before the project was switched to application
+                    dates, so sales and costs are being cut off at the PERIOD END instead - which can be weeks later, and puts the money in
+                    the wrong period. Nothing needs re-entering: open the forecast and press Save, and it picks up the project&apos;s own
+                    application calendar.
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* WHY A FORECAST IS NOT SHOWING.
                 Three gates can drop one and all of them were silent, so a forecast you
