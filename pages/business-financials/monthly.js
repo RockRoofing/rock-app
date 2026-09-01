@@ -112,7 +112,7 @@ export default function MonthlyCashFlow() {
       const netOfCis = (g) => g * (1 - cisRate)
       const today = new Date().toISOString().slice(0, 10)
 
-      let fcSalesIn = 0, fcCostOut = 0, fcLabGross = 0
+      let fcSalesIn = 0, fcCostOut = 0, fcLabGross = 0, fcMatOut = 0, fcLabNet = 0
       for (const fc of (data.projForecasts || [])) {
         // Applied for -> the real invoice and bills have replaced it.
         const bound = fc.valDate || fc.latestAppEnd || fc.to || ''
@@ -137,6 +137,8 @@ export default function MonthlyCashFlow() {
         const offM = Math.min(rawM, Math.max(0, avail - offL))
         billByProject[nk] = Math.max(0, avail - offL - offM)
         fcCostOut += Math.max(0, rawL - offL) + Math.max(0, rawM - offM)
+        fcLabNet += Math.max(0, rawL - offL)
+        fcMatOut += Math.max(0, rawM - offM)
         fcLabGross += rawLg
       }
       // CIS on forecast labour, paid the 22nd of the following month - so it lands in the
@@ -161,6 +163,7 @@ export default function MonthlyCashFlow() {
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatIn),
         bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut + cisOnFc), cisEstimated: cisOnFc > 0,
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut),
+        projMatOut: Math.round(fcMatOut), projLabOut: Math.round(fcLabNet),
         lumpIn: Math.round(lumpIn), lumpOut: Math.round(lumpOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
@@ -232,7 +235,9 @@ export default function MonthlyCashFlow() {
                     <th style={th}>Invoices in</th>
                     <th style={th}>Retention in</th>
                     <th style={th}>VAT in</th>
-                    <th style={th}>Project forecast</th>
+                    <th style={th} title="Sales from the project forecasts.">Project sales</th>
+                    <th style={th} title="Materials, on the supplier's payment date. If this is empty while sales is not, the forecasts have no materials scheduled.">Materials out</th>
+                    <th style={th} title="What reaches the subcontractor - forecast labour less CIS. The 20% is in the CIS to HMRC column the following month.">Labour out (net of CIS)</th>
                     <th style={th}>Manual in</th>
                     <th style={th}>Bills out</th>
                     <th style={th}>Overheads</th>
@@ -251,7 +256,13 @@ export default function MonthlyCashFlow() {
                       <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}>{r.vatIn ? gbp(r.vatIn) : '-'}</td>
-                      <td style={{ ...td, color: (r.projSalesIn - r.projCostOut) ? ((r.projSalesIn - r.projCostOut) < 0 ? '#dc2626' : '#0f766e') : '#ccc' }} title={r.projSalesIn || r.projCostOut ? `Forecast in ${gbp(r.projSalesIn)} / out ${gbp(r.projCostOut)}` : ''}>{(r.projSalesIn - r.projCostOut) ? gbp(r.projSalesIn - r.projCostOut) : '-'}</td>
+                      {/* THREE COLUMNS, not one net figure. Netted together, a month with
+                          166,381 of sales and no cost at all looks identical to one with
+                          250,000 of sales and 84,000 of cost - and the curve only ever
+                          rises. Same fault the 13-week had before it was split. */}
+                      <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc' }}>{r.projSalesIn ? gbp(r.projSalesIn) : '-'}</td>
+                      <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#c00' }}>{r.projMatOut ? gbp(-r.projMatOut) : 'none'}</td>
+                      <td style={{ ...td, color: r.projLabOut ? '#dc2626' : '#c00' }}>{r.projLabOut ? gbp(-r.projLabOut) : 'none'}</td>
                       <td style={{ ...td, color: r.lumpIn ? '#16a34a' : '#ccc' }}>{r.lumpIn ? gbp(r.lumpIn) : '-'}</td>
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc' }}>{r.overheads ? gbp(-r.overheads) : '-'}</td>
@@ -273,7 +284,9 @@ export default function MonthlyCashFlow() {
                         <td style={{ ...td, color: '#16a34a' }}>{gbp(sum('invoicesIn'))}</td>
                         <td style={{ ...td, color: '#16a34a' }}>{gbp(sum('retIn'))}</td>
                         <td style={{ ...td, color: '#16a34a' }}>{gbp(sum('vatIn'))}</td>
-                        <td style={{ ...td, color: '#0f766e' }}>{gbp(sum('projSalesIn') - sum('projCostOut'))}</td>
+                        <td style={{ ...td, color: '#0f766e' }}>{gbp(sum('projSalesIn'))}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('projMatOut'))}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('projLabOut'))}</td>
                         <td style={{ ...td, color: '#16a34a' }}>{gbp(sum('lumpIn'))}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('bills'))}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('overheads'))}</td>

@@ -1,48 +1,42 @@
-pkg689 - Total available cash on the chart
-===========================================
+pkg690 - Labour and materials were hidden inside "Project forecast"
+====================================================================
 
-*** SUPERSEDES pkg591 - pkg688. ***
+*** SUPERSEDES pkg591 - pkg689. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
-*** monthly.js is in this set too - replace it ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
   pages/business-financials/monthly.js
   ... and the rest of the set as before
 
 
-THE SECOND LINE
----------------
-Dashed teal, under the gold cash line: bank + card headroom + overdraft +
-invoice finance availability.
+THEY WERE BALANCING INSIDE THE COLUMN - THE SECOND OF YOUR TWO GUESSES
+------------------------------------------------------------------------
+    gbp(sum('projSalesIn') - sum('projCostOut'))
 
-    closing cash   overdraft headroom   TOTAL AVAILABLE
-        30,000              60,000            219,032
-       -25,000              35,000            139,032
-       200,000              60,000            389,032
+"Project forecast" was a NET figure. The 166,381 in September is sales LESS labour
+LESS materials, in one number. Checked against your table:
 
-THE OVERDRAFT HEADROOM MOVES WITH THE BALANCE. Drawn overdraft already shows as a
-negative bank figure, so the headroom is the limit LESS what is used - counting
-the full limit on top would count the drawn part twice. On a week the balance goes
-to -25,000 the available line correctly tightens rather than staying flat.
+    invoices 451,383 + project 166,381 - bills/oh/cis 313,789 = 303,975
+    shown net 303,976
 
-Card and invoice finance headroom are held constant across the weeks. Their drawn
-amounts do not change within the forecast, and modelling a drawdown you have not
-decided on would be false precision.
+So the cost was always in the arithmetic - just never on screen. Which is exactly
+the fault the 13-week had before pkg615, and it matters more here: a month with
+250,000 of sales and 84,000 of cost looks identical to one with 166,381 of sales
+and no cost at all, and the curve only ever rises either way.
 
-INVOICE FINANCE COMES FROM THE IF PAGE - the position it publishes, which is the
-one you reconciled against Bibby. Not a second calculation that could disagree.
+NOW THREE COLUMNS: Project sales, Materials out, Labour out (net of CIS). Missing
+cost shows as "none" in red rather than quietly reducing a net figure.
 
-
-DRAWN UNDER THE CASH LINE, AND DASHED
---------------------------------------
-Deliberately. Available is what you could pay out if you drew everything; it is
-not money you have, and it should not look like it. The caption says so: the gap
-between the two lines is borrowing capacity, not cash.
+THE NET IS UNCHANGED. Nothing about the totals moves - this is what was already
+being calculated, made visible.
 
 
-NEGOTIATED PROJECTS - left out, as you said. When you come back to it the question
-will be whether a negotiated job's forecast sales should count toward availability
-at all, given Bibby will not fund an invoice that does not exist yet.
+WHAT TO LOOK FOR NOW
+--------------------
+Your December question is directly answerable. Dec 26 showed project forecast
++210,597 net. Split out, if materials in December are large the net will be much
+smaller or negative - which is the dip you expected. If Materials out reads "none"
+across December and January, the materials are missing from the forecasts rather
+than merely late, and that is a Commercial data job.
