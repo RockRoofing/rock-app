@@ -2217,6 +2217,8 @@ export default function CashFlow() {
                 <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Project cash flows in these 13 weeks</div>
                   <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
+                    Months here are when the CASH lands, not the application period - a project applying on the 9th has its August
+                    application paid in September, so it appears under September. The application dates themselves are on the project forecast.{' '}
                     From the Commercial project forecasts, net of any real invoice or bill. Cost % is materials plus labour over sales - a roofing period should run 75-85%, and anything far below that has cost missing from its forecast.
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>

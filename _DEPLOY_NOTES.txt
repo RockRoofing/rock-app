@@ -1,49 +1,45 @@
-pkg682 - Where Winnersh's other 25,061 went
-============================================
+pkg683 - The spread grid is labelled by APPLICATION, not calendar month
+========================================================================
 
-*** SUPERSEDES pkg591 - pkg681. ***
+*** SUPERSEDES pkg591 - pkg682. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/project-cashflow.js
   pages/business-financials/cashflow.js
   ... and the rest of the set as before
 
 
-THE 16,707 IS RIGHT - IT IS THE SEPTEMBER APPLICATION
--------------------------------------------------------
-    revenue this period   41,768.37   spread Aug 60 / Sep 40
-      Aug line  valued 09/08  cash 08/09   25,061.02
-      Sep line  valued 09/09  cash 08/10   16,707.35   <- what you can see, in Oct
+THAT IS EXACTLY THE CONFUSION, AND IT IS A LABELLING FAULT
+------------------------------------------------------------
+The grid is keyed by CALENDAR MONTH, but your applications are not calendar
+months. On a 9th-of-the-month cycle the column headed "Aug 26" is the application
+VALUED 09/08 - covering work from 10 July. Calling it "August" invites precisely
+the reading you had, and you were right to question it.
 
-So the figure showing is the September application paying on 08/10, exactly as
-your 9th-of-the-month cycle says it should. MISSING is August's 25,061 due 08/09.
+Nothing about the maths was wrong. The percentage has always belonged to the
+application; the header just named the wrong thing.
 
+    BEFORE   Aug 26          Sep 26
+    AFTER    App 09/08/26    App 09/09/26
+             Aug 26          Sep 26        <- small, for orientation only
 
-ALMOST CERTAINLY THE INVOICE NETTING - AND IT WAS INVISIBLE
--------------------------------------------------------------
-If August's application has been raised and invoiced, the forecast line is netted
-off and that money sits in INVOICES IN instead. Correct behaviour - counting both
-would double it - but silent, and indistinguishable from a line that was never
-there.
+The heading and caption follow: "Spread across the period's 2 applications - set
+what % of sales and labour falls in each application."
 
-The per-week project drill now says so:
+WHERE THERE IS NO APPLICATION CALENDAR it still says the month, because that IS
+what the spread means on an end-of-month cycle. The label now tells you which
+convention is in force rather than assuming you know.
 
-    Replaced by real invoices this week: J242-Winnersh £25,061
-    - forecast sales came out because the invoice is already in Invoices in.
-      Nothing is lost; it has moved column.
-
-Open w/c 07 Sept and check. If Winnersh appears in that line, the model is right
-and the money is in Invoices in. If it does NOT, something else is dropping it and
-I want to know.
-
-Either way it reconciles: 25,061 invoice + 16,707 forecast = 41,768.
+THE STORED KEYS ARE UNCHANGED - still "2026-08" and so on. Display only, no
+migration, nothing to re-save.
 
 
-ALSO - EMPTY MONTHS REMOVED
----------------------------
-Winnersh was showing "Nov 26 -" with nothing in it. A month bucket was being
-created and then rendered empty, which made a project look as though it had a
-month with no money rather than no month at all. Only months with a figure now
-appear.
+AND ON THE BUSINESS FINANCIALS SIDE
+-----------------------------------
+The project drill-down there groups by the month the CASH lands, which is a
+different thing again - Winnersh's August application appears under September
+because that is when it pays. The caption now says so, so the two pages cannot be
+read as if they meant the same thing.

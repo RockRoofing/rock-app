@@ -1970,12 +1970,28 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {/* Monthly spread of sales + labour across the calendar months the period covers */}
               {periodMonths.length > 1 && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} calendar months</div>
-                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {(salesCycle === 'applications' || salesCycle === 'project') ? 'sales and labour' : 'labour'} falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle === 'weekly' || salesCycle === 'fortnightly' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} {appCalendarUsable ? 'applications' : 'calendar months'}</div>
+                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {(salesCycle === 'applications' || salesCycle === 'project') ? 'sales and labour' : 'labour'} falls in each {appCalendarUsable ? 'application' : 'month'}. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle === 'weekly' || salesCycle === 'fortnightly' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
                   <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead><tr style={{ color: '#999' }}>
                       <th style={{ textAlign: 'left', padding: '3px 10px' }}></th>
-                      {periodMonths.map(mk => <th key={mk} style={{ padding: '3px 10px', minWidth: 70 }}>{monthShort(mk)}</th>)}
+                      {/* LABELLED BY THE APPLICATION, not the calendar month.
+                          "Aug 26" is ambiguous on a 9th-of-the-month cycle: that column is
+                          the application VALUED 09/08, covering work from 10 July. Calling
+                          it August invites exactly the wrong reading - and the percentage
+                          belongs to the application, not the month. */}
+                      {periodMonths.map(mk => {
+                        const dts = appCalendarUsable ? resolveAppDates(mk, appCalendar || {}) : null
+                        const val = dts && (dts.valDate || dts.appDate)
+                        return (
+                          <th key={mk} style={{ padding: '3px 10px', minWidth: 86 }}>
+                            {val ? <>
+                              <div style={{ color: '#5b7085' }}>App {fmtD(val)}</div>
+                              <div style={{ fontSize: 9.5, fontWeight: 400, color: '#bbb' }}>{monthShort(mk)}</div>
+                            </> : monthShort(mk)}
+                          </th>
+                        )
+                      })}
                       <th style={{ padding: '3px 10px' }}>Total</th>
                     </tr></thead>
                     <tbody>
