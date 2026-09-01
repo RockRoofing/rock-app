@@ -45,6 +45,9 @@ export default function Reconciliation() {
     const fcs = cf.projForecasts || []
 
     // 1. INVOICES OWED - the ledger, straight off Xero.
+    // Anything in the receivables store that is NOT a sales invoice. A contaminated store
+    // counts supplier bills as money in AND as money out.
+    const wrongType = recs.filter(i => i.type && i.type !== 'ACCREC')
     const invTotal = recs.reduce((t, i) => t + num(i.amountDue), 0)
     const invNoProject = recs.filter(i => !i.projectNo && !i.projectName)
     const invNoExpected = recs.filter(i => !i.expectedDate)
@@ -86,7 +89,7 @@ export default function Reconciliation() {
     const openBank = (cf.manualBalances || []).filter(b => b.kind !== 'card').reduce((t, b) => t + num(b.balance), 0)
 
     return {
-      invTotal, invNoProject, invNoExpected, invOverdue,
+      invTotal, invNoProject, invNoExpected, invOverdue, wrongType,
       billTotal, billNoProject,
       fcSales, fcMat, fcLabGross, fcCost: fcMat + fcLabGross,
       costPc: fcSales > 0 ? ((fcMat + fcLabGross) / fcSales) * 100 : null,
@@ -170,6 +173,13 @@ export default function Reconciliation() {
               <Flag bad={model.invNoExpected.length > 0}
                 detail={`${model.invNoExpected.length} of ${(cf.receivables || []).length} invoices have no expected date, so they sit on Xero's due date. ${model.invOverdue.length} are already past their date, worth ${gbp(model.invOverdue.reduce((t, i) => t + num(i.amountDue), 0))}.`}>
                 Invoices have expected payment dates
+              </Flag>
+
+              <Flag bad={model.wrongType.length > 0}
+                detail={model.wrongType.length
+                  ? `${model.wrongType.length} entries in the invoices-owed store are SUPPLIER bills, worth ${gbp(model.wrongType.reduce((t, i) => t + num(i.amountDue), 0))}. They are being counted as money in AND as money out. Press Sync on the Invoices Owed page to rebuild it.`
+                  : 'Every entry in the invoices-owed store is a sales invoice.'}>
+                Invoices owed contains only sales invoices
               </Flag>
 
               <Flag bad={model.invNoProject.length > 0}

@@ -966,6 +966,13 @@ export default function CashFlow() {
       const arrInvDetail = []
       for (const i of (data.receivables || [])) {
         if (excluded[invKey(i)]) continue
+        // A SUPPLIER BILL HAS NO PLACE IN INVOICES IN.
+        //
+        // The Xero fetch filters on type, but anything stored before that guard existed is
+        // still sitting in bank:outstanding-receivables - and a bill counted as money IN is
+        // wrong twice over: it inflates the arrears row and it is already in Bills out.
+        // Filtered here as well, so a stale store cannot poison the forecast.
+        if (i.type && i.type !== 'ACCREC') continue
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) {
           arrInvoices += (i.amountDue || 0)

@@ -1,59 +1,55 @@
-pkg695 - A Reconcile page, and the overheads fix that missed
-=============================================================
+pkg696 - Supplier bills were sitting in Invoices Owed
+======================================================
 
-*** SUPERSEDES pkg591 - pkg694. ***
-*** SEVEN NEW FILES - create these in GitHub:
-      pages/business-financials/reconciliation.js          <- NEW
-      pages/business-financials/payment-performance.js
-      pages/business-financials/forecast-balance-sheet.js
-      pages/business-financials/forecast-pl.js
-      pages/business-financials/forecast-margin.js
-      pages/business-financials/balance-sheet.js
-      components/PageErrorBoundary.js
-***
+*** SUPERSEDES pkg591 - pkg695. ***
+*** SEVEN NEW FILES - create these in GitHub (reconciliation.js is one of them) ***
 
 
-YOUR OVERHEADS - I FIXED THE WRONG CALL SITE
-----------------------------------------------
-computePredictedByCodeMonth is called TWICE. pkg692 passed the actual-months list
-to the Budgets call and missed the CASHFLOW call - which is the one the Forecast
-P&L, Forecast Balance Sheet and 12-month all read. So August kept showing a
-fortnight of posted invoices instead of its budget. Now passed to both.
+*** AFTER DEPLOYING: PRESS SYNC ON THE INVOICES OWED PAGE. ***
 
 
-THE REAL ANSWER TO YOUR QUESTION - STOP CHASING SYMPTOMS
-----------------------------------------------------------
-New "Reconcile" tab. It counts your three sources of truth ONCE and runs the
-checks that must pass before anything built on them can be right. Every one is
-arithmetic, not opinion:
-
-  Cost as a share of forecast sales    is cost missing from the forecasts
-  Schedules add up to period revenue   is money vanishing in the spread (Winnersh)
-  Forecasts match the invoice ledger   can netting work at all (the 434,338)
-  Forecasts carry valuation dates      are periods cut at the right point
-  Invoices have expected dates         is the timing real or assumed
-  Invoices and bills carry a project   can they be netted, or double-counted
-
-A failing check NAMES THE FAULT rather than the symptom. Both bugs you hit today -
-Winnersh's 90% spread and the 434,338 - would have shown up here as a red line
-instead of you spotting a missing payment three screens away.
-
-Below the checks: every forecast as STORED, with revenue against scheduled sales,
-materials, labour and cost %. Red where a schedule does not tie or a cost is nil.
+CHANGED FILES (replace)
+-----------------------
+  pages/business-financials/cashflow.js
+  pages/business-financials/reconciliation.js
+  ... and the rest of the set as before
 
 
-THREE CSV EXPORTS
------------------
-  Forecasts CSV      every period, dates, revenue, scheduled, materials, labour
-  Invoices CSV       the ledger with date, due, expected, total, still due
-  Bills CSV          supplier, project, due, planned, CIS, total, still due
+YOU FOUND IT
+------------
+Supplier invoices in the Invoices in drill-down is not a display problem. The
+receivables STORE contains ACCPAY bills.
 
-So you can check them against Xero and the project team in a spreadsheet, rather
-than through my eyes.
+    /Invoices?Type=ACCPAY&where=Status=="AUTHORISED"
+
+Xero does not filter on a bare Type query parameter - it belongs inside the where
+clause. So both fetches returned BOTH types. There is a defensive filter in the
+code now (`if (inv.Type && inv.Type !== type) continue`), but anything stored
+BEFORE that guard existed is still in bank:outstanding-receivables, and that is
+what you are looking at.
+
+A BILL COUNTED AS MONEY IN IS WRONG TWICE OVER. It inflates the arrears row, and
+the same bill is already in Bills out. Removing it takes the overstatement off
+both sides - which is very likely most of your 434,338 and a good part of the 700k.
 
 
-WHERE I WOULD START
--------------------
-Deploy, open Reconcile, and send me the checks. If "cost as a share of sales" and
-"forecasts match the invoice ledger" both pass, the 700k is real and we look at
-timing. If either fails, that is the bug and we stop guessing.
+TWO THINGS DONE
+---------------
+1. FILTERED AT THE POINT OF USE. The cash flow now skips anything that is not
+   ACCREC, so a stale store cannot poison the forecast even before you re-sync.
+
+2. THE RECONCILE PAGE CHECKS FOR IT:
+
+     X Invoices owed contains only sales invoices
+       23 entries in the invoices-owed store are SUPPLIER bills, worth GBP 214,000.
+       They are being counted as money in AND as money out. Press Sync on the
+       Invoices Owed page to rebuild it.
+
+
+ON YOUR OTHER QUESTION - the projected cash balance uses expectedDate first and
+falls back to Xero's due date only where no expected date is set. The Invoices in
+drill-down marks which is which: "(expected)" or "(due date)".
+
+PRESS SYNC ON INVOICES OWED after deploying. The filter protects the forecast, but
+only a re-sync cleans the underlying store - and the Bills to Pay store is worth
+syncing too, for the same reason.
