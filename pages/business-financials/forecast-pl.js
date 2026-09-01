@@ -179,9 +179,9 @@ export default function ForecastPL() {
           if (!half.length) return null
           return (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '11px 15px', marginBottom: 16, fontSize: 12.5, color: '#92400e', maxWidth: 900 }}>
-              <strong>Switch {half.map(r => r.label).join(', ')} to Actual on the Budgets tab.</strong>
+              <strong>Switch {half.map(r => monthShort(r.mo)).join(', ')} to Actual on the Budgets tab.</strong>
               <div style={{ marginTop: 4 }}>
-                {half.map(r => `${r.label} has ${gbp(r.invoiced)} of invoices raised in Xero`).join('; ')} - but the month is still marked
+                {half.map(r => `${monthShort(r.mo)} has ${gbp(r.invoiced)} of invoices raised in Xero`).join('; ')} - but the month is still marked
                 forecast, so this page uses the project forecasts instead. Those periods have already been applied for, so their revenue has
                 gone while the real invoices are not being counted. The month reads low until you switch it, and switching takes revenue AND
                 cost from Xero together - which is the only way the two sides tie.

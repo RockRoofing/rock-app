@@ -1,77 +1,65 @@
-pkg697 - Reverting my P&L change, and what your CSVs actually show
-===================================================================
+pkg698 - Why the P&L looks right and the cash flow does not
+============================================================
 
-*** SUPERSEDES pkg591 - pkg696. ***
+*** SUPERSEDES pkg591 - pkg697. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/reconciliation.js
+  pages/business-financials/forecast-pl.js
   ... and the rest of the set as before
 
 
-1. I BROKE THE P&L - REVERTED
-------------------------------
-    Aug 26   revenue 412,604   cost of sale 5,446   gross margin 99%
-    FY net profit 79,770 -> 461,610
+THE ANSWER: THE P&L IS 8/12 ACTUAL
+-----------------------------------
+Eight months of real Xero data anchor that total and hide what the four forecast
+months are doing. The cash flow has no actuals to hide behind.
 
-I added real invoices to revenue on a forecast month without any matching COST -
-those periods have been applied for, so their forecast costs correctly dropped.
-Revenue from Xero, cost from a forecast that no longer exists. 380,000 of
-imaginary profit.
+    ACTUAL revenue Dec 25 - Jul 26, monthly average   199,242
 
-A HALF-ACTUAL MONTH CANNOT BE FIXED BY PATCHING ONE SIDE. The mechanism already
-exists and it is the right one:
+    Sept 26 forecast   509,075   =  2.6x
+    Oct 26  forecast   336,484   =  1.7x
+    Nov 26  forecast   193,989   =  1.0x
 
-    Switch Aug 26 to Actual on the Budgets tab. Xero then supplies revenue AND
-    cost together, which is the only way they tie.
+    quarter forecast 1,039,548 against a run rate of 597,727
+    -> 74% above anything the business has ever billed
 
-The page now says exactly that, naming the month and the value of invoices sitting
-in it, instead of quietly guessing.
+Same input. One presentation dilutes it eight-twelfths, the other shows it neat.
+That is why the P&L "looks about right" at 49,006 while the cash position looks
+absurd - and it means the P&L is NOT actually right, it is just wearing eight
+months of history as cover.
 
+By valuation month, straight from your own CSV:
 
-2. THE "CANNOT BE MATCHED" CHECK WAS WRONG - MY FAULT
--------------------------------------------------------
-Your CSVs settle it. The project labels match perfectly on both sides:
+    2026-09   237,802
+    2026-10   302,343   1.5x
+    2026-11    61,899
+    2026-12   485,102   2.4x    <- December is the one to look at
+    2027-05   284,478
 
-    invoices   J243-Christchurch Primary School, J190-Russell Hill, J246-...
-    forecasts  J243-Christchurch Primary School, J190-Russell Hill, J246-...
-
-Those nine simply have NO OUTSTANDING INVOICE - you have been paid, or have not
-billed yet. Perfectly healthy, and the check was calling it a fault.
-
-It now only fires where a period has been APPLIED FOR and there is still no
-invoice - which is the only case where the comparison actually matters. On your
-data that is ZERO, so the check goes green.
+DECEMBER AT 485,102 IS TWO AND A HALF TIMES your best month ever. That is where I
+would start with the project team.
 
 
-3. THE COST GAP IS REAL, AND IT IS THE LAST BIG ONE
------------------------------------------------------
-    all 16 forecasts   sales 1,371,624   cost 920,154   = 67%
-    at 80% cost would be 1,097,299 - short by 177,145
-
-Worst offenders from your own CSV:
-
-    J242-Winnersh          sales  37,592   cost  11,502   31%
-    J250-Plot 2000         sales   5,000   cost   2,200   44%
-    J246-Albert Bartlett   sales  52,710   cost  24,875   47%
-    J248-Renshaw House     sales  37,762   cost  17,424   46%   no materials at all
-    J243-Christchurch      sales  11,998   cost       0    0%   nothing at all
-
-AND THE CASH GAP IS BIGGER THAN THE MARGIN GAP, because labour there is gross of
-CIS - the cash out is 80% of it, plus the CIS a month later.
-
-That 177,145 is not a bug. It is cost that is not in the forecasts, and it is the
-single largest remaining reason the cash position looks high.
+NEW CHECK ON THE RECONCILE PAGE
+-------------------------------
+"Forecast revenue is in line with what you actually bill" - compares every
+forecast month against your real average and names the ones above 1.5x. This is
+the check that would have caught this on day one instead of us chasing the cash
+flow for two hours.
 
 
-4. BILLS WITHOUT A PROJECT - 7 of 122, worth 9,415. Immaterial; they simply will
-   not net against forecast cost. Not worth chasing.
+ALSO FIXED
+----------
+"undefined has GBP 412,604" - my banner read r.label, which the row does not carry.
+Uses the month key now.
+
+And I nearly shipped a check that read bud.actuals.income - the shape is
+actuals[month].sales. That would have given a run rate of zero and a check that
+was permanently, uselessly green.
 
 
-5. PRESS "READ BALANCE SHEET FROM XERO" - the amber banner on the Forecast BS is
-   still showing, so that page is running on figures fetched before the monthly
-   breakdown existed.
+ON YOUR 67% - you are right that it is not absurd on its own. It is worth perhaps
+177,000. The revenue overstatement is worth far more, and the two compound.

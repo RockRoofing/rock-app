@@ -26,13 +26,22 @@ export default function Reconciliation() {
   const [ok, setOk] = useState(false)
   const [cf, setCf] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [bud, setBud] = useState(null)
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(async d => {
       if (!d.user) { router.replace('/login'); return }
       if (d.user.role !== 'admin') { router.replace('/'); return }
       setOk(true)
-      try { setCf(await fetch('/api/business-financials?view=cashflow').then(r => r.json())) } catch {}
+      try {
+        const [c, b] = await Promise.all([
+          fetch('/api/business-financials?view=cashflow').then(r => r.json()),
+          // The Budgets view carries the ACTUAL monthly income, which is the only honest
+          // yardstick for whether a forecast is plausible.
+          fetch('/api/business-financials?view=budgets').then(r => r.json()).catch(() => null),
+        ])
+        setCf(c); setBud(b)
+      } catch {}
       setLoading(false)
     })
   }, [])
@@ -96,7 +105,33 @@ export default function Reconciliation() {
 
     const openBank = (cf.manualBalances || []).filter(b => b.kind !== 'card').reduce((t, b) => t + num(b.balance), 0)
 
+    // FORECAST REVENUE AGAINST WHAT YOU ACTUALLY BILL.
+    //
+    // This is the check that would have caught it. The Forecast P&L is 8/12 actual, so
+    // eight months of real Xero data anchor the total and hide what the forecast months
+    // are doing. The cash flow has no actuals to hide behind, which is why one looked
+    // right and the other did not - same input, different presentation.
+    // actuals[month].sales - NOT actuals.income, which does not exist. Guessing the shape
+    // would have produced a run rate of zero and a check that was permanently green.
+    const monthlyIncome = bud?.actuals || {}
+    const actMonths = Object.entries(monthlyIncome).filter(([, v]) => Number(v?.sales) > 0)
+    const runRate = actMonths.length ? actMonths.reduce((t, [, v]) => t + Number(v.sales), 0) / actMonths.length : 0
+    // Forecast sales by the month they are VALUED - the P&L basis.
+    const fcByMonth = {}
+    for (const fc of fcs) {
+      for (const x of (fc.salesSchedule || [])) {
+        const d = x.appDate || x.date
+        if (!d) continue
+        const k = String(d).slice(0, 7)
+        fcByMonth[k] = (fcByMonth[k] || 0) + num(x.amount)
+      }
+    }
+    const hot = Object.entries(fcByMonth)
+      .filter(([, v]) => runRate > 0 && v > runRate * 1.5)
+      .sort((a, b) => b[1] - a[1])
+
     return {
+      runRate, hot, fcByMonth,
       invTotal, invNoProject, invNoExpected, invOverdue, wrongType,
       billTotal, billNoProject,
       fcSales, fcMat, fcLabGross, fcCost: fcMat + fcLabGross,
@@ -148,6 +183,15 @@ export default function Reconciliation() {
 
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 8 }}>Checks</div>
+
+              <Flag bad={model.hot.length > 0}
+                detail={model.runRate <= 0
+                  ? 'No actual income months to compare against.'
+                  : model.hot.length
+                    ? `You have billed ${gbp(model.runRate)} a month on average. ${model.hot.slice(0, 4).map(([k, v]) => `${k} forecasts ${gbp(v)} (${(v / model.runRate).toFixed(1)}x)`).join(', ')}. A forecast well above what the business has ever billed will overstate both the P&L and the cash flow - but the P&L hides it behind the actual months.`
+                    : `Every forecast month is within 1.5x your ${gbp(model.runRate)} monthly average.`}>
+                Forecast revenue is in line with what you actually bill
+              </Flag>
 
               <Flag bad={model.costPc != null && model.costPc < 70}
                 detail={model.costPc != null ? `Cost is ${model.costPc.toFixed(0)}% of forecast sales. At 80% it would be ${gbp(model.fcSales * 0.8)}, against ${gbp(model.fcCost)} - about ${gbp(model.fcSales * 0.8 - model.fcCost)} missing.` : 'No forecast sales.'}>
