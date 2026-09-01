@@ -1,48 +1,44 @@
-pkg678 - Sales received on a specific day
-==========================================
+pkg680 - The amber box only fires on real faults now
+=====================================================
 
-*** SUPERSEDES pkg591 - pkg677. ***
+*** SUPERSEDES pkg591 - pkg679. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js
+  pages/business-financials/cashflow.js
   ... and the rest of the set as before
 
 
-NOT ANOTHER CYCLE - A SUPPLEMENT TO WHICHEVER ONE YOU PICK
-------------------------------------------------------------
-Materials paid on delivery while the works follow application terms is TWO payment
-behaviours in one period. No single cycle can express that, so adding a fifth
-option would have forced you to choose one and lose the other.
+YOU ARE RIGHT - IT WAS CRYING WOLF
+----------------------------------
+It listed five reasons a forecast was not in the figures. THREE OF THEM ARE THE
+MODEL WORKING CORRECTLY:
 
-"Received on a specific day" sits under Sales received. Each line is a date, an
-amount and a note. They come OFF THE TOP; the remainder spreads by the cycle you
-have chosen.
+    already applied for            the money is a real invoice now
+    period ended                   sales drop, as we agreed they should
+    cash outside the 13 weeks      normal timing
 
-    Moseley Hall, revenue 284,478.29
-      14/02/27   80,000.00   materials on delivery
-      remainder 204,478.29 spreads Feb/Mar/Apr/May at 40/30/25/5
-        Feb 81,791   Mar 61,343   Apr 51,120   May 10,224
+Putting those in an amber box made routine behaviour look like a problem, and an
+alert that is usually nothing gets ignored - including on the day it is something.
 
-A dated receipt is VALUED on the day it is received, so the P&L and the balance
-sheet see it in the right month too - not just the cash flow.
+TWO ARE GENUINE FAULTS and are all that remain:
 
+    no accrual data                 the API file has not been deployed
+    revenue but no sales schedule   it can never land in a week, ever
 
-IT WILL NOT LET YOU OVER-ALLOCATE
----------------------------------
-Put more on fixed dates than the period is worth and the remainder would go
-negative and spread as a credit. The line under the editor turns red and says so:
+Heading changed to match: "N forecasts cannot contribute anything - this needs
+fixing."
 
-    120,000 of 84,478 on fixed dates - MORE than this period, so the remainder
-    would go negative. Reduce it.
-
-Otherwise it tells you what is left to spread, so the two halves always add up in
-front of you.
+ON YOUR CURRENT DATA THE BOX SHOULD DISAPPEAR ALTOGETHER. All three you were
+seeing - J230, J240 and 8335 - were "outside the 13 weeks", which is just when
+their money lands.
 
 
-FOR RENSHAW AND KILBURN specifically: add one dated receipt for the materials
-payment on its delivery date, leave the cycle on Project application dates, and
-the works carry on following the app calendar. First app paid on delivery,
-everything after on terms - which is what you described.
+A BUG CAUGHT IN BUILD
+---------------------
+I first wrote `else return` to skip the normal cases. That loop is a for...of
+inside an IIFE, so a return would have abandoned the whole loop and silently
+dropped every forecast after the first normal one - turning a noisy box into a
+box that lies. Changed to `continue`.

@@ -1611,6 +1611,22 @@ function HypAppModal({ modal, onClose, onSaved }) {
       })].filter(s => s.date && s.amount > 0.5)
     }
 
+    // SPECIFIC DAY. The whole period is one application raised on a chosen date, paid a
+    // set number of days later. Renshaw's materials-on-delivery period is exactly this -
+    // and because each forecast period IS one application, the next period simply uses a
+    // different cycle. No need to mix two behaviours inside one period.
+    if (cycle === 'fixed') {
+      const raised = salesTerm.startDate || from || ''
+      if (!raised) return advLines
+      const d = new Date(raised); d.setDate(d.getDate() + num(salesTerm.days))
+      return [...advLines, {
+        month: String(raised).slice(0, 7),
+        appDate: raised,                       // P&L - valued when raised
+        date: isoOf(d),                        // cash - received N days later
+        amount: rev,
+      }]
+    }
+
     // END OF MONTH + days. Each spread month's portion, timed off that month's end.
     // Called "applications" in the stored data for historical reasons - the label on
     // screen now says what it does.
@@ -1944,50 +1960,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
 
-                {/* RECEIPTS ON A SPECIFIC DAY, outside the monthly spread.
-                    Materials paid on delivery and the works on application terms is TWO
-                    payment behaviours in one period - a single cycle cannot express that.
-                    These come off the top and the remainder spreads as normal. */}
-                <div style={{ width: '100%', borderTop: '1px dashed #e6e3dc', marginTop: 8, paddingTop: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: INK }}>Received on a specific day</div>
-                    <span style={{ fontSize: 10.5, color: '#9a958c' }}>
-                      e.g. materials paid on delivery. Taken off the period first; the rest follows the cycle above.
-                    </span>
-                  </div>
-                  {(salesAdvances || []).map((a, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
-                      <input type="date" value={a.date || ''}
-                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, date: e.target.value } : x))}
-                        style={{ ...inpS, width: 140 }} />
-                      <span style={{ color: '#bbb' }}>&pound;</span>
-                      <input type="number" value={a.amount ?? ''} placeholder="0.00"
-                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
-                        style={{ ...inpS, width: 110, textAlign: 'right' }} />
-                      <input value={a.note || ''} placeholder="what for - e.g. materials on delivery"
-                        onChange={e => setSalesAdvances(v => v.map((x, j) => j === i ? { ...x, note: e.target.value } : x))}
-                        style={{ ...inpS, width: 230 }} />
-                      <button onClick={() => setSalesAdvances(v => v.filter((_, j) => j !== i))}
-                        style={{ border: 'none', background: 'none', color: '#c66', cursor: 'pointer', fontSize: 16 }}>&times;</button>
-                    </div>
-                  ))}
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
-                    <button onClick={() => setSalesAdvances(v => [...(v || []), { date: '', amount: '', note: '' }])}
-                      style={{ background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer' }}>+ Add a dated receipt</button>
-                    {(salesAdvances || []).some(a => a.date && num(a.amount) > 0) && (() => {
-                      const t = (salesAdvances || []).filter(a => a.date && num(a.amount) > 0).reduce((x, a) => x + num(a.amount), 0)
-                      const over = t > revenueThisPeriod + 0.5
-                      return (
-                        <span style={{ fontSize: 10.5, color: over ? '#dc2626' : '#8a857c', fontWeight: over ? 700 : 400 }}>
-                          {gbp(t)} of {gbp(revenueThisPeriod)} on fixed dates
-                          {over
-                            ? ' - MORE than this period, so the remainder would go negative. Reduce it.'
-                            : ` - ${gbp(Math.max(0, revenueThisPeriod - t))} spreads across the months`}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </div>
+                {/* The separate "received on a specific day" block is gone - a period IS
+                    one application, so "Specific day" belongs in the cycle dropdown rather
+                    than as a second mechanism alongside it. Renshaw's materials period uses
+                    that cycle; the next period uses the app dates. Saved salesAdvances are
+                    still honoured by the schedule so nothing already entered is lost. */}
               </div>
 
               {/* Monthly spread of sales + labour across the calendar months the period covers */}
@@ -2261,6 +2238,7 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
   const cycle = (term && term.cycle) || 'applications'
   const cycling = cycles && (cycle === 'weekly' || cycle === 'fortnightly')
   const usingProject = cycles && cycle === 'project'
+  const isFixed = cycles && cycle === 'fixed'
   // When applications go in on a cycle, the term runs from each APPLICATION date, so the
   // preview has to be off the start date - not the period end, which is the reference
   // for a single application covering the whole period.
@@ -2278,29 +2256,35 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
                 does is time each spread month off MONTH END plus the term - there is
                 nothing per-application about it. */}
             <option value="applications">End of month + days</option>
+            <option value="fixed">Specific day</option>
             <option value="project">Project application dates</option>
             <option value="weekly">Weekly</option>
             <option value="fortnightly">Fortnightly</option>
           </select>
         )}
+        {/* Only the FINAL date on the project cycle. "Payment due" is a contractual
+            milestone, not when the money lands - offering it as a cash option invited a
+            forecast built on a date nobody actually pays on. */}
         {usingProject ? (
-          <select value={term.payOn || 'final'} onChange={e => setTerm({ ...term, payOn: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
-            <option value="final">cash on final date for payment</option>
-            <option value="due">cash on payment due</option>
-          </select>
+          <span style={{ fontSize: 11.5, color: '#5b7085', padding: '5px 0' }}>cash on final date for payment</span>
         ) : (
           <>
-            <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
-              <option value="days">days from {cycling ? 'application' : refLabel}</option>
-              <option value="eom">EOM + days</option>
-            </select>
+            {/* On a specific-day cycle the raised date IS the basis, so only the days
+                box applies - offering "EOM +" there would be meaningless. */}
+            {!isFixed && (
+              <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+                <option value="days">days from {cycling ? 'application' : refLabel}</option>
+                <option value="eom">EOM + days</option>
+              </select>
+            )}
+            {isFixed && <span style={{ fontSize: 11.5, color: '#5b7085' }}>days after it is raised</span>}
             <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
           </>
         )}
       </div>
-      {cycling && (
+      {(cycling || isFixed) && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <span style={{ fontSize: 10.5, color: '#9a958c' }}>starting</span>
+          <span style={{ fontSize: 10.5, color: '#9a958c' }}>{isFixed ? 'app / invoice raised' : 'starting'}</span>
           <input type="date" value={term.startDate || ''} onChange={e => setTerm({ ...term, startDate: e.target.value })} style={{ ...inpS, padding: '4px 6px' }} />
         </div>
       )}

@@ -2038,18 +2038,29 @@ export default function CashFlow() {
               for (const fc of all) {
                 const nm = projLabel(fc)
                 if (shown.has(nm)) continue
+                // ONLY GENUINE FAULTS.
+                //
+                // This used to list every forecast that was not in the figures, including
+                // the three that are simply normal: already applied for, period ended, and
+                // cash falling outside the window. Those are the model working, and
+                // putting them in an amber box made routine timing look like a problem.
+                //
+                // What remains is the two that are actually wrong - a forecast with no
+                // accrual data means the API is not deployed, and one with no sales
+                // schedule will never contribute anything to anything.
                 let why = ''
                 if (!fc.accrual) why = 'no accrual data - the API file in this package has not been deployed'
-                else if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) why = `already applied for (application to ${fmtDMY(fc.latestAppEnd)}) - its money is a real invoice now`
-                else if (fc.to && fc.to < todayISO) why = `period ended ${fmtDMY(fc.to)} - sales drop once a period has passed without being applied for`
-                else if (!(fc.salesSchedule || []).length) why = 'no sales schedule saved on the forecast'
-                else why = 'its cash falls outside the next 13 weeks'
+                else if (!(fc.salesSchedule || []).length && ((Number(fc.revenueThisPeriod) || 0) > 0)) why = 'has revenue but no sales schedule - it can never land in a week'
+                // `continue`, not `return` - this is a for...of inside an IIFE, so a
+                // return would abandon the whole loop and silently drop every forecast
+                // after the first normal one.
+                else continue
                 hidden.push({ nm, why, to: fc.to })
               }
               if (!hidden.length) return null
               return (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
-                  <strong>{hidden.length} forecast{hidden.length === 1 ? '' : 's'} not in the figures above.</strong>
+                  <strong>{hidden.length} forecast{hidden.length === 1 ? '' : 's'} cannot contribute anything - this needs fixing.</strong>
                   <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                     {hidden.slice(0, 8).map((h, i) => <li key={i} style={{ marginBottom: 2 }}>{h.nm} - {h.why}</li>)}
                   </ul>
