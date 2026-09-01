@@ -1,7 +1,7 @@
-pkg680 - The amber box only fires on real faults now
-=====================================================
+pkg681 - Financing and Materials drop-downs, and visible carets
+================================================================
 
-*** SUPERSEDES pkg591 - pkg679. ***
+*** SUPERSEDES pkg591 - pkg680. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,34 +11,45 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-YOU ARE RIGHT - IT WAS CRYING WOLF
-----------------------------------
-It listed five reasons a forecast was not in the figures. THREE OF THEM ARE THE
-MODEL WORKING CORRECTLY:
+1. THE CARETS
+-------------
+At 9px grey they were nearly invisible whether open or shut, and with two rows
+expanded you could not tell which. Now:
 
-    already applied for            the money is a real invoice now
-    period ended                   sales drop, as we agreed they should
-    cash outside the 13 weeks      normal timing
+    closed   9px, #bbb
+    open    12px, BOLD, #1a1a19
 
-Putting those in an amber box made routine behaviour look like a problem, and an
-alert that is usually nothing gets ignored - including on the day it is something.
+One shared Caret component drives all seven columns, so they cannot drift apart
+again - which is how the overheads one ended up styled differently from the rest.
 
-TWO ARE GENUINE FAULTS and are all that remain:
 
-    no accrual data                 the API file has not been deployed
-    revenue but no sales schedule   it can never land in a week, ever
+2. FINANCING & TAX
+------------------
+    Item                    Type                   Date        Amount
+    PAYE/CIS arrears        liability repayment    22/09/26    -5,000
+    Van HP - Ford Transit   recurring commitment   01/09/26    -1,200
+    Corporation tax         liability repayment    30/09/26      -410
+    Total (3)                                                  -6,610
 
-Heading changed to match: "N forecasts cannot contribute anything - this needs
-fixing."
+THE TYPE COLUMN MATTERS. A liability repayment reduces what you owe and never
+touches the P&L; a recurring commitment is ordinary spend. Two different things
+sharing one column, and nothing said which was which.
 
-ON YOUR CURRENT DATA THE BOX SHOULD DISAPPEAR ALTOGETHER. All three you were
-seeing - J230, J240 and 8335 - were "outside the 13 weeks", which is just when
-their money lands.
+
+3. MATERIALS OUT
+----------------
+    Project                Delivered   Pays        Amount
+    J190 - Russell Hill    05/10/26    15/12/26   -42,441
+    J244 - Waungron        01/10/26    30/11/26    -5,000
+
+TWO DATES, DELIBERATELY. Delivered is when the cost is INCURRED - what the P&L and
+the application use. Pays is delivery plus that supplier's terms, which is what
+this column schedules. They are routinely six to ten weeks apart and the column
+only ever showed one of them. "est" flags a payment date that was assumed because
+the line carried no term.
 
 
 A BUG CAUGHT IN BUILD
 ---------------------
-I first wrote `else return` to skip the normal cases. That loop is a for...of
-inside an IIFE, so a return would have abandoned the whole loop and silently
-dropped every forecast after the first normal one - turning a noisy box into a
-box that lies. Changed to `continue`.
+Balance sheet items carry `label`, commitments carry `name`. The drill read only
+`label`, so every vehicle commitment would have shown as "(unnamed)". Reads both.

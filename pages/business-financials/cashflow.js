@@ -30,6 +30,22 @@ const todayISO = new Date().toISOString().slice(0, 10)
 //
 // Module scope: a component declared inside another remounts on every render, which would
 // close the picker just as effectively.
+// DROP-DOWN ARROW. Bigger and darker when open, so you can see at a glance which rows are
+// expanded - at 9px grey they were nearly invisible either way, and with several open you
+// could not tell which was which.
+//
+// One component, so all seven columns behave identically and cannot drift apart.
+function Caret({ open }) {
+  return (
+    <span style={{
+      fontSize: open ? 12 : 9,
+      fontWeight: open ? 700 : 400,
+      color: open ? '#1a1a19' : '#bbb',
+      marginLeft: 3,
+    }}>{open ? '\u25B2' : '\u25BC'}</span>
+  )
+}
+
 function DateCell({ value, fallback, onCommit, onClear, title }) {
   // `value` is what has actually been SET. `fallback` is the due date the forecast uses
   // when nothing is set - shown in the box in light grey so you can see what will happen
@@ -362,6 +378,8 @@ export default function CashFlow() {
   const [openInvWk, setOpenInvWk] = useState(null)       // which week's invoices are open
   const [openBillWk, setOpenBillWk] = useState(null)     // which week's bills are open
   const [openCisWk, setOpenCisWk] = useState(null)
+  const [openFinWk, setOpenFinWk] = useState(null)
+  const [openMatWk, setOpenMatWk] = useState(null)
   const [openVatWk, setOpenVatWk] = useState(null)
   const [openArrears, setOpenArrears] = useState(false)  // arrears row broken out by bill
   const [openProj, setOpenProj] = useState(null)          // project row expanded to months
@@ -995,7 +1013,8 @@ export default function CashFlow() {
       const ohDetail = Object.entries(ohDetailMap)
         .map(([code, amount]) => ({ code, name: (data.overheadNames || {})[code] || code, amount: Math.round(amount) }))
         .sort((a, b) => b.amount - a.amount)
-      const commOut = commEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
+      const commDetail = commEvents.filter(x => inWk(x.date)).sort((a, b) => b.amount - a.amount)
+      const commOut = commDetail.reduce((a, x) => a + x.amount, 0)
       const inWkCis = cisPayments.filter(c => inWk(c.date))
       const cisOut = inWkCis.reduce((a, c) => a + c.amount, 0)
       // Any forecast-derived contribution makes the week's figure an estimate.
@@ -1131,7 +1150,11 @@ export default function CashFlow() {
         // "J190 - Russell Hill", not "L:190". projectName is blank whenever the
         // dashboard cache has not named that job, and the key was the fallback - which
         // is the raw Redis key and means nothing to read.
-        if (sIn || lOut || mOut) fcBreak.push({ name: projLabel(fc), no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to, month: s.slice(0, 7),
+        // Line-level materials, so the column can name the supplier and delivery date
+        // rather than only the project total.
+        const matLines = (fc.matItems || []).filter(x => inWk(x.date) && !past(x))
+          .map(x => ({ project: projLabel(fc), amount: x.amount || 0, date: x.date, deliver: x.deliverDay || '', est: !!x.estimatedTerm }))
+        if (sIn || lOut || mOut) fcBreak.push({ name: projLabel(fc), no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, matLines, from: fc.from, to: fc.to, month: s.slice(0, 7),
           // Carried in from an earlier period that was certified for less than forecast.
           carry: (carry && firstDate && inWkIn(firstDate)) ? carry : 0,
           matEstimated: (fc.matItems || []).some(m => m.estimatedTerm) })
@@ -1181,7 +1204,7 @@ export default function CashFlow() {
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         vatEstimated, vatSrcs, cisEstimated,
         cisDetail: inWkCis,
-        bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), commDetail, vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
@@ -1613,7 +1636,7 @@ export default function CashFlow() {
                         onClick={() => r.invoicesIn && setOpenInvWk(openInvWk === i ? null : i)}
                         title={r.invoicesIn ? 'Click to see which invoices' : ''}>
                         {r.invoicesIn ? gbp(r.invoicesIn) : '-'}
-                        {r.invoicesIn ? <span style={{ fontSize: 9, color: '#999' }}> {openInvWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.invoicesIn ? <Caret open={openInvWk === i} /> : null}
                       </td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of
@@ -1623,7 +1646,7 @@ export default function CashFlow() {
                         title={r.vatSrcs && r.vatSrcs.length ? r.vatSrcs.map(x => `${x.mk}: ${x.src === 'filed' ? 'filed return' : x.src === 'reclaim' ? 'estimated reclaim on forecast materials and bills' : 'VAT estimate'}`).join('; ') : ''}>
                         {r.vatIn ? gbp(r.vatIn) : '-'}
                         {r.vatIn && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
-                        {r.vatIn ? <span style={{ fontSize: 9, color: '#999' }}> {openVatWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.vatIn ? <Caret open={openVatWk === i} /> : null}
                       </td>
                       {/* On the arrears row this is a mix of overdue bills and certified-
                           but-uninvoiced cost. Clicking opens exactly what it is made of,
@@ -1633,14 +1656,19 @@ export default function CashFlow() {
                         onClick={() => { if (!r.bills) return; if (r.arrears) setOpenArrears(v => !v); else setOpenBillWk(openBillWk === i ? null : i) }}
                         title={r.bills ? 'Click to see which bills' : ''}>
                         {r.bills ? gbp(-r.bills) : '-'}
-                        {r.bills ? <span style={{ fontSize: 9, color: '#999' }}> {(r.arrears ? openArrears : openBillWk === i) ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.bills ? <Caret open={(r.arrears ? openArrears : openBillWk === i)} /> : null}
                       </td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc', cursor: r.overheads ? 'pointer' : 'default', textDecoration: r.overheads ? 'underline dotted' : 'none' }}
                         onClick={() => r.overheads && setOpenOhWk(openOhWk === i ? null : i)}
                         title={r.overheads ? 'Click to see the breakdown' : ''}>
-                        {r.overheads ? gbp(-r.overheads) : '-'}{r.overheads ? <span style={{ fontSize: 9, color: '#999' }}>{openOhWk === i ? ' \u25B2' : ' \u25BC'}</span> : null}
+                        {r.overheads ? gbp(-r.overheads) : '-'}{r.overheads ? <Caret open={openOhWk === i} /> : null}
                       </td>
-                      <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
+                      <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc', cursor: r.commitments ? 'pointer' : 'default' }}
+                        onClick={() => r.commitments && setOpenFinWk(openFinWk === i ? null : i)}
+                        title={r.commitments ? 'Click to see which items' : ''}>
+                        {r.commitments ? gbp(-r.commitments) : '-'}
+                        {r.commitments ? <Caret open={openFinWk === i} /> : null}
+                      </td>
                       {/* Same treatment - VAT out comes from the same months, so a
                           payment can be an estimate too. */}
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}
@@ -1655,7 +1683,7 @@ export default function CashFlow() {
                         title={r.cisEstimated ? 'Includes CIS predicted from forecast labour, not just from bills already in Xero.' : (r.cisOut ? 'From bills ticked as CIS labour.' : '')}>
                         {r.cisOut ? gbp(-r.cisOut) : '-'}
                         {r.cisOut && r.cisEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
-                        {r.cisOut ? <span style={{ fontSize: 9, color: '#999' }}> {openCisWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.cisOut ? <Caret open={openCisWk === i} /> : null}
                       </td>
                       {/* Three columns, not one net figure. If Materials out and Labour
                           out sit at nil while Project sales runs high, the cost side of
@@ -1663,18 +1691,22 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc', cursor: r.projSalesIn ? 'pointer' : 'default', textDecoration: r.projSalesIn ? 'underline dotted #bbb' : 'none' }}
                         onClick={() => r.projSalesIn && setOpenFcWk(openFcWk === i ? null : i)}
                         title={r.projSalesIn ? 'Click to see which projects this is' : ''}>
-                        {r.projSalesIn ? gbp(r.projSalesIn) : '-'}{r.projSalesIn ? <span style={{ fontSize: 9, color: '#999' }}> {openFcWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.projSalesIn ? gbp(r.projSalesIn) : '-'}{r.projSalesIn ? <Caret open={openFcWk === i} /> : null}
                       </td>
                       {/* Opens the same per-project breakdown the sales figure does - it
                           already carries all three, so a separate table would be the same
                           numbers twice and one more thing to keep in step. */}
                       <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#ccc', cursor: r.projMatOut ? 'pointer' : 'default' }}
-                        onClick={() => r.projMatOut && setOpenFcWk(openFcWk === i ? null : i)}>{r.projMatOut ? gbp(-r.projMatOut) : '-'}</td>
+                        onClick={() => r.projMatOut && setOpenMatWk(openMatWk === i ? null : i)}
+                        title={r.projMatOut ? 'Click to see the supplier lines' : ''}>
+                        {r.projMatOut ? gbp(-r.projMatOut) : '-'}
+                        {r.projMatOut ? <Caret open={openMatWk === i} /> : null}
+                      </td>
                       <td style={{ ...td, color: r.projLabourOut ? '#dc2626' : '#ccc', cursor: r.projLabourOut ? 'pointer' : 'default' }}
                         onClick={() => r.projLabourOut && setOpenFcWk(openFcWk === i ? null : i)}
                         title={r.projLabourOut ? 'Click to see it by project. Net of CIS - the 20% is in the CIS to HMRC column.' : ''}>
                         {r.projLabourOut ? gbp(-r.projLabourOut) : '-'}
-                        {r.projLabourOut ? <span style={{ fontSize: 9, color: '#999' }}> {openFcWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                        {r.projLabourOut ? <Caret open={openFcWk === i} /> : null}
                       </td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
@@ -1736,6 +1768,82 @@ export default function CashFlow() {
                         </table>
                         <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
                           &quot;(due date)&quot; means Xero&apos;s date is being used because no expected date has been set. Set one in the Invoices owed table below and it moves to the week you actually expect it.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {openFinWk != null && forecast[openFinWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#fdf6f0', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Financing &amp; tax in {forecast[openFinWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Item</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Type</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Date</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openFinWk].commDetail || []).map((x, k) => (
+                              <tr key={k} style={{ borderTop: '1px solid #f4e9e0' }}>
+                                {/* Balance sheet items use `label`, commitments use `name` -
+                                    two shapes in one column, so both are read. */}
+                                <td style={{ padding: '3px 6px' }}>{x.label || x.name || '(unnamed)'}</td>
+                                {/* Balance sheet items reduce a liability; commitments are
+                                    operating spend. Different things in one column. */}
+                                <td style={{ padding: '3px 6px', color: x.kind === 'bs' ? '#7c3aed' : '#8a857c' }}>
+                                  {x.kind === 'bs' ? 'liability repayment' : 'recurring commitment'}
+                                </td>
+                                <td style={{ padding: '3px 6px', color: '#999' }}>{x.date ? fmtDMY(x.date) : '-'}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot><tr style={{ borderTop: '1px solid #eddcd0', fontWeight: 700 }}>
+                            <td colSpan={3} style={{ padding: '3px 6px' }}>Total ({(forecast[openFinWk].commDetail || []).length})</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-forecast[openFinWk].commitments)}</td>
+                          </tr></tfoot>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          Set up on the Balance Sheet tab. A liability repayment reduces what you owe and never touches the P&amp;L; a recurring commitment is ordinary spend.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {openMatWk != null && forecast[openMatWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#faf7fd', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Materials in {forecast[openMatWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Delivered</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Pays</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Amount</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openMatWk].fcBreak || []).flatMap(b => (b.matLines || [])).sort((a, b) => b.amount - a.amount).map((x, k) => (
+                              <tr key={k} style={{ borderTop: '1px solid #efe9f6' }}>
+                                <td style={{ padding: '3px 6px' }}>{x.project}</td>
+                                {/* Delivery is the P&L date, payment the cash date - the two
+                                    are weeks apart and the column only ever showed one. */}
+                                <td style={{ padding: '3px 6px', color: '#999' }}>{x.deliver ? fmtDMY(x.deliver) : '-'}</td>
+                                <td style={{ padding: '3px 6px', color: '#999' }}>
+                                  {x.date ? fmtDMY(x.date) : '-'}{x.est ? <span style={{ color: '#b45309', fontSize: 9.5 }}> est</span> : null}
+                                </td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-x.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot><tr style={{ borderTop: '1px solid #e6dcf2', fontWeight: 700 }}>
+                            <td colSpan={3} style={{ padding: '3px 6px' }}>Total</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#dc2626' }}>{gbp(-forecast[openMatWk].projMatOut)}</td>
+                          </tr></tfoot>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          Delivered is when the cost is INCURRED - that is the date the P&amp;L and the application use. Pays is delivery plus that supplier&apos;s terms, which is what this column schedules. &quot;est&quot; means the payment date was assumed because the line carried no term.
                         </div>
                       </td>
                     </tr>
@@ -2118,7 +2226,8 @@ export default function CashFlow() {
                             title="Click to see it month by month"
                             style={{ borderBottom: '1px solid #f2f0ec', cursor: 'pointer', background: openProj === x.name ? '#f7faf9' : 'transparent' }}>
                             <td style={{ ...td, textAlign: 'left' }}>
-                              <span style={{ fontSize: 9, color: '#999', marginRight: 4 }}>{openProj === x.name ? '\u25BC' : '\u25B6'}</span>
+                              <span style={{ fontSize: openProj === x.name ? 12 : 9, fontWeight: openProj === x.name ? 700 : 400,
+                                color: openProj === x.name ? '#1a1a19' : '#bbb', marginRight: 4 }}>{openProj === x.name ? '\u25BC' : '\u25B6'}</span>
                               {x.name}
                             </td>
                             <td style={{ ...td, color: '#999' }}>{x.weeks}</td>
