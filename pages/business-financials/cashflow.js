@@ -1095,6 +1095,7 @@ export default function CashFlow() {
       // WHICH PROJECTS make up the week, so the figure can be checked rather than trusted.
       const fcBreak = []
       const netted = []
+      let raisedThisWk = 0
       for (const fc of (data.projForecasts || [])) {
         // SUPERSEDED - the period has already been applied for, so the money is now a
         // real invoice sitting in `receivables`. Counting the forecast as well is the
@@ -1123,6 +1124,11 @@ export default function CashFlow() {
         // a real invoice covers it is correct, but invisible - and indistinguishable from
         // a line that was never there.
         if (offS > 0) netted.push({ name: projLabel(fc), amount: offS })
+        // RAISED this week, on the application date - not the payment date. This is what
+        // creates new invoice finance availability, weeks before the cash arrives.
+        raisedThisWk += (fc.salesSchedule || [])
+          .filter(x => (x.appDate || x.date) && inWk(x.appDate || x.date))
+          .reduce((a, x) => a + (x.amount || 0), 0)
         if (offS > 0 && fc.projectNo) {
           if (!invUsed[wkMonth]) invUsed[wkMonth] = {}
           invUsed[wkMonth][String(fc.projectNo)] = (invUsed[wkMonth][String(fc.projectNo)] || 0) + offS
@@ -1227,7 +1233,7 @@ export default function CashFlow() {
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
-        netted,
+        netted, raised: Math.round(raisedThisWk),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -1262,14 +1268,39 @@ export default function CashFlow() {
           return t + Math.max(0, lim - Math.abs(Math.min(0, a.balance || 0)))
         }, 0)
       : Math.max(0, (Number(finance.ccLimit) || 0) - Math.abs(Math.min(0, (data?.balances?.cardTotal) || 0)))
-    const ifAvail = data?.ifAvailability ? Math.max(0, data.ifAvailability.availability || 0) : 0
-    return { cards, ifAvail, odLimit: Number(finance.overdraftLimit) || 0 }
+    const pos = data?.ifAvailability || null
+    const ifAvail = pos ? Math.max(0, pos.availability || 0) : 0
+    // The EFFECTIVE ADVANCE RATE Bibby is actually giving you, taken from the published
+    // position rather than assumed - advance over approved ledger.
+    // CAVEAT WORTH KNOWING: this assumes every forecast invoice is fundable. Bibby will
+    // not fund a negotiated job that has no contract, may exclude a customer over its
+    // concentration limit, and applies its own eligibility rules. So this is an upper
+    // bound on availability, not a promise.
+    const rate = (pos && pos.approvedLedger > 0)
+      ? Math.min(1, Math.max(0, (pos.totalAdvance || 0) / pos.approvedLedger))
+      : 0
+    return { cards, ifAvail, rate, odLimit: Number(finance.overdraftLimit) || 0 }
   })()
 
   const chartData = (() => {
     const out = []
+    let ifRunning = facilityHeadroom.ifAvail
     for (const r of forecast) {
-      const avail = (c) => c + facilityHeadroom.cards + facilityHeadroom.ifAvail
+      // INVOICE FINANCE AVAILABILITY MOVES. Holding it constant made the available line
+      // run parallel to cash, which is the opposite of how the facility behaves.
+      //
+      // Raising an invoice creates availability immediately - that is the whole point of
+      // the facility, cash released before the customer pays. Collecting the invoice then
+      // repays the advance, so availability falls as cash rises. The two lines should
+      // diverge and re-converge, not move together.
+      //
+      //   + invoices RAISED this week   x advance rate
+      //   - invoices COLLECTED this week x advance rate
+      ifRunning = Math.max(0, ifRunning
+        + (r.raised || 0) * facilityHeadroom.rate
+        - ((r.invoicesIn || 0) + (r.projSalesIn || 0)) * facilityHeadroom.rate)
+      const ifNow = ifRunning
+      const avail = (c) => c + facilityHeadroom.cards + ifNow
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
       if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
@@ -1614,7 +1645,7 @@ export default function CashFlow() {
               )
             })()}
 
-            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero. The dashed line is what you could pay out if you drew everything - bank plus card headroom, overdraft and invoice finance availability. Drawing it does not make you better off, so the gap between the two lines is borrowing capacity, not cash.">
+            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero. The dashed line adds card headroom, overdraft and invoice finance availability. Availability MOVES: raising an invoice creates it and collecting the invoice repays the advance, so the two lines diverge on a week you bill and close up on a week you collect. Drawing it does not make you better off - the gap is borrowing capacity, not cash.">
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
