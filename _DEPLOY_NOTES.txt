@@ -1,65 +1,57 @@
-pkg698 - Why the P&L looks right and the cash flow does not
-============================================================
+pkg699 - You were right: the 26% ignored the bills
+===================================================
 
-*** SUPERSEDES pkg591 - pkg697. ***
+*** SUPERSEDES pkg591 - pkg698. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/reconciliation.js
-  pages/business-financials/forecast-pl.js
+  pages/business-financials/monthly.js
   ... and the rest of the set as before
 
 
-THE ANSWER: THE P&L IS 8/12 ACTUAL
------------------------------------
-Eight months of real Xero data anchor that total and hide what the four forecast
-months are doing. The cash flow has no actuals to hide behind.
+MY BANNER WAS COMPARING THE WRONG THINGS
+------------------------------------------
+    forecast cost only    358,092   = 26%   <- what it said
+    plus bills out        298,912
+    both together         657,004   = 48%
 
-    ACTUAL revenue Dec 25 - Jul 26, monthly average   199,242
+Your forecasts hold 920,154 of cost. The 12-month showed 358,092 because
+562,062 HAS ALREADY BEEN NETTED against bills sitting in Xero - which is the
+netting working exactly as intended. September is the clearest case: 263,658 of
+bills, and materials and labour both reading "none".
 
-    Sept 26 forecast   509,075   =  2.6x
-    Oct 26  forecast   336,484   =  1.7x
-    Nov 26  forecast   193,989   =  1.0x
-
-    quarter forecast 1,039,548 against a run rate of 597,727
-    -> 74% above anything the business has ever billed
-
-Same input. One presentation dilutes it eight-twelfths, the other shows it neat.
-That is why the P&L "looks about right" at 49,006 while the cash position looks
-absurd - and it means the P&L is NOT actually right, it is just wearing eight
-months of history as cover.
-
-By valuation month, straight from your own CSV:
-
-    2026-09   237,802
-    2026-10   302,343   1.5x
-    2026-11    61,899
-    2026-12   485,102   2.4x    <- December is the one to look at
-    2027-05   284,478
-
-DECEMBER AT 485,102 IS TWO AND A HALF TIMES your best month ever. That is where I
-would start with the project team.
+So yes - it was excluding costs already incurred through bills. Counting the
+forecast side while ignoring the bills that replaced it was never going to give a
+sensible percentage.
 
 
-NEW CHECK ON THE RECONCILE PAGE
--------------------------------
-"Forecast revenue is in line with what you actually bill" - compares every
-forecast month against your real average and names the ones above 1.5x. This is
-the check that would have caught this on day one instead of us chasing the cash
-flow for two hours.
+AND A SECOND REASON THE PERCENTAGE CANNOT BE READ AS A MARGIN
+---------------------------------------------------------------
+A twelve-month window collects revenue for work ALREADY DONE, whose cost was paid
+before the window opened. Cost is truncated at the start; revenue is not. The
+percentage will always sit below your true margin and it is not a fault.
+
+Look at it month by month and the artefact is obvious:
+
+    Sep 26   sales 166,381   cost 263,658   158%
+    Oct 26   sales 285,838   cost  52,522    18%
+
+Same work. September pays for what October bills. In a CASH flow that is correct.
+
+The banner is now amber rather than red, counts bills, and says all of this.
 
 
-ALSO FIXED
-----------
-"undefined has GBP 412,604" - my banner read r.label, which the row does not carry.
-Uses the month key now.
+THE REAL GAPS, FROM YOUR CSV - AND THERE ARE ONLY THREE
+---------------------------------------------------------
+    J243-Christchurch  14/09-25/09   sales 11,998   NO cost at all
+    J248-Renshaw       21/09-09/10   sales 37,762   labour only, no materials
+    J230-St Chads      09/11-13/11   sales    655   labour only, no materials
 
-And I nearly shipped a check that read bud.actuals.income - the shape is
-actuals[month].sales. That would have given a run rate of zero and a check that
-was permanently, uselessly green.
+That is all. Three forecasts, and only one of any size. Your project data is in
+far better shape than the banner was suggesting - the 177,145 "missing" figure I
+quoted earlier was the same mistake, counting forecast cost alone.
 
-
-ON YOUR 67% - you are right that it is not absurd on its own. It is worth perhaps
-177,000. The revenue overstatement is worth far more, and the two compound.
+WHICH LEAVES THE REVENUE OVERSTATEMENT as the one substantial issue outstanding:
+December at 485,102 against a 199,242 monthly average.

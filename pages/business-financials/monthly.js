@@ -276,16 +276,28 @@ export default function MonthlyCashFlow() {
                 // inferred from a curve that only ever rises.
                 // `forecast`, not `rows` - rows is the local inside the memo and is not in
                 // scope out here. It compiles and throws on render.
+                // BILLS ARE PROJECT COSTS TOO.
+                //
+                // The banner compared sales against forecast cost ALONE and called it 26%.
+                // But most of the forecast cost has been NETTED against bills already in
+                // Xero - Sept shows 263,658 of bills with materials and labour both reading
+                // "none". Counting the forecast side only and ignoring the bills that
+                // replaced it was never going to give a sensible percentage.
                 const sales = forecast.reduce((a, r) => a + (r.projSalesIn || 0), 0)
-                const cost = forecast.reduce((a, r) => a + (r.projMatOut || 0) + (r.projLabOut || 0), 0)
+                const fcCost = forecast.reduce((a, r) => a + (r.projMatOut || 0) + (r.projLabOut || 0), 0)
+                const billCost = forecast.reduce((a, r) => a + (r.bills || 0), 0)
+                const cost = fcCost + billCost
                 if (!(sales > 0)) return null
                 const pc = (cost / sales) * 100
                 if (pc >= 70) return null
                 return (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#b91c1c' }}>
-                    <strong>Cost is only {pc.toFixed(0)}% of project sales over the year.</strong>{' '}
-                    Roofing runs 75-85%. At 80% the cost on {gbp(sales)} would be {gbp(sales * 0.8)}, against {gbp(cost)} forecast -
-                    roughly {gbp(sales * 0.8 - cost)} missing. That is why the closing balance climbs and never comes back down.
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
+                    <strong>Cost is {pc.toFixed(0)}% of project sales in this window</strong> - {gbp(fcCost)} still forecast plus {gbp(billCost)} already billed by suppliers.
+                    <div style={{ marginTop: 4 }}>
+                      Some of that gap is real and expected: a twelve-month window collects revenue for work ALREADY DONE, whose cost was paid
+                      before the window opened. So the percentage here is always lower than your true margin and cannot be read as one. Worth
+                      checking only where a month shows sales with &quot;none&quot; against both materials and labour AND no bills either.
+                    </div>
                   </div>
                 )
               })()}
