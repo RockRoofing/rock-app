@@ -893,8 +893,16 @@ export default async function handler(req, res) {
       }
     }
     const availMonths = Object.keys(bm).sort()
+    // THE ACTUAL-MONTHS LIST HAS TO BE PASSED HERE TOO.
+    //
+    // pkg692 fixed this on the Budgets call and missed this one - which is the call the
+    // Forecast P&L, the Forecast Balance Sheet and the 12-month all read. So August kept
+    // showing a fortnight of posted invoices instead of its budget.
+    const cfActualMonths = await redis.get('config:overhead-actual-months')
+      .then(v => Array.isArray(v) ? v : null).catch(() => null)
     const { predicted: predictedByCodeMonth } = computePredictedByCodeMonth(
-      [...ohCodes], ohActualsByCode, availMonths, ohBudgets, ohForecastMethods, ohForecastOverrides
+      [...ohCodes], ohActualsByCode, availMonths, ohBudgets, ohForecastMethods, ohForecastOverrides,
+      cfActualMonths
     )
     // Overhead code -> name (for the weekly overhead breakdown on the Cash Flow page).
     const cfChart = await redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([]))

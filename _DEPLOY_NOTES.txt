@@ -1,52 +1,59 @@
-pkg694 - The 434,338 was my bug, not your dates
-================================================
+pkg695 - A Reconcile page, and the overheads fix that missed
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg693. ***
-*** SIX NEW FILES - create these in GitHub (as before) ***
-
-
-CHANGED FILES (replace)
------------------------
-  pages/business-financials/cashflow.js
-  ... and the rest of the set as before
-
-
-IT IS NOT THE EXPECTED DATES
-----------------------------
-That money is not overdue invoices at all. It is the "applied for but not yet
-invoiced" guard I added in pkg670, and it was claiming the lot.
-
-    invoiced = invByProject[fc.projectNo] || 0
-    short    = certified - invoiced
-
-RECEIVABLES DO NOT RELIABLY CARRY projectNo. The Xero sync attaches it where it
-can and leaves it blank otherwise. Where it was blank the lookup returned ZERO, so
-"certified less invoiced" became "certified less nothing" - and the ENTIRE
-certified value of every applied-for period was dumped into week 1 as money
-awaiting an invoice.
-
-    certified 500,000, invoiced 480,000  ->      20,000   correct
-    certified 500,000, lookup fails      ->     500,000   what was happening
-
-No amount of setting expected dates would have touched it, because it was never
-reading them.
+*** SUPERSEDES pkg591 - pkg694. ***
+*** SEVEN NEW FILES - create these in GitHub:
+      pages/business-financials/reconciliation.js          <- NEW
+      pages/business-financials/payment-performance.js
+      pages/business-financials/forecast-balance-sheet.js
+      pages/business-financials/forecast-pl.js
+      pages/business-financials/forecast-margin.js
+      pages/business-financials/balance-sheet.js
+      components/PageErrorBoundary.js
+***
 
 
-THE FIX - PROVE THE MATCH FIRST
--------------------------------
-Matched on project NAME as well as number, and where a project has no matchable
-invoices at all the guard now says NOTHING rather than assuming the worst. It
-cannot tell "fully invoiced" from "could not match", and guessing between them is
-what caused this.
-
-THE CARRY-FORWARD HAD THE SAME FAULT. An unmatched project read certified as nil
-and carried its whole period into the next one. Same guard applied.
-
-The cost side was always fine - bills do carry b.project, so that lookup has
-always matched.
+YOUR OVERHEADS - I FIXED THE WRONG CALL SITE
+----------------------------------------------
+computePredictedByCodeMonth is called TWICE. pkg692 passed the actual-months list
+to the Budgets call and missed the CASHFLOW call - which is the one the Forecast
+P&L, Forecast Balance Sheet and 12-month all read. So August kept showing a
+fortnight of posted invoices instead of its budget. Now passed to both.
 
 
-AFTER DEPLOYING, the arrears row should fall to genuinely overdue invoices only,
-and the day-one spike should go with it. The reconciliation panel will then show a
-much smaller "collection of debt that existed on day one" - and if the trading
-movement is still around -18,000, that is a real figure worth looking at.
+THE REAL ANSWER TO YOUR QUESTION - STOP CHASING SYMPTOMS
+----------------------------------------------------------
+New "Reconcile" tab. It counts your three sources of truth ONCE and runs the
+checks that must pass before anything built on them can be right. Every one is
+arithmetic, not opinion:
+
+  Cost as a share of forecast sales    is cost missing from the forecasts
+  Schedules add up to period revenue   is money vanishing in the spread (Winnersh)
+  Forecasts match the invoice ledger   can netting work at all (the 434,338)
+  Forecasts carry valuation dates      are periods cut at the right point
+  Invoices have expected dates         is the timing real or assumed
+  Invoices and bills carry a project   can they be netted, or double-counted
+
+A failing check NAMES THE FAULT rather than the symptom. Both bugs you hit today -
+Winnersh's 90% spread and the 434,338 - would have shown up here as a red line
+instead of you spotting a missing payment three screens away.
+
+Below the checks: every forecast as STORED, with revenue against scheduled sales,
+materials, labour and cost %. Red where a schedule does not tie or a cost is nil.
+
+
+THREE CSV EXPORTS
+-----------------
+  Forecasts CSV      every period, dates, revenue, scheduled, materials, labour
+  Invoices CSV       the ledger with date, due, expected, total, still due
+  Bills CSV          supplier, project, due, planned, CIS, total, still due
+
+So you can check them against Xero and the project team in a spreadsheet, rather
+than through my eyes.
+
+
+WHERE I WOULD START
+-------------------
+Deploy, open Reconcile, and send me the checks. If "cost as a share of sales" and
+"forecasts match the invoice ledger" both pass, the 700k is real and we look at
+timing. If either fails, that is the bug and we stop guessing.
