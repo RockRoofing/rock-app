@@ -668,24 +668,41 @@ export default function CashFlow() {
     // So sales are dropped only to the extent invoices have actually arrived, and the
     // shortfall lands in the current week rather than sitting in a month that has gone.
     const awaitingCash = (() => {
+      // MATCH ON PROJECT NAME AS WELL AS NUMBER.
+      //
+      // Receivables do not reliably carry projectNo - the Xero sync attaches what it can,
+      // and where it cannot the lookup returned nothing. Then "certified less invoiced"
+      // was certified less ZERO, so the ENTIRE certified value of every applied-for period
+      // landed in week 1 as "not yet invoiced". That is the 434,338, and it had nothing to
+      // do with the expected dates being set.
       const invByProject = {}
+      const invByName = {}
+      let anyMatchable = false
       for (const i of (data.receivables || [])) {
-        if (!i.projectNo || excluded[invKey(i)]) continue
-        const k = String(i.projectNo)
-        invByProject[k] = (invByProject[k] || 0) + (i.amountDue || 0)
+        if (excluded[invKey(i)]) continue
+        if (i.projectNo) { invByProject[String(i.projectNo)] = (invByProject[String(i.projectNo)] || 0) + (i.amountDue || 0); anyMatchable = true }
+        if (i.projectName) { const n = normName(i.projectName); invByName[n] = (invByName[n] || 0) + (i.amountDue || 0); anyMatchable = true }
       }
       const out = []
       for (const fc of (data.projForecasts || [])) {
         if (!isApplied(fc)) continue
+        // If NOTHING can be matched, the comparison is meaningless - claiming the whole
+        // certified value is uninvoiced would be far worse than saying nothing.
+        if (!anyMatchable) continue
         const bound = fc.valDate || fc.to || ''
         const certified = (fc.salesSchedule || [])
           .filter(x => (x.appDate || x.date) && (x.appDate || x.date) <= bound)
           .reduce((t, x) => t + (x.amount || 0), 0)
         if (certified <= 0) continue
         const k = String(fc.projectNo || '')
-        const invoiced = invByProject[k] || 0
+        const nk = normName(fc.projectName || '')
+        const invoiced = (invByProject[k] || 0) || (invByName[nk] || 0)
+        // Nothing found for THIS project - cannot tell "fully invoiced" from "not matched",
+        // so say nothing rather than guess the worst.
+        if (invoiced <= 0) continue
         const short = Math.max(0, certified - invoiced)
-        invByProject[k] = Math.max(0, invoiced - certified)   // consume, so two periods cannot both claim it
+        if (k) invByProject[k] = Math.max(0, (invByProject[k] || 0) - certified)
+        if (nk) invByName[nk] = Math.max(0, (invByName[nk] || 0) - certified)
         if (short > 0.5) out.push({ name: projLabel(fc), amount: short, upTo: bound })
       }
       return out
@@ -771,11 +788,14 @@ export default function CashFlow() {
         const k = String(fc.projectKey || fc.projectNo || '')
         ;(byProject[k] = byProject[k] || []).push(fc)
       }
+      // By number AND name, for the same reason as above - an unmatched project would
+      // read certified as nil and carry its ENTIRE period forward.
       const invLeft = {}
+      const invLeftName = {}
       for (const i of (data.receivables || [])) {
-        if (!i.projectNo || excluded[invKey(i)]) continue
-        const k = String(i.projectNo)
-        invLeft[k] = (invLeft[k] || 0) + (i.amountDue || 0)
+        if (excluded[invKey(i)]) continue
+        if (i.projectNo) invLeft[String(i.projectNo)] = (invLeft[String(i.projectNo)] || 0) + (i.amountDue || 0)
+        if (i.projectName) { const n = normName(i.projectName); invLeftName[n] = (invLeftName[n] || 0) + (i.amountDue || 0) }
       }
       for (const [, list] of Object.entries(byProject)) {
         // Oldest valuation first, so the carry walks forward in the order the periods
@@ -787,9 +807,14 @@ export default function CashFlow() {
           if (!salesSpent(fc)) { carry = 0; break }   // reached the open periods - stop
           const own = (fc.salesSchedule || []).reduce((t, x) => t + (x.amount || 0), 0)
           const k = String(fc.projectNo || '')
-          const avail = invLeft[k] || 0
+          const nk = normName(fc.projectName || '')
+          const avail = (invLeft[k] || 0) || (invLeftName[nk] || 0)
+          // No invoices found for this project at all - cannot distinguish "certified
+          // nothing" from "could not match", so carry nothing rather than the lot.
+          if (avail <= 0) { carry = 0; break }
           const certified = Math.min(own + carry, avail)
-          invLeft[k] = Math.max(0, avail - certified)
+          if (k) invLeft[k] = Math.max(0, (invLeft[k] || 0) - certified)
+          if (nk) invLeftName[nk] = Math.max(0, (invLeftName[nk] || 0) - certified)
           carry = (own + carry) - certified
         }
       }

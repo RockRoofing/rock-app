@@ -1,7 +1,7 @@
-pkg693 - Invoice finance availability now MOVES
+pkg694 - The 434,338 was my bug, not your dates
 ================================================
 
-*** SUPERSEDES pkg591 - pkg692. ***
+*** SUPERSEDES pkg591 - pkg693. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,42 +11,42 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-YOU ARE RIGHT - A CONSTANT MADE IT PARALLEL TO CASH
-------------------------------------------------------
-I held availability still, so the available line was just the cash line plus a
-fixed number. That is the opposite of how the facility behaves.
+IT IS NOT THE EXPECTED DATES
+----------------------------
+That money is not overdue invoices at all. It is the "applied for but not yet
+invoiced" guard I added in pkg670, and it was claiming the lot.
 
-Bibby releases cash BEFORE the customer pays. So:
+    invoiced = invByProject[fc.projectNo] || 0
+    short    = certified - invoiced
 
-    raising an invoice   CREATES availability, weeks before the cash arrives
-    collecting it        REPAYS the advance, so availability falls as cash rises
+RECEIVABLES DO NOT RELIABLY CARRY projectNo. The Xero sync attaches it where it
+can and leaves it blank otherwise. Where it was blank the lookup returned ZERO, so
+"certified less invoiced" became "certified less nothing" - and the ENTIRE
+certified value of every applied-for period was dumped into week 1 as money
+awaiting an invoice.
 
-Now modelled week by week:
+    certified 500,000, invoiced 480,000  ->      20,000   correct
+    certified 500,000, lookup fails      ->     500,000   what was happening
 
-    + invoices RAISED this week    x advance rate
-    - invoices COLLECTED this week x advance rate
-
-    week  raised    collected   availability   cash    total available
-             0       120,000              0    70,000        70,000
-       250,000        40,000        147,000    30,000       177,000
-             0        60,000        105,000    10,000       115,000
-       180,000             0        231,000   -70,000       161,000
-             0       200,000         91,000    50,000       141,000
-
-The lines now diverge on a week you bill and close up on a week you collect -
-which is the shape you were expecting to see.
-
-RAISED IS TAKEN ON THE APPLICATION DATE, not the payment date. That is the whole
-point: the availability appears when the invoice is raised, not when it is paid.
-
-THE ADVANCE RATE IS YOUR OWN - totalAdvance over approvedLedger from the position
-the IF page publishes. Not assumed at 70 or 80%.
+No amount of setting expected dates would have touched it, because it was never
+reading them.
 
 
-ONE CAVEAT, WRITTEN INTO THE CODE
----------------------------------
-This assumes every forecast invoice is fundable. Bibby will not fund a negotiated
-job with no contract, may exclude a customer over its concentration limit, and
-applies its own eligibility rules. So the dashed line is an UPPER BOUND on
-availability, not a promise - which matters most on exactly the weeks you would be
-relying on it.
+THE FIX - PROVE THE MATCH FIRST
+-------------------------------
+Matched on project NAME as well as number, and where a project has no matchable
+invoices at all the guard now says NOTHING rather than assuming the worst. It
+cannot tell "fully invoiced" from "could not match", and guessing between them is
+what caused this.
+
+THE CARRY-FORWARD HAD THE SAME FAULT. An unmatched project read certified as nil
+and carried its whole period into the next one. Same guard applied.
+
+The cost side was always fine - bills do carry b.project, so that lookup has
+always matched.
+
+
+AFTER DEPLOYING, the arrears row should fall to genuinely overdue invoices only,
+and the day-one spike should go with it. The reconciliation panel will then show a
+much smaller "collection of debt that existed on day one" - and if the trading
+movement is still around -18,000, that is a real figure worth looking at.
