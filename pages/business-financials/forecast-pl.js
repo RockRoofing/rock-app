@@ -18,7 +18,11 @@ const projLabel = (fc) => {
   const no = fc.projectNo ? String(fc.projectNo) : ''
   const nm = (fc.projectName || '').trim()
   if (no && nm) return nm.startsWith(no) ? nm : `${no} - ${nm}`
-  return nm || no || String(fc.projectKey || '').replace(/^[LN]:/, '') || '(unnamed)'
+  // A negotiated job is prefixed so it is never mistaken for a live one - it is a deal,
+  // not a contract, and the money is far less certain.
+  const key = String(fc.projectKey || '')
+  if (key.startsWith('N:')) return nm ? `${nm} (negotiated)` : `Deal ${key.slice(2)} (negotiated)`
+  return nm || no || key.replace(/^L:/, '') || '(unnamed)'
 }
 
 const th = { padding: '7px 8px', fontSize: 10.5, color: '#888', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }

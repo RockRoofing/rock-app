@@ -1,7 +1,7 @@
-pkg673 - Materials on site kept separate from measured works
-=============================================================
+pkg676 - Why saving did not clear the red banner
+=================================================
 
-*** SUPERSEDES pkg591 - pkg672. ***
+*** SUPERSEDES pkg591 - pkg675. ***
 *** SIX NEW FILES - create these in GitHub (as before) ***
 
 
@@ -11,46 +11,48 @@ CHANGED FILES (replace)
   ... and the rest of the set as before
 
 
-YOUR QUESTION - YES, 100k COMES THROUGH, AND THAT IS RIGHT
------------------------------------------------------------
-Gross claimed includes materials on site. You claimed 100k and you get paid on
-100k, so for cash it is correct and unchanged.
+YOU DIAGNOSED IT - THE END OF MONTH CYCLE NEVER SET A VALUATION DATE
+---------------------------------------------------------------------
+    return { month: mk, date, amount: rev * pct }     <- no appDate
 
-THE PROBLEM WAS EVERYTHING MEASURED AGAINST IT. salesBudgetTotal is contract works
-plus variations - it does NOT contain MOS, because MOS is an advance on work not
-yet done. Comparing the two understated remaining works by the whole MOS balance:
+So a forecast on that cycle had no valuation date NO MATTER HOW OFTEN IT WAS
+SAVED. My banner was telling you to do something that could not work, which is
+worse than not warning at all.
 
-    contract + variations   135,000
-    claimed                 100,000  (20,000 works + 80,000 materials on site)
+On an end-of-month cycle the valuation IS the month end - that is what the cash
+date is derived from - so it can simply be stated:
 
-    BEFORE  "35,000 of contract left"     wrong - works+MOS against works
-    AFTER   "115,000 of works left (plus 80,000 materials on site claimed)"
+    J248, period 02/11-13/11
+      before  no appDate -> valuation fell back to the period end, 13/11
+      after   30/11
 
-At the exact moment you build the next forecast - your Step 2 - it was telling you
-35,000 of work remained when 115,000 did.
+    and on J244's four-month period:
+      Sep -> valued 30/09,  Oct -> 31/10,  Nov -> 30/11,  Dec -> 31/12
+      before, ALL FOUR were cut off at the period end, 18/12
 
-
-THE OVER-CLAIM WARNING WAS MISFIRING FOR THE SAME REASON
----------------------------------------------------------
-It tested gross against contract. Claim 120,000 of materials on a 135,000 job and
-it announced you were over-claimed when you had done 20,000 of work. It now tests
-WORKS against contract.
-
-WHICH ALSO EXPLAINS J248. I put that 158,000-against-135,000 down to a double
-count. Materials on site is the more likely explanation, and worth re-checking
-now the two are separated.
+Save J248 and 8335 once more after deploying and the banner should clear.
 
 
-THE PANEL SPLITS IT
--------------------
-    Previously claimed (gross)   158,928.94
-    From App 18 - 96,000 works + 62,928.94 materials on site
+WAUNGRON vs MARKET DRAYTON - THE BANNER IS RIGHT
+-------------------------------------------------
+    13-week window   31/08/26 to 29/11/26
+    J244 Waungron    first cash 27/10  INSIDE  -> not listed
+    J240 Market Dr.  first cash 04/12  OUTSIDE -> listed
 
-Cash against gross, remaining contract against works. Both questions answered on
-the right basis, and the difference visible rather than buried in one figure.
+Waungron has later instalments beyond the window, but it is not excluded because
+part of it lands inside. Market Drayton's earliest cash is already past the end.
 
 
-ON YOUR STEP 1 AND 2 - one nuance worth holding onto. Materials on site is what
-you CLAIM; delivery is what you PAY. Same materials, different dates, and the
-forecast keeps both - which is why a materials figure can sit in a valuation
-period and leave the bank two months later. That gap is exactly what WIP holds.
+MATERIALS PAID ON DELIVERY - ALREADY SUPPORTED
+-----------------------------------------------
+No new option needed. Every materials LINE has its own delivery date and its own
+term, which is what "Materials terms are set per line below (per supplier)" means.
+
+    Renshaw materials delivered 14/09
+      days + 0    ->  paid 14/09   (on delivery)
+      days + 7    ->  paid 21/09
+      EOM + 30    ->  paid 30/10   (normal terms)
+
+So for Renshaw and Kilburn: set the first delivery line to days + 0 and leave the
+later lines on their normal term. First app paid on delivery, everything after on
+the application cycle - exactly what you described, with what is already there.

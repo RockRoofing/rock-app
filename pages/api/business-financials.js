@@ -1,4 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
+import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 import { getTokens, saveTokens, getProject } from '../../lib/db'
 import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances, fetchBalanceSheetAccounts, fetchPaidReceivables } from '../../lib/xero'
@@ -910,6 +911,18 @@ export default async function handler(req, res) {
         for (const k of (batch || [])) keys.push(k)
       } while (cursor)
       // Map planning project key -> a display/project name for matching to invoices/bills.
+      // Pipedrive deal titles, for the negotiated forecasts.
+      const dealNameById = {}
+      const dealCustById = {}
+      try {
+        const deals = crmDealsToFlat((await redis.get('crm:deals').catch(() => ([]))) || [])
+        for (const d of (Array.isArray(deals) ? deals : [])) {
+          if (!d || d.id == null) continue
+          dealNameById[String(d.id)] = d.title || ''
+          dealCustById[String(d.id)] = d.organizationName || ''
+        }
+      } catch {}
+
       const dashCustByNo = {}
       const dashByNo = {}
       // Latest application valuation date per job number, for the supersede rule below.
@@ -928,7 +941,13 @@ export default async function handler(req, res) {
         const pk = k.replace('cashflow:hyp-apps:', '')
         // pk is "L:<projectNo>" (live/draft) or "N:<dealId>" (negotiated).
         const projectNo = pk.startsWith('L:') ? pk.slice(2) : ''
-        const projectName = projectNo ? (dashByNo[projectNo] || '') : ''
+        // NEGOTIATED projects are keyed "N:<pipedrive deal id>" and were never named -
+        // the page showed a bare "8335", which means nothing to anybody. Same source the
+        // planning Gantt uses, so the two agree.
+        const dealId = pk.startsWith('N:') ? pk.slice(2) : ''
+        const projectName = projectNo
+          ? (dashByNo[projectNo] || '')
+          : (dealId ? (dealNameById[dealId] || '') : '')
         const list = (await redis.get(k).catch(() => ([]))) || []
         for (const fc of list) {
           projForecasts.push({
@@ -938,7 +957,7 @@ export default async function handler(req, res) {
             // The CUSTOMER, so the payment-behaviour table can group a project's forecast
             // sales with that customer's invoices and retention. Without it a forecast row
             // groups under the project name and never meets the rest of their money.
-            customer: (dashByNo[projectNo] && dashCustByNo[projectNo]) || '',
+            customer: projectNo ? (dashCustByNo[projectNo] || '') : (dealId ? (dealCustById[dealId] || '') : ''),
             salesSchedule: fc.salesSchedule || (fc.salesDate ? [{ date: fc.salesDate, amount: fc.revenueThisPeriod || 0 }] : []),
             // SAME FALLBACK THE PROJECT CASH FLOW USES (project-cashflow.js:213).
             //

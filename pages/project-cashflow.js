@@ -1591,13 +1591,24 @@ function HypAppModal({ modal, onClose, onSaved }) {
       }).filter(s => s.date && s.amount > 0.5)
     }
 
-    // One application for the period: each spread month's portion, timed off month end.
+    // END OF MONTH + days. Each spread month's portion, timed off that month's end.
+    // Called "applications" in the stored data for historical reasons - the label on
+    // screen now says what it does.
     if (!periodMonths.length) return []
     const days = num(salesTerm.days)
     return periodMonths.map(mk => {
       const pct = num(salesSpread[mk]) / 100
       const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
-      return { month: mk, date, amount: rev * pct }
+      // THE MONTH END IS THE VALUATION DATE on this cycle.
+      //
+      // This branch never set appDate, so a forecast using it had no valuation date no
+      // matter how many times it was saved - and the "needs a Save" banner kept firing on
+      // forecasts that had just been saved. Worse, the cash flow then cut sales and costs
+      // off at the PERIOD END instead, which on a four-month period is months out.
+      //
+      // On an end-of-month cycle the valuation IS the month end - that is what the cash
+      // date is derived from - so it can be stated rather than left blank.
+      return { month: mk, appDate: monthEndOf(mk), date, amount: rev * pct }
     }).filter(s => s.amount > 0.5)
   }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm, from, to, appCalendar, appCalendarUsable])
 
@@ -2195,7 +2206,11 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar,
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         {cycles && (
           <select value={cycle} onChange={e => setTerm({ ...term, cycle: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
-            <option value="applications">Per application</option>
+            {/* LABEL renamed, VALUE left alone. It is stored on every saved forecast, so
+                changing "applications" would orphan the lot. What this branch actually
+                does is time each spread month off MONTH END plus the term - there is
+                nothing per-application about it. */}
+            <option value="applications">End of month + days</option>
             <option value="project">Project application dates</option>
             <option value="weekly">Weekly</option>
             <option value="fortnightly">Fortnightly</option>
