@@ -1,38 +1,54 @@
-pkg714 - FIX: "td is not defined", and full width
-==================================================
+pkg715 - Availability moves on the APPLICATION date, and a projection on the IF page
+=====================================================================================
 
-*** SUPERSEDES pkg591 - pkg713. ***
+*** SUPERSEDES pkg591 - pkg714. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 *** lib/cashflowEvents.js IS IN THIS PACKAGE - replace it ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
   pages/business-financials/monthly.js
   pages/business-financials/forecast-pl.js
+  lib/cashflowEvents.js
   ... and the rest of the set as before
 
 
-THE ERROR - MY BUG, AND THE SAME SHAPE AS EVER
-------------------------------------------------
-I put the Drill component at MODULE SCOPE, which is right - a component declared
-inside another remounts on every render. But `td` and `th` were declared INSIDE
-the page component, so Drill could not see them.
+WHY THE LINE TRACKED THE CASH - TWO REASONS, BOTH MINE
+--------------------------------------------------------
+    .filter(x => (x.appDate || x.date) && inWk(x.appDate || x.date))
 
-Compiles clean. Throws "td is not defined" the moment the table renders.
+1. IT FELL BACK TO x.date - the PAYMENT date - wherever appDate was missing. So
+   availability moved with the cash instead of the billing.
 
-Both style objects hoisted to module scope, above the components that use them.
+2. It sat INSIDE the block guarded by salesSpent, so a period whose forecast sales
+   had been superseded raised nothing at all. But the application still happened
+   and still created fundable debt.
 
-I also ran a scan for any other module-scope component reaching into page scope on
-both pages - clean. The three it flagged in DrillTable were map callback
-parameters, `(c, i)` and `(x, i)`, declared where they are used.
+Now: appDate only, over every forecast, regardless of supersession.
+
+    Waungron App2, applied 27/09, cash 27/10
+      BEFORE  availability rose in the week of 27/10, with the cash
+      AFTER   rises 27/09, falls 27/10 as the advance is repaid
+
+The dashed line now LEADS the cash line by the application-to-payment gap, which
+is the whole point of the facility.
 
 
-FULL WIDTH
-----------
-    12-MONTH   was maxWidth 1300 with sixteen columns, so it scrolled sideways on
-               every screen including ones with room to spare. Now full width, and
-               the table minWidth raised to 1500 so the columns are not crushed.
+AND THE PROJECTION IS ON THE INVOICE FINANCE PAGE, AS YOU ASKED
+-----------------------------------------------------------------
+"Projected availability, by application date":
 
-    FORECAST P&L   the table had no width set, so it sized to its content and left
-               a third of a wide monitor empty. Now width 100%.
+    Application month   Applied for   Over insured limit   Advance created
+
+Built from the project forecasts, grouped by the month each application is RAISED,
+with the advance calculated per customer using the SAME rules as the live table -
+your advance rate, and the insured limit applied to the DEBT with only the excess
+disapproved.
+
+THE "OVER INSURED LIMIT" COLUMN IS THE USEFUL ONE. Where no limit is recorded for
+a customer, none of that customer's debt is fundable - so a large figure there is
+either a limit you have not entered or an application Bibby will not fund. Either
+way it is worth knowing before you count on the advance.

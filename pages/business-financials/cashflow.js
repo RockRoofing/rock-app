@@ -1155,7 +1155,18 @@ export default function CashFlow() {
       // WHICH PROJECTS make up the week, so the figure can be checked rather than trusted.
       const fcBreak = []
       const netted = []
+      // RAISED THIS WEEK, on the application date alone.
+      //
+      // Bibby fund an application the day it is raised. So availability must move on
+      // appDate - never on the payment date, and regardless of whether the forecast sales
+      // have since been superseded by a real invoice, because the application still
+      // happened and still created fundable debt.
       let raisedThisWk = 0
+      for (const fc of (data.projForecasts || [])) {
+        raisedThisWk += (fc.salesSchedule || [])
+          .filter(x => x.appDate && inWk(x.appDate))
+          .reduce((a, x) => a + (x.amount || 0), 0)
+      }
       for (const fc of (data.projForecasts || [])) {
         // SUPERSEDED - the period has already been applied for, so the money is now a
         // real invoice sitting in `receivables`. Counting the forecast as well is the
@@ -1186,9 +1197,11 @@ export default function CashFlow() {
         if (offS > 0) netted.push({ name: projLabel(fc), amount: offS })
         // RAISED this week, on the application date - not the payment date. This is what
         // creates new invoice finance availability, weeks before the cash arrives.
-        raisedThisWk += (fc.salesSchedule || [])
-          .filter(x => (x.appDate || x.date) && inWk(x.appDate || x.date))
-          .reduce((a, x) => a + (x.amount || 0), 0)
+        // Moved out of this block - see below. An application is raised whether or not
+        // the forecast sales have been superseded, and it must be dated on the APPLICATION
+        // date only. Falling back to x.date used the PAYMENT date, which made availability
+        // move with the cash instead of with the billing - the opposite of how the facility
+        // works.
         if (offS > 0 && fc.projectNo) {
           if (!invUsed[wkMonth]) invUsed[wkMonth] = {}
           invUsed[wkMonth][String(fc.projectNo)] = (invUsed[wkMonth][String(fc.projectNo)] || 0) + offS

@@ -146,6 +146,7 @@ export default function InvoiceFinance() {
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: '', highInvolvementPct: 35, ageDays: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
+  const [cf, setCf] = useState(null)                  // project forecasts, for the projection
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [apiVersion, setApiVersion] = useState(null)
   const [dashEmpty, setDashEmpty] = useState(false)
@@ -174,6 +175,9 @@ export default function InvoiceFinance() {
     setLoading(true)
     try {
       const d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
+      // The project forecasts, so this page can project availability forward. Fetched
+      // separately because the invoice-finance view does not carry them.
+      try { setCf(await fetch('/api/business-financials?view=cashflow').then(r => r.json())) } catch {}
       setData(d)
       setSettings({
         advanceRate: d.settings?.advanceRate ?? 60,
@@ -288,6 +292,51 @@ export default function InvoiceFinance() {
       return { ...c, insured, hasLimit, fundable, insurable, overLimitDebt, rawAdvance, advance, cappedByLimit: hasLimit && overLimitDebt > 0 }
     }).sort((a, b) => b.advance - a.advance || b.fundable - a.fundable)
   }, [data, limits, settings.advanceRate, paidOverrides])
+
+  // PROJECTED AVAILABILITY, BY APPLICATION DATE.
+  //
+  // Bibby fund an application the moment it is raised, not when the customer pays. So the
+  // question is not "how much cash is coming" but "how much debt will exist on the day I
+  // apply, and how much of it will they advance".
+  //
+  // Uses the SAME rules as the live position above - advance rate, insured limit applied
+  // to the DEBT with only the excess disapproved - so the projection cannot say something
+  // the current position would not.
+  const projected = useMemo(() => {
+    const rate = (Number(settings.advanceRate) || 0) / 100
+    const rows = []
+    for (const fc of (cf?.projForecasts || [])) {
+      const cust = fc.customer || '(no customer)'
+      for (const x of (fc.salesSchedule || [])) {
+        // The APPLICATION date - when the debt comes into existence and becomes fundable.
+        const d = x.appDate || x.date
+        if (!d || !(Number(x.amount) > 0)) continue
+        rows.push({ date: d, customer: cust, project: fc.projectName || fc.projectKey || '', amount: Number(x.amount) || 0 })
+      }
+    }
+    rows.sort((a, b) => a.date.localeCompare(b.date))
+    // Month by month: what is applied for, and what Bibby would advance on it.
+    const byMonth = {}
+    for (const r of rows) {
+      const mk = r.date.slice(0, 7)
+      const m = byMonth[mk] || (byMonth[mk] = { mk, applied: 0, byCust: {} })
+      m.applied += r.amount
+      m.byCust[r.customer] = (m.byCust[r.customer] || 0) + r.amount
+    }
+    const months = Object.values(byMonth).sort((a, b) => a.mk.localeCompare(b.mk)).map(m => {
+      let advance = 0, capped = 0
+      for (const [cust, amt] of Object.entries(m.byCust)) {
+        const insured = Number((limits[cust] || {}).insuredLimit) || 0
+        // Same rule as the live table: no limit recorded means none of it is insurable.
+        const over = insured > 0 ? Math.max(0, amt - insured) : amt
+        const insurable = Math.max(0, amt - over)
+        advance += insurable * rate
+        capped += over
+      }
+      return { ...m, advance, capped }
+    })
+    return { rows, months }
+  }, [cf, limits, settings.advanceRate])
 
   const totals = useMemo(() => {
     const fundable = customers.reduce((s, c) => s + c.fundable, 0)
@@ -681,6 +730,48 @@ export default function InvoiceFinance() {
               <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save settings'}</button>
               {importMsg && <div style={{ fontSize: 11.5, color: '#555', flexBasis: '100%' }}>{importMsg}</div>}
             </div>
+
+            {/* PROJECTED AVAILABILITY - what the facility will support as applications
+                are raised, which is a different question from what cash is coming. */}
+            {projected.months.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Projected availability, by application date</div>
+                <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10, maxWidth: 860 }}>
+                  Bibby fund an application the day it is raised, not when the customer pays. So this is the debt that will EXIST on each
+                  application date and what they would advance against it - at your {settings.advanceRate}% rate, with each customer&apos;s
+                  insured limit applied to the debt and only the excess disapproved, exactly as the live table below does.
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                    <th style={{ padding: '7px 9px', textAlign: 'left', fontSize: 11, color: '#888' }}>Application month</th>
+                    <th style={{ padding: '7px 9px', textAlign: 'right', fontSize: 11, color: '#888' }}>Applied for</th>
+                    <th style={{ padding: '7px 9px', textAlign: 'right', fontSize: 11, color: '#888' }}>Over insured limit</th>
+                    <th style={{ padding: '7px 9px', textAlign: 'right', fontSize: 11, color: '#888' }}>Advance created</th>
+                  </tr></thead>
+                  <tbody>
+                    {projected.months.map((m, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                        <td style={{ padding: '6px 9px' }}>{m.mk}</td>
+                        <td style={{ padding: '6px 9px', textAlign: 'right' }}>{gbp(m.applied)}</td>
+                        {/* Debt above the insured limit is not funded - and where no limit
+                            is recorded, none of that customer is. Worth seeing before you
+                            rely on the advance. */}
+                        <td style={{ padding: '6px 9px', textAlign: 'right', color: m.capped ? '#dc2626' : '#ccc' }}>
+                          {m.capped ? gbp(m.capped) : '-'}
+                        </td>
+                        <td style={{ padding: '6px 9px', textAlign: 'right', fontWeight: 700, color: '#0f766e' }}>{gbp(m.advance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr style={{ borderTop: '2px solid #ddd', fontWeight: 700 }}>
+                    <td style={{ padding: '7px 9px' }}>Total ({projected.rows.length} applications)</td>
+                    <td style={{ padding: '7px 9px', textAlign: 'right' }}>{gbp(projected.months.reduce((a, m) => a + m.applied, 0))}</td>
+                    <td style={{ padding: '7px 9px', textAlign: 'right', color: '#dc2626' }}>{gbp(projected.months.reduce((a, m) => a + m.capped, 0))}</td>
+                    <td style={{ padding: '7px 9px', textAlign: 'right', color: '#0f766e' }}>{gbp(projected.months.reduce((a, m) => a + m.advance, 0))}</td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            )}
 
             {/* Customer -> projects -> applications */}
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'auto' }}>
