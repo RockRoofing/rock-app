@@ -496,6 +496,10 @@ export default function CashFlow() {
     const start = mondayOf(new Date())
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
+    // Which account codes count as overheads, from the same list the API builds the
+    // predicted grid from - so a bill is judged an overhead by exactly the same rule.
+    const ohCodeSet = new Set(Object.keys(data.overheadNames || {}).map(String))
+
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
     // ONE COLUMN. Vehicles and commitments are financing too, so they sit with the
     // balance sheet items rather than in a column of their own.
@@ -1050,7 +1054,31 @@ export default function CashFlow() {
         }))
         .sort((a, b) => b.amount - a.amount)
       const billsOut = billDetail.reduce((a, i) => a + i.amount, 0)
-      const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
+      // AN OVERHEAD BILL IS ALREADY IN BILLS OUT.
+      //
+      // Bills out pays every outstanding Xero bill, including overhead ones - insurance,
+      // rent, accountancy. The Overheads column then pays the PREDICTED figure for the same
+      // month, so that cost leaves the bank twice.
+      //
+      // Every bill carries lineCodes from the sync; nothing was reading them. Netted per
+      // overhead CODE within the week: where a real bill exists, the predicted figure comes
+      // down by it rather than both being paid.
+      const ohBillByCode = {}
+      for (const b of (data.bills || [])) {
+        if (excluded[b.id]) continue
+        if (!inWk((billOverrides[b.id] || b.payDate || b.dueDate) || '')) continue
+        const codes = (b.lineCodes || []).filter(c => ohCodeSet.has(String(c)))
+        if (!codes.length) continue
+        // A bill can touch several overhead codes; split it evenly rather than guess.
+        const per = Math.abs(b.amountDue || 0) / codes.length
+        for (const c of codes) ohBillByCode[String(c)] = (ohBillByCode[String(c)] || 0) + per
+      }
+      const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => {
+        const avail = ohBillByCode[String(x.code)] || 0
+        const off = Math.min(x.amount, avail)
+        if (off > 0) ohBillByCode[String(x.code)] = avail - off
+        return a + Math.max(0, x.amount - off)
+      }, 0)
       // Per-week overhead breakdown by code (for the click-to-expand detail).
       const ohDetailMap = {}
       for (const x of ohEvents.filter(x => inWk(x.date))) {

@@ -118,6 +118,8 @@ export default function MonthlyCashFlow() {
     const [ly, lm] = months[months.length - 1].split('-').map(Number)
     const end = new Date(ly, lm, 0)  // last day of final month
 
+    const ohCodeSet = new Set(Object.keys(data.overheadNames || {}).map(String))
+
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
     // BALANCE SHEET ITEMS too - PAYE/CIS arrears, loan and HP capital, corporation tax.
     // The 13-week has carried these since pkg627; this page only ever had the vehicle
@@ -219,7 +221,22 @@ export default function MonthlyCashFlow() {
           project: i.project || '', amount: Math.abs(i.amountDue || 0), date: i.payDate || i.dueDate || '', set: !!i.payDate }))
         .sort((a, b) => b.amount - a.amount)
       const billsOut = billDetail.reduce((a, i) => a + i.amount, 0)
-      const ohOut = ohEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => a + x.amount, 0)
+      // Same as the 13-week: an overhead bill is already in Bills out, so netting stops the
+      // same cost leaving the bank twice.
+      const ohBillByCode = {}
+      for (const b of (data.bills || [])) {
+        if (!inMonth(b.payDate || b.dueDate, mk)) continue
+        const codes = (b.lineCodes || []).filter(c => ohCodeSet.has(String(c)))
+        if (!codes.length) continue
+        const per = Math.abs(b.amountDue || 0) / codes.length
+        for (const c of codes) ohBillByCode[String(c)] = (ohBillByCode[String(c)] || 0) + per
+      }
+      const ohOut = ohEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => {
+        const avail = ohBillByCode[String(x.code)] || 0
+        const off = Math.min(x.amount, avail)
+        if (off > 0) ohBillByCode[String(x.code)] = avail - off
+        return a + Math.max(0, x.amount - off)
+      }, 0)
       const commOut = commEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inMonth(c.date, mk)).reduce((a, c) => a + c.amount, 0)
 
