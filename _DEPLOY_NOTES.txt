@@ -1,45 +1,44 @@
-pkg718 - You are right, and it is cleaner
-==========================================
+pkg720 - The availability field never existed
+==============================================
 
-*** SUPERSEDES pkg591 - pkg717. ***
+*** SUPERSEDES pkg591 - pkg719. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 *** lib/cashflowEvents.js IS IN THIS PACKAGE - replace it ***
 
 
-THEY GIVE THE SAME ANSWER
--------------------------
-    mine    opening 2,500     collect 430,120 (reduced)  ->  432,620
-    yours   opening -119,500  collect 552,120 (in full)  ->  432,620
+    const ifAvail = pos ? Math.max(0, pos.availability || 0) : 0
 
-Identical. And yours is better on three counts:
+THERE IS NO `availability` FIELD. The published position carries totalAdvance,
+drawn and approvedLedger - nothing else. I assumed one when I wrote pkg689, so it
+has read ZERO from the day it was written.
 
-  THE LIABILITY IS ON SCREEN instead of buried in a netting rule nobody can see.
-  A NEW DRAWDOWN WORKS NATURALLY - the balance goes further negative, the bank
-    goes up, which is exactly what happens.
-  IT MATCHES HOW CARDS ALREADY WORK, so there is one model for facilities rather
-    than two.
+Which means the dashed line has only ever been CARDS + OVERDRAFT. Both are
+constant. That is why it ran parallel to the cash line no matter what the
+applications did - the invoice finance part was never in it.
 
-I built the more complicated one. Yours is what should have been there.
+    availability = totalAdvance - drawn = 180,000 - 122,000 = 58,000
 
+And the rate had the same problem: totalAdvance / approvedLedger is zero if
+approvedLedger is missing, so raising an application moved nothing. Falls back to
+the advance rate on your IF settings now.
 
-HOW TO ENTER IT
----------------
-Facilities -> Manual balances -> Add account:
+    week   raised    collected   IF avail   cards+od   total facilities
+              0       120,000           0    142,844           142,844
+        250,000        40,000     147,000    142,844           289,844
+              0        60,000     105,000    142,844           247,844
+        180,000             0     231,000    142,844           373,844
 
-    Name    Bibby - drawn
-    Kind    Invoice finance drawn      <- new option
-    Balance -122000                    <- NEGATIVE, you owe it
-
-It counts toward CASH, not card debt - the advance has already been spent, and the
-ledger it was drawn against is collected in full in the forecast. Opening cash
-becomes 2,500 less 122,000 = -119,500 on both the 13-week and the 12-month.
-
-Warns if you type a positive, the same way the card rows do.
+Before, that last column was 142,844 every single week.
 
 
-NO DOUBLE COUNT
----------------
-The repayment rule from pkg717 SWITCHES ITSELF OFF the moment an if-kind account
-exists. So whichever way you enter it, the 122k comes off exactly once - and if
-you later delete the account, the rule takes over again rather than the money
-quietly reappearing.
+AND IT NOW SHOWS ITS COMPONENTS
+---------------------------------
+Under the chart:
+
+    Facilities in the dashed line: cards X + overdraft Y (both flat) + invoice
+    finance, which starts at Z and moves as applications are raised and collected
+    at N%.
+
+With a warning in amber where no position has been published. Two of the three
+components are constant by nature, so a flat gap is only meaningful if you know
+the third one is actually in there - which is precisely what I could not see.

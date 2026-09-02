@@ -492,7 +492,22 @@ export default function CashFlow() {
 
   const forecast = useMemo(() => {
     if (!data) return []
-    const openBank = startCash !== '' ? Number(startCash) : (data.cashAtBank || 0)
+    // FROM THE MANUAL BALANCES - the same source the Facilities panel shows.
+    //
+    // This opened from data.cashAtBank, Xero's BOOK balance, and never looked at the
+    // manual balances at all. So the figures you type - including the Bibby drawn account
+    // - changed the panel and not the forecast. Exactly the fault I fixed on the 12-month
+    // in pkg703 and did not check here.
+    //
+    // Everything that is not a card counts toward cash: bank accounts, and invoice finance
+    // drawn (negative, already spent). Cards are held separately as debt.
+    const manualBankTotal = (data.manualBalances || [])
+      .filter(b => b && b.kind !== 'card')
+      .reduce((t, b) => t + (Number(b.balance) || 0), 0)
+    const hasManualBank = (data.manualBalances || []).some(b => b && b.kind !== 'card')
+    const openBank = startCash !== ''
+      ? Number(startCash)
+      : (hasManualBank ? manualBankTotal : (data.cashAtBank || 0))
     const start = mondayOf(new Date())
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
@@ -1376,16 +1391,22 @@ export default function CashFlow() {
         }, 0)
       : Math.max(0, (Number(finance.ccLimit) || 0) - Math.abs(Math.min(0, (data?.balances?.cardTotal) || 0)))
     const pos = data?.ifAvailability || null
-    const ifAvail = pos ? Math.max(0, pos.availability || 0) : 0
+    // AVAILABILITY IS totalAdvance LESS drawn. There is no `availability` field on the
+    // published position - I assumed one, so this read zero from the day it was written,
+    // and the dashed line was only cards plus overdraft. Both are constant, which is
+    // exactly why it ran parallel to the cash line however the applications moved.
+    const ifAvail = pos ? Math.max(0, (Number(pos.totalAdvance) || 0) - (Number(pos.drawn) || 0)) : 0
     // The EFFECTIVE ADVANCE RATE Bibby is actually giving you, taken from the published
     // position rather than assumed - advance over approved ledger.
     // CAVEAT WORTH KNOWING: this assumes every forecast invoice is fundable. Bibby will
     // not fund a negotiated job that has no contract, may exclude a customer over its
     // concentration limit, and applies its own eligibility rules. So this is an upper
     // bound on availability, not a promise.
-    const rate = (pos && pos.approvedLedger > 0)
-      ? Math.min(1, Math.max(0, (pos.totalAdvance || 0) / pos.approvedLedger))
-      : 0
+    // Effective rate from the published position where it is usable, otherwise the
+    // advance rate on the IF settings. A rate of zero silently froze the line.
+    const rate = (pos && Number(pos.approvedLedger) > 0)
+      ? Math.min(1, Math.max(0, (Number(pos.totalAdvance) || 0) / Number(pos.approvedLedger)))
+      : Math.min(1, Math.max(0, (Number(finance.ifAdvanceRate) || 60) / 100))
     return { cards, ifAvail, rate, odLimit: Number(finance.overdraftLimit) || 0 }
   })()
 
@@ -1763,7 +1784,7 @@ export default function CashFlow() {
               )
             })()}
 
-            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero. The dashed line adds card headroom, overdraft and invoice finance availability. Availability MOVES: raising an invoice creates it and collecting the invoice repays the advance, so the two lines diverge on a week you bill and close up on a week you collect. Drawing it does not make you better off - the gap is borrowing capacity, not cash.">
+            <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero. The dashed line adds card headroom, overdraft and invoice finance availability - drawing it does not make you better off, so the gap is borrowing capacity, not cash.">
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -1779,6 +1800,17 @@ export default function CashFlow() {
                   <Line type="monotone" dataKey="closing" name="Closing cash" stroke={GOLD} strokeWidth={2.5} dot={{ r: 2 }} />
                 </ComposedChart>
               </ResponsiveContainer>
+              {/* WHAT THE DASHED LINE IS MADE OF. Two of these are constant, so if the gap
+                  never changes the invoice finance part is contributing nothing - which is
+                  what happened when availability read zero for weeks without saying so. */}
+              <div style={{ fontSize: 11, color: '#8a857c', marginTop: 6 }}>
+                Facilities in the dashed line: cards {gbp(facilityHeadroom.cards)} + overdraft {gbp(facilityHeadroom.odLimit)} (both flat)
+                {' '}+ invoice finance, which starts at {gbp(facilityHeadroom.ifAvail)} and moves as applications are raised and collected
+                {facilityHeadroom.rate > 0 ? ` at ${(facilityHeadroom.rate * 100).toFixed(0)}%` : ''}.
+                {facilityHeadroom.ifAvail === 0 && facilityHeadroom.rate === 0 && (
+                  <strong style={{ color: '#b45309' }}> No invoice finance position published - open the Invoice Finance page to publish it, or this line is only cards and overdraft.</strong>
+                )}
+              </div>
             </Card>
 
             <div style={{ marginTop: 16 }}>
