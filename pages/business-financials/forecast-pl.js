@@ -438,7 +438,10 @@ export default function ForecastPL() {
                               <td style={{ ...td, textAlign: 'left', color: '#5b7085' }}>{p2.name}</td>
                               <td style={{ ...td, textAlign: 'left', color: '#999', fontSize: 11 }}>{p2.from} to {p2.to}</td>
                               <td style={td}>{gbp(p2.materials)}</td>
-                              <td style={td}>{gbp(p2.labour)} <span style={{ color: '#bbb', fontSize: 10 }}>{p2.wdBefore}/{p2.wdAll}</span></td>
+                              <td style={td}>
+                                {gbp(p2.labour)}
+                                {p2.labourPart ? <span style={{ color: '#bbb', fontSize: 10 }}> {p2.wdBefore}/{p2.wdAll} pro-rata</span> : null}
+                              </td>
                               <td style={td}>{gbp(p2.accrued)}</td>
                               <td style={{ ...td, color: '#999' }}>{gbp(p2.alreadyIn)}</td>
                               <td style={{ ...td, color: p2.costTopUp ? '#dc2626' : '#ccc' }}>{p2.costTopUp ? gbp(p2.costTopUp) : '-'}</td>

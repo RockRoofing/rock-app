@@ -1,62 +1,57 @@
-pkg729 - Year-end WIP: correct period boundary
-===============================================
+pkg730 - Year-end WIP: restore the straddle test, fix labour pro-rating
+========================================================================
 
-SUPERSEDES pkg724-728. Contains every file from all of them.
+SUPERSEDES pkg724-729. Contains every file from all of them.
 
 REPLACE (no new files):
   lib/forecastMonths.js                                 (changed here)
-  pages/api/business-financials.js                      (changed here)
-  pages/business-financials/forecast-pl.js              (labels only)
+  pages/business-financials/forecast-pl.js              (label only)
   pages/business-financials/forecast-balance-sheet.js   (as pkg727)
   pages/business-financials/monthly.js                  (as pkg725)
+  pages/api/business-financials.js                      (as pkg729)
 
-WHAT WAS WRONG
---------------
-I used the FORECAST RECORD as the period. J244 Waungron is one forecast running
-01/09/2026 to 18/12/2026 containing FOUR applications. So the window came out as
-1 Sept to 30 Nov:
+TWO FAULTS
+----------
 
-  materials  71,950   three months of deliveries
-  labour     48,675   pro-rated 65/79 working days across the whole record
-  revenue   182,724
+1. THE STRADDLE TEST WAS MISSING. It existed before pkg729 and I removed it when
+   rebuilding around application dates. A forecast had to still be running at
+   month end:
 
-The window should have been 28-30 November - the days after the last
-application, which is 27/11.
+     fc.from <= 30 Nov AND fc.to >= 30 Nov
 
-J240 Market Drayton applies on the 30th of each month, so there is NO unclaimed
-window at all. It was showing 64,805.
+   Without it, a Renshaw period running 14-30 September was given a window from
+   its own start through to 30 November - two and a half months of cost in what
+   should be a few days. Renshaw House appeared three times, Winnersh from
+   9 September, Bradford Works from 21 November.
 
-WHAT CHANGED
-------------
-1. pages/api/business-financials.js now returns appDates - EVERY application
-   boundary on a forecast, not just the last one as valDate. The intermediate
-   boundaries were never exposed, which is why the code fell back to fc.from
-   and fc.to.
+   A period that finished in September has no unclaimed work at the year end. It
+   was claimed in September.
 
-2. The window is now: the day after the last application dated ON OR BEFORE
-   30 November, through to 30 November.
-   - An application ON the 30th leaves nothing unclaimed - that project is
-     skipped entirely.
-   - Nothing past 30 November is taken. December's cost sits in December on
-     its own, as you said.
-   - Labour is the application period spanning month end, pro-rated on working
-     days for the part falling on or before the 30th.
+2. LABOUR ALREADY INSIDE THE WINDOW WAS BEING PRO-RATED. That is why the table
+   showed "already in Nov" LARGER than "accrued cost" - Bradford Works 5,255
+   against 3,311, Winnersh 11,002 against 3,000. Already-in cannot exceed
+   accrued; the two were measured on different bases.
 
-ON YOUR TWO PROJECTS (tested with their real dates)
-----------------------------------------------------
-  J244 Waungron   window 28-30 Nov, last app 27/11, next 27/12
-                  materials      0   (deliveries are 09/11 then 18/12)
-                  labour       ~1 working day of the period's labour
-                  was 182,724 of revenue - now a few hundred
+   A labour line carries the END of its instalment window. A line dated on or
+   before the 30th is wholly inside the window and now counts at FACE VALUE.
+   Only the first line dated AFTER month end straddles the boundary, and only
+   that one is pro-rated - across its own instalment, from the previous line's
+   date, not across the whole forecast.
 
-  J240 Market Drayton   excluded entirely - applies on the 30th
+   The cost top-up is therefore exactly the straddling share, and can never be
+   negative or exceed the accrual.
 
-The drill-down now shows the unclaimed window and the last application date per
-project, so the boundary is visible rather than assumed.
+WHAT YOU SHOULD SEE
+-------------------
+Tested with periods matching your screenshot:
+  - Renshaw House (finished September)  -> gone
+  - Bradford Works (applies on the 30th) -> gone
+  - Winnersh (finished before month end) -> gone
+  - Waungron (runs to 18 December)       -> stays, window 28-30 Nov,
+                                            one working day of labour
 
-WHAT TO CHECK
--------------
-  - Market Drayton should be gone from the list.
-  - Waungron's window should read 2026-11-28 to 2026-11-30, materials nil.
-  - Any project still showing large materials - check its delivery dates really
-    do fall in the last few days of November.
+Expect the list to be SHORT - only projects genuinely still running across
+30 November with an application before it. If a project you know finished in
+October is still listed, tell me.
+
+The working-day ratio now only shows on the line that is actually pro-rated.
