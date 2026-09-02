@@ -19,6 +19,7 @@ export default function ForecastPL() {
   const [cf, setCf] = useState(null)      // cashflow (project forecasts, accrual dates)
   const [manual, setManual] = useState({})
   const [openMonth, setOpenMonth] = useState(null)
+  const [openYeWip, setOpenYeWip] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draftMo, setDraftMo] = useState('')
   const [draft, setDraft] = useState({ revenue: '', cos: '', materials: '', labour: '' })
@@ -238,40 +239,14 @@ export default function ForecastPL() {
                   )}
                 </div>
                 {model.yeWip.applies ? (
-                  <>
-                    <div style={{ fontSize: 11.5, color: '#8a857c', marginTop: 6, lineHeight: 1.45, maxWidth: 940 }}>
+                  <div style={{ fontSize: 11.5, color: '#8a857c', marginTop: 6, lineHeight: 1.45, maxWidth: 940 }}>
                       Work done between each project&apos;s November valuation date and the 30th, which is not in any
                       application until December. Materials are taken on their delivery date and are ALREADY in
                       November&apos;s cost, so only the revenue is missing; labour is pro-rated on WORKING DAYS and is added
                       as cost too, because it sits at the end of its instalment window in December. The margin excludes
-                      that orphaned cost, otherwise it would drag itself down.
-                    </div>
-                    <div style={{ overflowX: 'auto', marginTop: 8 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead><tr style={{ background: '#faf9f7', borderBottom: '1px solid #eee' }}>
-                          <th style={{ ...th, textAlign: 'left' }}>Project</th>
-                          <th style={{ ...th, textAlign: 'left' }}>Period</th>
-                          <th style={th}>Materials</th><th style={th}>Labour (wd)</th>
-                          <th style={th}>Accrued cost</th><th style={th}>Already in Nov</th>
-                          <th style={th}>Cost added</th><th style={th}>Revenue</th>
-                        </tr></thead>
-                        <tbody>
-                          {model.yeWip.projects.map(p2 => (
-                            <tr key={p2.name} style={{ borderBottom: '1px solid #f5f4f1' }}>
-                              <td style={{ ...td, textAlign: 'left', color: '#5b7085' }}>{p2.name}</td>
-                              <td style={{ ...td, textAlign: 'left', color: '#999', fontSize: 11 }}>{p2.from} to {p2.to}</td>
-                              <td style={td}>{gbp(p2.materials)}</td>
-                              <td style={td}>{gbp(p2.labour)} <span style={{ color: '#bbb', fontSize: 10 }}>{p2.wdBefore}/{p2.wdAll}</span></td>
-                              <td style={td}>{gbp(p2.accrued)}</td>
-                              <td style={{ ...td, color: '#999' }}>{gbp(p2.alreadyIn)}</td>
-                              <td style={{ ...td, color: p2.costTopUp ? '#dc2626' : '#ccc' }}>{p2.costTopUp ? gbp(p2.costTopUp) : '-'}</td>
-                              <td style={{ ...td, color: '#0f766e', fontWeight: 600 }}>{gbp(p2.revenue)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
+                    that orphaned cost, otherwise it would drag itself down. Open the arrow on the
+                    year-end WIP rows in the table for the project-by-project working.
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -373,10 +348,14 @@ export default function ForecastPL() {
                       already in November for materials, so only the labour shortfall is
                       added; the revenue against the whole accrual is what was missing. */}
                   {model.yeWip.applies ? (
-                    <YeWipLine rows={model.rows} label={`plus year-end WIP cost (labour to 30 Nov)`} amount={-model.yeWip.costTopUp} colour="#dc2626" />
+                    <YeWipLine rows={model.rows} label="plus year-end WIP cost (labour to 30 Nov)"
+                      amount={-model.yeWip.costTopUp} colour="#dc2626"
+                      open={openYeWip} onToggle={() => setOpenYeWip(!openYeWip)} />
                   ) : null}
                   {model.yeWip.applies ? (
-                    <YeWipLine rows={model.rows} label="plus year-end WIP revenue" amount={model.yeWip.revenue} colour="#0f766e" />
+                    <YeWipLine rows={model.rows} label="plus year-end WIP revenue"
+                      amount={model.yeWip.revenue} colour="#0f766e"
+                      open={openYeWip} onToggle={() => setOpenYeWip(!openYeWip)} />
                   ) : null}
                   {(model.wip.available && !model.wip.include) || model.yeWip.applies ? (
                     <Line label="Net profit after adjustments" rows={model.rows} pick={() => null} colour={INK} bold band total={model.adjTotals.net} />
@@ -436,6 +415,41 @@ export default function ForecastPL() {
                 </div>
               ) : null}
 
+              {/* Year-end WIP working, opened from either of the two rows above. */}
+              {openYeWip && model.yeWip.applies ? (
+                <div style={{ marginTop: 16, borderTop: '2px solid #eee', paddingTop: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 6 }}>
+                    Year-end WIP - work after each valuation date to 30 Nov
+                    <button onClick={() => setOpenYeWip(false)} style={{ ...btn, marginLeft: 10, fontSize: 11, padding: '3px 8px' }}>close</button>
+                  </div>
+                    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr style={{ background: '#faf9f7', borderBottom: '1px solid #eee' }}>
+                          <th style={{ ...th, textAlign: 'left' }}>Project</th>
+                          <th style={{ ...th, textAlign: 'left' }}>Period</th>
+                          <th style={th}>Materials</th><th style={th}>Labour (wd)</th>
+                          <th style={th}>Accrued cost</th><th style={th}>Already in Nov</th>
+                          <th style={th}>Cost added</th><th style={th}>Revenue</th>
+                        </tr></thead>
+                        <tbody>
+                          {model.yeWip.projects.map(p2 => (
+                            <tr key={p2.name} style={{ borderBottom: '1px solid #f5f4f1' }}>
+                              <td style={{ ...td, textAlign: 'left', color: '#5b7085' }}>{p2.name}</td>
+                              <td style={{ ...td, textAlign: 'left', color: '#999', fontSize: 11 }}>{p2.from} to {p2.to}</td>
+                              <td style={td}>{gbp(p2.materials)}</td>
+                              <td style={td}>{gbp(p2.labour)} <span style={{ color: '#bbb', fontSize: 10 }}>{p2.wdBefore}/{p2.wdAll}</span></td>
+                              <td style={td}>{gbp(p2.accrued)}</td>
+                              <td style={{ ...td, color: '#999' }}>{gbp(p2.alreadyIn)}</td>
+                              <td style={{ ...td, color: p2.costTopUp ? '#dc2626' : '#ccc' }}>{p2.costTopUp ? gbp(p2.costTopUp) : '-'}</td>
+                              <td style={{ ...td, color: '#0f766e', fontWeight: 600 }}>{gbp(p2.revenue)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                  </div>
+                </div>
+              ) : null}
+
               <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 8, lineHeight: 1.45 }}>
                 Click a forecast month heading to see the projects behind it. Xero gives ONE cost-of-sales total for a closed month, so
                 actual months have no breakdown. Forecast revenue is spread across the months each period&apos;s sales schedule says, materials
@@ -489,10 +503,14 @@ function DraftField({ label, k, draft, setDraft }) {
 
 // One row, one figure, in the FY column only. The monthly cells are deliberately blank -
 // nothing has been taken off any month, and putting a number in a month would say it had.
-function YeWipLine({ rows, label, amount, colour }) {
+function YeWipLine({ rows, label, amount, colour, open, onToggle }) {
   return (
-    <tr style={{ borderBottom: '1px solid #f2f0ec', background: '#fffdf5' }}>
-      <td style={{ ...lbl, fontSize: 11.5, color: colour, position: 'sticky', left: 0, background: '#fffdf5' }}>{label}</td>
+    <tr style={{ borderBottom: '1px solid #f2f0ec', background: '#fffdf5', cursor: onToggle ? 'pointer' : 'default' }}
+      onClick={onToggle} title={onToggle ? 'Click to see the projects behind this' : ''}>
+      <td style={{ ...lbl, fontSize: 11.5, color: colour, position: 'sticky', left: 0, background: '#fffdf5' }}>
+        {onToggle ? <span style={{ color: '#999', marginRight: 4 }}>{open ? '\u25BC' : '\u25B6'}</span> : null}
+        {label}
+      </td>
       {rows.map(r => <td key={r.mo} style={{ ...td, color: '#e5e1d8' }}>-</td>)}
       <td style={{ ...td, fontWeight: 700, background: '#eef3fb', color: colour }}>{gbp(amount)}</td>
     </tr>
