@@ -1,65 +1,55 @@
-pkg706 - I had it backwards. The CASH FLOW is right.
-=====================================================
+pkg707 - 263,150 of cost was being DROPPED, not netted
+=======================================================
 
-*** SUPERSEDES pkg591 - pkg705. ***
+*** SUPERSEDES pkg591 - pkg706. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/monthly.js
+  pages/business-financials/cashflow.js
+  pages/business-financials/forecast-balance-sheet.js
   ... and the rest of the set as before
 
 
-FIRST - MY LAST DIAGNOSIS WAS WRONG, AND pkg705 DID ALMOST NOTHING
---------------------------------------------------------------------
-I said 355,547 was "undated and overdue" and dumping into month one. It is not:
+YOU WERE RIGHT, AND YOUR OWN TOTALS PROVE IT
+----------------------------------------------
+    cost in your forecasts               920,154
+    cost reaching the 12-month           358,092
+    difference, supposedly netted        562,062
+    total bills available to net against 298,912
 
-    no expected date                     15    355,547
-    of those, ALSO overdue                2      3,175
-
-Your own Reconcile check said it - "1 are already past their date, worth 455" -
-and I read straight past it. pkg705 touched 3,175. Reverted.
-
-You were also right about the behaviour: an unshaded box is Xero's due date
-showing as the default, which is exactly what should happen.
-
-
-SEPTEMBER REALLY IS 451,383 - AND THEY ARE YOUR DATES
--------------------------------------------------------
-    2026-09    451,383
-    2026-10     95,794
-
-Waungron App2 113,815 on 27/09. Winnersh 80,417 on 08/09. Albert Bartlett 54,503
-on 13/09. Market Drayton 39,216 on 14/09. The cash flow is reading your ledger
-correctly.
-
-WHICH FLIPS THE ANSWER. The cash flow is right. THE BALANCE SHEET IS WRONG.
+YOU CANNOT NET 562,062 AGAINST 298,912. 263,150 of cost was not netted - it was
+DROPPED. That is why materials read "none" for eight of the twelve months while
+your forecasts are full of them, and it is why the balance climbs and never comes
+back down when the materials get paid.
 
 
-THE FORECAST BALANCE SHEET NEVER READ A SINGLE EXPECTED DATE
---------------------------------------------------------------
-    receipts = lag(revOf, i, dDays) * (1 - retPct) + released
+THE LINE
+--------
+    const past = (x) => bound && x.date && x.date <= bound
+    ...filter(x => inMonth(x.date, mk) && !past(x))
 
-It lagged ALL revenue by a flat 45 days. So it was still holding 1,021,667 of
-debtors at November while the cash flow had banked 451,383 of them in September on
-dates you had typed by hand. Same invoices, two completely different models - and
-that is the 841,401.
+Any cost dated on or before the valuation date was excluded outright, on the
+assumption a supplier had already billed it. THAT IS ONLY TRUE WHERE A BILL
+EXISTS - and the netting immediately below already handles exactly that case. So
+the cost came out twice: once by exclusion, once by netting.
 
-The existing ledger now collects WHEN YOU SAY IT WILL. Only revenue still to be
-BILLED falls back to debtor days, which is the one place an assumption is honest:
-there is no invoice yet to carry a date.
+Removed from both the 12-month and the 13-week. Anything a supplier has invoiced
+still nets; anything they have not now stands as forecast cost, which is what it
+is.
 
-    debtors at Nov   1,021,667 -> about 474,490
-    bank at Nov       -187,303 -> about 359,874
-    12-month says                    654,098
-    remaining gap                    294,224
+    12-month closing at Aug 27   718,408  ->  about 455,258
 
-Still a gap, but a THIRD of what it was, and now between two pages that model the
-same invoices the same way.
+And the SHAPE changes, which is what you have been describing all along - Sept 26
+and Feb-Aug 27 get their materials back instead of showing "none" against live
+sales.
 
 
-PRESS "READ BALANCE SHEET FROM XERO" BEFORE JUDGING IT. The amber banner is still
-on your screenshot, so the debtors and bank lines are rolled forward from an
-opening the model invented rather than from Xero.
+ALSO IN THIS PACKAGE (pkg706)
+-----------------------------
+The Forecast Balance Sheet never read a single expected date - it lagged all
+revenue by a flat 45 days, so it held 1,021,667 of debtors at November while the
+cash flow had banked 451,383 of them in September on your dates. It now collects
+the existing ledger when you say it will.

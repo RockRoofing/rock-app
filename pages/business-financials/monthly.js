@@ -191,11 +191,23 @@ export default function MonthlyCashFlow() {
         invByProject[k] = Math.max(0, (invByProject[k] || 0) - offS)
         fcSalesIn += Math.max(0, rawS - offS)
 
-        const past = (x) => bound && x.date && x.date <= bound
-        // Forecast labour is GROSS; what leaves the bank is net of CIS, and the 20% goes
-        // to HMRC separately.
-        const rawLg = (fc.labourSchedule || []).filter(x => inMonth(x.date, mk) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
-        const rawM = (fc.matItems || []).filter(x => inMonth(x.date, mk) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        // COST BEHIND THE VALUATION DATE IS NETTED, NOT DROPPED.
+        //
+        // `!past(x)` excluded any cost dated on or before the valuation date outright, on
+        // the assumption a supplier had already billed it. That is only true to the extent
+        // bills EXIST - and they do not:
+        //
+        //     cost in the forecasts              920,154
+        //     cost reaching the 12-month         358,092
+        //     difference                         562,062
+        //     bills available to net against     298,912
+        //     -> 263,150 dropped, not netted
+        //
+        // The netting below already handles anything a supplier has invoiced. Dropping it
+        // first as well removed the cost twice, and it is why the closing balance climbs
+        // and never comes back down when the materials are paid.
+        const rawLg = (fc.labourSchedule || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
+        const rawM = (fc.matItems || []).filter(x => inMonth(x.date, mk)).reduce((a, x) => a + (x.amount || 0), 0)
         const nk = normName(fc.projectName || '')
         const avail = billByProject[nk] || 0
         const rawL = netOfCis(rawLg)

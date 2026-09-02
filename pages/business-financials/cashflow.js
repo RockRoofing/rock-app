@@ -1186,8 +1186,14 @@ export default function CashFlow() {
         const cCarry = costCarryIn[fc.id || `${fc.projectKey}|${fc.from}|${fc.to}`] || 0
         // What actually leaves the bank for the subcontractor. The withheld 20% is a
         // separate payment to HMRC in the CIS column, on the 22nd of the following month.
-        const rawL = netOfCis((fc.labourSchedule || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0))
-        const rawM = (fc.matItems || []).filter(x => inWk(x.date) && !past(x)).reduce((a, x) => a + (x.amount || 0), 0)
+        // NETTED, NOT DROPPED - same fault as the 12-month had.
+        //
+        // `!past(x)` removed any cost dated on or before the valuation date on the
+        // assumption a supplier had billed it. The bill netting below already handles that
+        // where a bill exists; excluding it here as well took the cost out twice. Across
+        // the twelve months that was 263,150 of cost that simply disappeared.
+        const rawL = netOfCis((fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0))
+        const rawM = (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         // Applied to labour first, then materials - a project bill is far more often
         // subcontract labour than a materials invoice.
         const offL = Math.min(rawL, billThisWk)
@@ -1209,7 +1215,7 @@ export default function CashFlow() {
         // is the raw Redis key and means nothing to read.
         // Line-level materials, so the column can name the supplier and delivery date
         // rather than only the project total.
-        const matLines = (fc.matItems || []).filter(x => inWk(x.date) && !past(x))
+        const matLines = (fc.matItems || []).filter(x => inWk(x.date))
           .map(x => ({ project: projLabel(fc), amount: x.amount || 0, date: x.date, deliver: x.deliverDay || '', est: !!x.estimatedTerm }))
         if (sIn || lOut || mOut) fcBreak.push({ name: projLabel(fc), no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, matLines, from: fc.from, to: fc.to, month: s.slice(0, 7),
           // Carried in from an earlier period that was certified for less than forecast.
