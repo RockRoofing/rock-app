@@ -1407,12 +1407,23 @@ export default function CashFlow() {
     const rate = (pos && Number(pos.approvedLedger) > 0)
       ? Math.min(1, Math.max(0, (Number(pos.totalAdvance) || 0) / Number(pos.approvedLedger)))
       : Math.min(1, Math.max(0, (Number(finance.ifAdvanceRate) || 60) / 100))
-    return { cards, ifAvail, rate, odLimit: Number(finance.overdraftLimit) || 0 }
+    // GROSS availability - the whole advance the facility supports against the ledger,
+    // BEFORE deducting what is already drawn. `ifAvail` is the net figure and is what the
+    // dashed line uses, because drawn money is already in the bank and cannot be drawn
+    // twice. The gross is what Bibby would fund in total, which is the question the
+    // tooltip answers.
+    const ifGross = pos ? Math.max(0, Number(pos.totalAdvance) || 0) : 0
+    const ifDrawn = pos ? Math.max(0, Number(pos.drawn) || 0) : 0
+    return { cards, ifAvail, ifGross, ifDrawn, rate, odLimit: Number(finance.overdraftLimit) || 0 }
   })()
 
   const chartData = (() => {
     const out = []
     let ifRunning = facilityHeadroom.ifAvail
+    // The SAME movement applied to the gross advance. Tracked separately rather than
+    // added back at the end: both are clamped at zero, so net + drawn stops equalling
+    // gross once either floors, and deriving one from the other would then be wrong.
+    let ifGrossRunning = facilityHeadroom.ifGross
     for (const r of forecast) {
       // INVOICE FINANCE AVAILABILITY MOVES. Holding it constant made the available line
       // run parallel to cash, which is the opposite of how the facility behaves.
@@ -1424,19 +1435,21 @@ export default function CashFlow() {
       //
       //   + invoices RAISED this week   x advance rate
       //   - invoices COLLECTED this week x advance rate
-      ifRunning = Math.max(0, ifRunning
-        + (r.raised || 0) * facilityHeadroom.rate
-        - ((r.invoicesIn || 0) + (r.projSalesIn || 0)) * facilityHeadroom.rate)
+      const move = (r.raised || 0) * facilityHeadroom.rate
+        - ((r.invoicesIn || 0) + (r.projSalesIn || 0)) * facilityHeadroom.rate
+      ifRunning = Math.max(0, ifRunning + move)
+      ifGrossRunning = Math.max(0, ifGrossRunning + move)
       const ifNow = ifRunning
+      const ifGrossNow = ifGrossRunning
       const avail = (c) => c + facilityHeadroom.cards + ifNow
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
-      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
       if (prev && prev._arr) {
-        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
         continue
       }
-      out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
+      out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
     }
     return out
   })()
@@ -1790,7 +1803,7 @@ export default function CashFlow() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                   <XAxis dataKey="wk" tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={64} />
                   <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={54} />
-                  <Tooltip formatter={(v) => gbp(v)} />
+                  <Tooltip content={<CashTip drawn={facilityHeadroom.ifDrawn} cards={facilityHeadroom.cards} odLimit={facilityHeadroom.odLimit} />} />
                   <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="3 3" />
                   {/* Dashed, and drawn UNDER the cash line so cash stays the headline.
                       Available is what you could pay out if you drew everything - useful,
@@ -2887,6 +2900,50 @@ function NetPositionBox({ bankCash, cardDebt, odDrawn, ifDrawn }) {
           amount, so this figure does not move at all. */}
       <div style={{ fontSize: 9.5, color: '#b45309', marginTop: 5, lineHeight: 1.35 }}>
         Drawing headroom does not change this - cash and debt rise together.
+      </div>
+    </div>
+  )
+}
+
+// TOOLTIP FOR THE PROJECTED CASH BALANCE CHART.
+//
+// Module scope, and every figure it needs is passed in as a prop. A component defined
+// inside the page can see page state by accident, which has broken this file five times;
+// passing them explicitly means this cannot drift when the page changes.
+//
+// The Bibby line is the GROSS advance available against the ledger at that week - what
+// the facility supports in total, before deducting what is already drawn. Net is shown
+// underneath because that is what the dashed available line actually uses: money already
+// drawn is in the bank and cannot be drawn again.
+function CashTip({ active, payload, label, drawn, cards, odLimit }) {
+  if (!active || !payload || !payload.length) return null
+  const p = payload[0] && payload[0].payload
+  if (!p) return null
+  const od = Math.max(0, (Number(odLimit) || 0) - Math.max(0, -(p.closing || 0)))
+  const row = (k, v, colour, bold) => (
+    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, fontSize: 12, marginTop: 2 }}>
+      <span style={{ color: '#6b6b68' }}>{k}</span>
+      <span style={{ color: colour || INK, fontWeight: bold ? 700 : 500 }}>{v}</span>
+    </div>
+  )
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 8, padding: '9px 12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 250 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 4 }}>{label}</div>
+      {row('Closing cash', gbp(p.closing || 0), (p.closing || 0) < 0 ? '#dc2626' : GOLD, true)}
+      {row('Total available', gbp(p.available || 0), '#0f766e', true)}
+      <div style={{ borderTop: '1px solid #f0eee9', marginTop: 6, paddingTop: 5 }}>
+        <div style={{ fontSize: 10.5, color: '#9a958c', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>Invoice finance</div>
+        {row('Bibby availability (gross)', gbp(p.ifGross || 0), '#0f766e', true)}
+        {row('less drawn', gbp(-(Number(drawn) || 0)), '#dc2626')}
+        {row('Still drawable', gbp(p.ifNet || 0))}
+      </div>
+      <div style={{ borderTop: '1px solid #f0eee9', marginTop: 6, paddingTop: 5 }}>
+        {row('Card headroom', gbp(cards || 0))}
+        {row('Overdraft headroom', gbp(od))}
+      </div>
+      <div style={{ fontSize: 10, color: '#a8a49c', marginTop: 6, lineHeight: 1.35 }}>
+        Gross is what the facility supports against the ledger that week. Drawn money is
+        already in the bank, so only the net is added to total available.
       </div>
     </div>
   )

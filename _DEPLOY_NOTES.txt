@@ -1,77 +1,29 @@
-pkg722 - Forecast P&L drill-downs, manual month figures, page removals
-=======================================================================
-
-NEW FILE - create this in GitHub:
-  lib/forecastMonths.js
+pkg723 - Bibby availability in the cash flow chart tooltip
+===========================================================
 
 REPLACE:
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-balance-sheet.js
-  pages/api/business-financials.js
-  components/BizNav.js
+  pages/business-financials/cashflow.js
 
-DELETE these three in GitHub (they are gone from the nav in this package,
-so if you miss one it is unreachable rather than broken):
-  pages/business-financials/forecast-margin.js
-  pages/business-financials/invoice-store-audit.js
-  pages/api/invoice-store-audit.js
-
-Nothing else references them - checked.
+No new files. Deploy pkg722 first if you have not.
 
 WHAT CHANGED
 ------------
+Hovering any week on "Projected cash balance" now gives a full breakdown
+instead of two bare figures:
 
-1. "Switch to Actual on the Budgets tab" banner REMOVED from the Forecast P&L.
+  Closing cash
+  Total available
+  -- Invoice finance --
+  Bibby availability (gross)     <- the whole advance the facility supports
+  less drawn                        against the ledger that week, BEFORE
+  Still drawable                    deducting what you have borrowed
+  -- --
+  Card headroom
+  Overdraft headroom             <- moves with the balance, as it should
 
-2. DRILL-DOWNS. Click any month heading marked "forecast" on the Forecast P&L
-   and the projects behind it appear under the table: revenue, materials,
-   labour, gross and margin % per project, with a total row that ties to the
-   column above it.
+Gross and net are tracked separately rather than one derived from the other.
+Both are floored at zero, so once either hits the floor "net + drawn" stops
+equalling gross and deriving it would quietly be wrong.
 
-   Only FORECAST months have this. Xero returns a single cost-of-sales total
-   for a closed month, so an ACTUAL month has nothing to break down, and a
-   MANUAL month is a figure you typed. Those headings are not clickable.
-
-   A project with revenue and no cost shows "none" in red rather than a dash -
-   that is a forecast missing its cost, not a job that costs nothing.
-
-3. MANUAL MONTH FIGURES. New panel on the Forecast P&L above the table.
-   Pick a month, type revenue / materials / labour, save. Cost of sale is
-   taken as materials plus labour unless you type it explicitly.
-
-   - The month badges as MANUAL (blue) instead of forecast or ACTUAL.
-   - "Back to forecast" clears it. Emptying every box does the same.
-   - Overheads are NOT overridable - you said Budgets has them right, and
-     they keep coming from the Budgets grid either way.
-   - A typed 0 is kept as a real figure, not treated as blank.
-   - If a manual month is ALSO switched to Actual on Budgets, the typed
-     figures win and the row says so rather than silently choosing.
-
-   Stored in config:pl-manual-months.
-
-4. ONE MODEL, THREE PAGES BECAME TWO. The Forecast P&L and the Forecast
-   Balance Sheet each rebuilt monthly revenue and cost of sale from the
-   project forecasts, with the supersede test, the valuation-date cap and the
-   undated-line rule written out separately in each file. Forecast Margin was
-   a third copy. That is now lib/forecastMonths.js, read by both remaining
-   pages - so your August figures reach the balance sheet without being
-   stored twice, and a future fix to the accrual rules lands in one place.
-
-   On the balance sheet a MANUAL month is deliberately NOT treated as an
-   actual month: re-basing onto Xero is what an actual month does, and the
-   reason you typed August by hand is that Xero's August is not usable.
-
-5. Forecast gross margin page removed. Everything it showed is on the
-   Forecast P&L now that the drill-downs are there. Its "margin above 35% is
-   not credible" warning is gone with it, as asked.
-
-6. Store Audit removed (pkg721).
-
-WHAT TO CHECK AFTER DEPLOY
---------------------------
-  - Forecast P&L loads, nav has no Forecast Margin or Store Audit tab.
-  - Click a forecast month heading - projects appear, total row ties to the
-    column.
-  - Set August: revenue, materials, labour. Month turns MANUAL, the FY totals
-    move, and the Forecast BS bank line moves with it.
-  - Forecast BS still ties on actual months ("Out by" near zero).
+The dashed "total available" line still uses the NET figure and that has not
+changed - money already drawn is in the bank and cannot be drawn twice.
