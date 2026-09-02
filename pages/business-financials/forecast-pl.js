@@ -240,8 +240,9 @@ export default function ForecastPL() {
                 </div>
                 {model.yeWip.applies ? (
                   <div style={{ fontSize: 11.5, color: '#8a857c', marginTop: 6, lineHeight: 1.45, maxWidth: 940 }}>
-                      Work done between each project&apos;s November valuation date and the 30th, which is not in any
-                      application until December. Materials are taken on their delivery date and are ALREADY in
+                      Work done between each project&apos;s LAST APPLICATION on or before 30 November and the 30th itself -
+                      the part not claimed until December. A project applying ON the 30th has no unclaimed window and
+                      does not appear. Nothing past the 30th is taken: December&apos;s cost belongs to December. Materials are taken on their delivery date and are ALREADY in
                       November&apos;s cost, so only the revenue is missing; labour is pro-rated on WORKING DAYS and is added
                       as cost too, because it sits at the end of its instalment window in December. The margin excludes
                     that orphaned cost, otherwise it would drag itself down. Open the arrow on the

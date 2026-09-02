@@ -1203,6 +1203,12 @@ export default async function handler(req, res) {
               const ds = (fc.salesSchedule || []).map(x => x.appDate).filter(Boolean).sort()
               return ds.length ? ds[ds.length - 1] : (fc.to || '')
             })(),
+            // EVERY application boundary, not just the last. One forecast record can hold
+            // four applications - J244 runs 01/09 to 18/12 with apps on 27/09, 27/10,
+            // 27/11 and 27/12. Anything that needs to know where one application ends and
+            // the next begins has to have these; using fc.from and fc.to instead treats
+            // three and a half months as a single period.
+            appDates: (fc.salesSchedule || []).map(x => x.appDate).filter(Boolean).sort(),
             // A person's decision about what is still coming, made when the forecast was
             // last redone. null means "use claimed less spend"; a number means somebody
             // has looked and settled it.
