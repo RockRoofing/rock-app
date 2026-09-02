@@ -1,75 +1,59 @@
-pkg726 - Year-end WIP accrual on the Forecast P&L
-==================================================
+pkg727 - WIP as named rows on the Forecast Balance Sheet
+=========================================================
 
-SUPERSEDES pkg724 and pkg725. Contains every file from both, so it is safe to
-deploy on its own regardless of what went before.
+SUPERSEDES pkg724, pkg725, pkg726. Contains every file from all three.
 
 REPLACE (no new files):
-  lib/forecastMonths.js
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-balance-sheet.js   (unchanged from pkg725)
-  pages/business-financials/monthly.js                  (unchanged from pkg725)
-  pages/api/business-financials.js
+  pages/business-financials/forecast-balance-sheet.js   (changed here)
+  lib/forecastMonths.js                                 (as pkg726)
+  pages/business-financials/forecast-pl.js              (as pkg726)
+  pages/business-financials/monthly.js                  (as pkg725)
+  pages/api/business-financials.js                      (as pkg726)
 
-YOUR SCENARIO, AS THE CODE COMPUTES IT
---------------------------------------
-Valuation 25 Nov. Next period 26 Nov - 23 Dec.
-Materials 20,000 delivered 26 Nov. Labour 32,000 over the period.
+WHAT WAS WRONG
+--------------
+The WIP deduction went straight onto reserves, so August read a 59,676 FALL in
+net assets in a month that made 62,250. The number was right; nothing on the
+page said where it came from.
 
-  materials in window          20,000  (exact, on delivery date)
-  labour, working days 3/20     4,800  (26-30 Nov is 3 working days)
-  accrued cost                 24,800
-  already in November          20,000  (the materials - dated, so already there)
-  cost ADDED to November        4,800  (labour only)
-  revenue recognised           31,000  (24,800 / 0.80 at 20% margin)
-  effect on net profit         26,200
+Worse, the November accrual built in pkg726 was on the P&L but NOT on the
+balance sheet at all - so the two pages would have ended the year apart by the
+accrual's profit effect.
 
-Two rows at the foot of the table, under the WIP deduction, plus a "Net profit
-after adjustments" line.
+NOW
+---
+Reserves roll forward CLEAN - each month's own profit, unadjusted - and the two
+WIP movements sit on their own lines underneath:
 
-WHY ONLY THE LABOUR IS ADDED AS COST
--------------------------------------
-Materials sit on their DELIVERY date, so a delivery on the 26th is already in
-November's cost with no revenue against it. Labour sits at the END of its
-instalment window, which for a period running to 23 December is December - so
-the days worked in November are not in November at all.
+  Reserves (opening + profit)      clean roll-forward
+  less last completed WIP          from the first forecast month onwards
+  plus estimated WIP at 30 Nov     November only
+  Reserves after WIP               ties to Net assets
+  Out by
 
-The accrual is netted against whatever the model already placed. Adding the
-accrued cost gross would count the materials twice; adding none of it would
-leave the labour out. The drill-down shows accrued / already in November / cost
-added per project, so the netting is visible rather than buried.
+On your figures August now reads:
 
-THE MARGIN IS COMPUTED TWICE, ON PURPOSE
------------------------------------------
-Those orphaned materials sitting in November with no revenue DEPRESS the blended
-margin - the exact thing the accrual exists to fix. Left alone, the bigger the
-year-end WIP the smaller the correction. So a first pass at zero margin
-identifies the orphaned cost, the margin is worked out on the rest, and the
-accrual then runs for real. In testing this was the difference between 0% and
-20%.
+  Reserves (opening + profit)   118,710      (56,460 + 62,250)
+  less last completed WIP      -121,926
+  Reserves after WIP             -3,216
 
-Revenue is grossed up TO the margin, not marked up BY it: cost / (1 - m).
-At 20% on 24,800 that is 31,000, not 29,760.
+Same closing figure as before, but the 62,250 of profit is visible and the fall
+is a labelled line rather than an unexplained step.
 
-CONTROLS
---------
-Panel above the table: include tick, and a box to type your own total which
-overrides the calculation entirely. Per-project working shown underneath.
+Both movements still hit the financing catch-all as well, so assets and
+liabilities move with reserves and "Out by" keeps tying. The tie is now checked
+against reserves AFTER the WIP rows, not before - that had to change with them.
 
-GUARDS
-------
-  - Only fires when November is still a FORECAST month. Once it is switched to
-    Actual, Xero's own WIP journal is in the income figure and the existing
-    include-at-year-end rule takes over. The two can never both apply.
-  - Superseded periods excluded, same test as everywhere else.
-  - If no period straddles 30 November the row says so rather than showing a
-    bare zero - that would mean the forecasts have run out before the year end,
-    which is a pipeline problem, not a fault here.
-  - Balance sheet untouched by this.
+No attempt to itemise WIP as its own asset row. That would mean pulling it out
+of Xero's actual months, which needs the account name, which is the same
+unresolved problem as the credit cards. Financing absorbs it and ties correctly.
+
+The redundant "WIP OUT" badge on the August column heading is gone - the
+movement has its own row now.
 
 WHAT TO CHECK
 -------------
-  - The per-project table: does the working-day split look right for your jobs?
-  - "Already in Nov" should equal the materials for most projects. Where it
-    equals the full accrued cost, that project's labour is already dated in
-    November and no top-up is needed - correct, not a miss.
+  - August: reserves 118,710, deduction -121,926, after WIP -3,216, Out by ties
+  - November: "plus estimated WIP at 30 Nov" appears, and net assets there
+    reflect the same accrual the P&L shows
+  - "Out by" still ties on EVERY forecast month

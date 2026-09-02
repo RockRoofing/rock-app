@@ -140,7 +140,9 @@ export default function ForecastBalanceSheet() {
     // lib/forecastMonths.js - which is also how a manual month typed on the P&L reaches
     // this page without being stored twice.
     const pl = buildForecastMonths({ oh, mg, cf, manual: (oh && oh.plManualMonths) || {}, fyEnd,
-      wipLocks: (oh && oh.wipLocks) || {}, wipInclude: oh ? oh.plWipInclude : null })
+      wipLocks: (oh && oh.wipLocks) || {}, wipInclude: oh ? oh.plWipInclude : null,
+      yeWipEnabled: oh && oh.plYeWip ? oh.plYeWip.enabled !== false : true,
+      yeWipOverride: oh && oh.plYeWip ? oh.plYeWip.override : null })
     if (!pl) return null
     const plByMonth = {}
     for (const r of pl.rows) plByMonth[r.mo] = r
@@ -189,7 +191,7 @@ export default function ForecastBalanceSheet() {
       ledgerByMonth[k] = (ledgerByMonth[k] || 0) + (Number(inv.amountDue) || 0)
     }
 
-    let wipApplied = false
+    let wipApplied = false, wipDeduct = 0, wipAccrual = 0
     let bank = openBank, cards = openCards, debtors = openDebtors, creditors = openCreditors
     let financing = openFinancing, retention = 0, reserves = openEquityish
     const rows = []
@@ -231,9 +233,26 @@ export default function ForecastBalanceSheet() {
       // from there. Taken off reserves AND off the financing catch-all (which is where
       // an unmodelled asset like WIP already sits), so both sides move together and
       // "Out by" still ties.
+      // WIP, AS TWO NAMED ROWS RATHER THAN A SILENT STEP.
+      //
+      // Taking the deduction straight off reserves made August look like it lost money
+      // when it made 62,250 - the fall was the adjustment, with nothing on the page
+      // saying so. Reserves now roll forward CLEAN and the two WIP movements are shown
+      // on their own lines underneath.
+      //
+      // Both still hit the financing catch-all as well, so assets and liabilities move
+      // with reserves and "Out by" keeps tying. What changes is that the figures are
+      // named instead of buried.
       const wipOff = (pl.wip.available && !pl.wip.include && pl.wip.lastActual
         && mo > pl.wip.lastActual && !wipApplied) ? pl.wip.amount : 0
-      if (wipOff) { wipApplied = true; reserves -= wipOff; financing -= wipOff }
+      if (wipOff) { wipApplied = true; wipDeduct = wipOff; financing -= wipOff }
+
+      // The November accrual - work done after the valuation date, not yet invoiced.
+      // Without this the balance sheet would end the year short of the P&L by exactly
+      // the accrual's profit effect.
+      const yeAdd = (pl.yeWip && pl.yeWip.applies && mo === `${fyEnd}-11`)
+        ? (pl.yeWip.revenue - pl.yeWip.costTopUp) : 0
+      if (yeAdd) { wipAccrual = yeAdd; financing += yeAdd }
 
       // Retention withheld on this month's billing, released after retMonths.
       const withheld = revenue * retPct
@@ -304,14 +323,15 @@ export default function ForecastBalanceSheet() {
         financing = xeroNet - (bank + debtors + retention + cards + creditors)
       }
       rows.push({
-        mo, isActual, isManual, fromXero: useXero, revenue, cos, overheads, net, wipOff,
+        mo, isActual, isManual, fromXero: useXero, revenue, cos, overheads, net, wipOff, yeAdd,
+        wipDeduct, wipAccrual, reservesAfter: reserves - wipDeduct + wipAccrual,
         bank, debtors, retention, cards, creditors, financing,
         assets, liabs, netAssets: useXero ? xeroNet : (assets + liabs), reserves,
         // The whole point of the third statement. If this is not ~0 the model does not
         // tie, and saying so is more useful than a balance sheet that quietly does not.
         // Only meaningful on FORECAST months. On an actual month both sides are Xero's
         // own figure, so a tie there would prove nothing.
-        check: useXero ? 0 : (assets + liabs) - reserves,
+        check: useXero ? 0 : (assets + liabs) - (reserves - wipDeduct + wipAccrual),
       })
     })
     // WHY A ROW IS EMPTY. Cards read nil on this page while Xero's own balance sheet
@@ -469,12 +489,14 @@ export default function ForecastBalanceSheet() {
 
             {model.wip && model.wip.available && !model.wip.include ? (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
-                <strong>{gbp(model.wip.amount)} of WIP taken out from {monthShort(model.wip.lastActual)} onwards.</strong>
+                <strong>{gbp(model.wip.amount)} of WIP taken out, and the November accrual added back, as their own rows under Reserves.</strong>
                 <div style={{ marginTop: 3 }}>
-                  Actual months are left exactly as Xero has them - the asset really was there on those dates.
-                  The journal reverses on the 1st, so the forecast months should not carry it forward. Taken off
-                  reserves and off the financing catch-all together, so &quot;Out by&quot; still ties.
-                  Change this with the tick on the Forecast P&amp;L.
+                  Reserves roll forward CLEAN - each month&apos;s own profit, unadjusted - and the two WIP movements sit
+                  on named lines beneath. Taking the deduction straight off reserves made the first forecast month look
+                  like it lost money when it had not; the fall was the adjustment, with nothing saying so.
+                  Actual months are untouched: the asset really was there on those dates, and the journal reverses on
+                  the 1st, so only the forecast months should stop carrying it. Change either with the ticks on the
+                  Forecast P&amp;L.
                 </div>
               </div>
             ) : null}
@@ -489,7 +511,6 @@ export default function ForecastBalanceSheet() {
                       <div style={{ fontSize: 9, fontWeight: 700, color: r.isManual ? '#1d4ed8' : (r.isActual ? '#16a34a' : '#b45309') }}>
                         {r.isManual ? 'MANUAL' : r.isActual ? 'ACTUAL' : 'forecast'}
                       </div>
-                      {r.wipOff ? <div style={{ fontSize: 8.5, fontWeight: 700, color: '#b45309' }}>WIP OUT</div> : null}
                     </th>
                   ))}
                 </tr></thead>
@@ -502,6 +523,15 @@ export default function ForecastBalanceSheet() {
                   <Row label="Financing &amp; tax" rows={model.rows} pick={r => r.financing} colour="#dc2626" />
                   <Row label="Net assets" rows={model.rows} pick={r => r.netAssets} bold band />
                   <Row label="Reserves (opening + profit)" rows={model.rows} pick={r => r.reserves} />
+                  {model.rows.some(r => r.wipDeduct) ? (
+                    <Row label="less last completed WIP" rows={model.rows} pick={r => r.wipDeduct ? -r.wipDeduct : null} colour="#b45309" />
+                  ) : null}
+                  {model.rows.some(r => r.wipAccrual) ? (
+                    <Row label="plus estimated WIP at 30 Nov" rows={model.rows} pick={r => r.wipAccrual ? r.wipAccrual : null} colour="#0f766e" />
+                  ) : null}
+                  {model.rows.some(r => r.wipDeduct || r.wipAccrual) ? (
+                    <Row label="Reserves after WIP" rows={model.rows} pick={r => r.reservesAfter} bold />
+                  ) : null}
                   <Row label="Out by" rows={model.rows} pick={r => r.check} check />
                   {/* Where the reversal lands, so the step down in net assets has a
                       label instead of looking like a break in the roll-forward. */}
