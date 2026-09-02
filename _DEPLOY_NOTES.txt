@@ -1,61 +1,65 @@
-pkg705 - Found it: the whole ledger was landing in month one
-=============================================================
+pkg706 - I had it backwards. The CASH FLOW is right.
+=====================================================
 
-*** SUPERSEDES pkg591 - pkg704. ***
+*** SUPERSEDES pkg591 - pkg705. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
-
-
-*** DO THIS FIRST: PRESS "READ BALANCE SHEET FROM XERO" ON THE BALANCE SHEET TAB.
-    Your screenshot still shows the amber banner, which means the BS component
-    lines are NOT anchored to Xero - only Net Assets is. The Bank row of -187,303
-    is a MODELLED number, so the comparison you just ran was model against model. ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/monthly.js
-  pages/api/business-financials.js
   ... and the rest of the set as before
 
 
-THE 841,401
------------
-    12-month, first three months
-      Sept 26   invoices in  451,368
-      Oct 26                  95,794
-      Nov 26                       0
+FIRST - MY LAST DIAGNOSIS WAS WRONG, AND pkg705 DID ALMOST NOTHING
+--------------------------------------------------------------------
+I said 355,547 was "undated and overdue" and dumping into month one. It is not:
 
-547,162 of a 555,310 ledger collected in three months - 81% of everything you are
-owed, in ONE month.
+    no expected date                     15    355,547
+    of those, ALSO overdue                2      3,175
 
-WHY: 15 invoices worth 355,547 have no expected date, so they sit on Xero's due
-date. For an overdue invoice that date is in the PAST, and everything in the past
-falls into month one.
+Your own Reconcile check said it - "1 are already past their date, worth 455" -
+and I read straight past it. pkg705 touched 3,175. Reverted.
 
-The balance sheet never does this - it spreads collection over DEBTOR DAYS. Two
-pages guessing differently about the same invoices.
-
-AND YOU WERE RIGHT THAT IT SHOULD CORRECT ITSELF LATER - it would, if this were a
-timing difference. It is not. The money is collected EARLY, not twice, so the gap
-opens in month one and persists to the end. That is exactly why it never came back
-down, and why your instinct that something was structurally wrong was correct.
+You were also right about the behaviour: an unshaded box is Xero's due date
+showing as the default, which is exactly what should happen.
 
 
-THE FIX
--------
-Where you have SET a date, it is used as-is - nothing changes. Where you have not,
-an overdue invoice is spread across the debtor-day window rather than assumed to
-arrive at once:
+SEPTEMBER REALLY IS 451,383 - AND THEY ARE YOUR DATES
+-------------------------------------------------------
+    2026-09    451,383
+    2026-10     95,794
 
-    355,547 over 2 months -> Sept 177,774, Oct 177,774
-    September invoices in falls from 451,368 to about 273,595
+Waungron App2 113,815 on 27/09. Winnersh 80,417 on 08/09. Albert Bartlett 54,503
+on 13/09. Market Drayton 39,216 on 14/09. The cash flow is reading your ledger
+correctly.
 
-It now reads the debtor-day setting from the SAME config the Forecast Balance
-Sheet uses, so the two pages cannot drift apart on this again.
+WHICH FLIPS THE ANSWER. The cash flow is right. THE BALANCE SHEET IS WRONG.
 
 
-THIS IS AN ASSUMPTION TOO
--------------------------
-A less flattering one, but still a guess. The real answer is dates on those
-fifteen invoices - they are two thirds of your ledger by value, and until they are
-dated no cash flow can be better than an estimate.
+THE FORECAST BALANCE SHEET NEVER READ A SINGLE EXPECTED DATE
+--------------------------------------------------------------
+    receipts = lag(revOf, i, dDays) * (1 - retPct) + released
+
+It lagged ALL revenue by a flat 45 days. So it was still holding 1,021,667 of
+debtors at November while the cash flow had banked 451,383 of them in September on
+dates you had typed by hand. Same invoices, two completely different models - and
+that is the 841,401.
+
+The existing ledger now collects WHEN YOU SAY IT WILL. Only revenue still to be
+BILLED falls back to debtor days, which is the one place an assumption is honest:
+there is no invoice yet to carry a date.
+
+    debtors at Nov   1,021,667 -> about 474,490
+    bank at Nov       -187,303 -> about 359,874
+    12-month says                    654,098
+    remaining gap                    294,224
+
+Still a gap, but a THIRD of what it was, and now between two pages that model the
+same invoices the same way.
+
+
+PRESS "READ BALANCE SHEET FROM XERO" BEFORE JUDGING IT. The amber banner is still
+on your screenshot, so the debtors and bank lines are rolled forward from an
+opening the model invented rather than from Xero.

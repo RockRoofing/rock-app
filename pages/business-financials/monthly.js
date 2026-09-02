@@ -129,29 +129,11 @@ export default function MonthlyCashFlow() {
     let fcLabGrossPrev = 0
     let running = openBank
     for (const mk of months) {
-      // AN OVERDUE INVOICE WITH NO EXPECTED DATE DOES NOT ARRIVE THIS MONTH.
-      //
-      // Two thirds of the ledger by value has no expected date, so it sits on Xero's due
-      // date - which for an overdue invoice is in the PAST, and everything in the past
-      // lands in month one. September was collecting 451,368 of a 555,310 ledger: 81% of
-      // everything you are owed, in one month, on dates nobody has looked at.
-      //
-      // The balance sheet spreads collection over debtor days and never does this, which
-      // is most of why the two pages disagree by 841,401 at November - and it does not
-      // correct later, because the money is collected EARLY rather than twice.
-      //
-      // Where a date has been SET, it is used as-is. Where one has not, an overdue invoice
-      // is spread over the debtor-day window from today rather than assumed to arrive at
-      // once. That is an assumption too, but a far less flattering one.
-      const invoicesIn = (data.receivables || []).reduce((a, i) => {
-        const set = !!i.expectedDate
-        const d = i.expectedDate || i.dueDate || ''
-        if (!d) return a
-        if (set || d >= todayKey) return a + (inMonth(d, mk) ? (i.amountDue || 0) : 0)
-        // Undated AND overdue - spread evenly across the next `spreadMonths` months.
-        const idx = months.indexOf(mk)
-        return a + ((idx >= 0 && idx < spreadMonths) ? (i.amountDue || 0) / spreadMonths : 0)
-      }, 0)
+      // Xero's due date is used as-is where you have not changed it - which is what the
+      // Invoices Owed page shows and what you expect. I briefly spread undated overdue
+      // invoices here on a diagnosis that was wrong: only 3,175 of the ledger is undated
+      // AND overdue, not the 355,547 I claimed. Reverted.
+      const invoicesIn = (data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
       const retIn = retEvents.filter(r => inMonth(r.date, mk)).reduce((a, r) => a + r.amount, 0)
       // FORWARD VAT RECLAIM, as the 13-week does. vatByMonth only ever held filed returns
       // and the current estimate, so every future month showed nothing - on a twelve-month

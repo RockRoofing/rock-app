@@ -200,6 +200,16 @@ export default function ForecastBalanceSheet() {
     const retPct = (Number(a.retentionPct) || 0) / 100
     const retMonths = Math.max(1, Number(a.retentionMonths) || 12)
 
+    // The existing sales ledger, by the month you expect each invoice.
+    const ledgerByMonth = {}
+    for (const inv of (cf.receivables || [])) {
+      if (inv.type && inv.type !== 'ACCREC') continue
+      const d = inv.expectedDate || inv.dueDate || ''
+      if (!d) continue
+      const k = String(d).slice(0, 7)
+      ledgerByMonth[k] = (ledgerByMonth[k] || 0) + (Number(inv.amountDue) || 0)
+    }
+
     let bank = openBank, cards = openCards, debtors = openDebtors, creditors = openCreditors
     let financing = openFinancing, retention = 0, reserves = openEquityish
     const rows = []
@@ -231,11 +241,24 @@ export default function ForecastBalanceSheet() {
       const withheld = revenue * retPct
       const released = (revOf[i - retMonths] ?? 0) * retPct
 
-      const receipts = lag(revOf, i, dDays) * (1 - retPct) + released
+      // THE INVOICES YOU HAVE ALREADY RAISED COLLECT ON THE DATES YOU SET.
+      //
+      // This lagged ALL revenue by a flat 45 days and never read a single expected date -
+      // so it held 1,021,667 of debtors at November while the cash flow had collected
+      // 451,383 of them in September on dates you entered by hand. The two pages were
+      // modelling the same invoices completely differently, and that is the 841,401.
+      //
+      // The existing ledger now lands when you say it will. Only revenue still to be
+      // BILLED falls back to the debtor-day assumption - the one place an assumption is
+      // honest, because there is no invoice yet to carry a date.
+      const ledgerIn = ledgerByMonth[mo] || 0
+      const receipts = lag(revOf, i, dDays) * (1 - retPct) + released + ledgerIn
       const payments = lag(cosOf, i, cDays) + overheads
       const finPaid = finByMonth[mo] || 0
 
-      debtors += revenue * (1 - retPct) - lag(revOf, i, dDays) * (1 - retPct)
+      // Debtors fall as the ledger is collected, or the balance sheet holds money the cash
+      // flow has already banked - which is exactly what it was doing.
+      debtors += revenue * (1 - retPct) - lag(revOf, i, dDays) * (1 - retPct) - ledgerIn
       retention += withheld - released
       creditors += -(cos - lag(cosOf, i, cDays))       // liabilities carried negative
       financing += finPaid                              // liability negative, so paying it rises toward 0
