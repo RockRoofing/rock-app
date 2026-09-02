@@ -139,7 +139,8 @@ export default function ForecastBalanceSheet() {
     // every time one was fixed and the others were not. One implementation now, in
     // lib/forecastMonths.js - which is also how a manual month typed on the P&L reaches
     // this page without being stored twice.
-    const pl = buildForecastMonths({ oh, mg, cf, manual: (oh && oh.plManualMonths) || {}, fyEnd })
+    const pl = buildForecastMonths({ oh, mg, cf, manual: (oh && oh.plManualMonths) || {}, fyEnd,
+      wipLocks: (oh && oh.wipLocks) || {}, wipInclude: oh ? oh.plWipInclude : null })
     if (!pl) return null
     const plByMonth = {}
     for (const r of pl.rows) plByMonth[r.mo] = r
@@ -188,6 +189,7 @@ export default function ForecastBalanceSheet() {
       ledgerByMonth[k] = (ledgerByMonth[k] || 0) + (Number(inv.amountDue) || 0)
     }
 
+    let wipApplied = false
     let bank = openBank, cards = openCards, debtors = openDebtors, creditors = openCreditors
     let financing = openFinancing, retention = 0, reserves = openEquityish
     const rows = []
@@ -217,6 +219,21 @@ export default function ForecastBalanceSheet() {
       const isManual = !!(plByMonth[mo] && plByMonth[mo].isManual)
       const revenue = revOf[i], cos = cosOf[i], overheads = ohOf[i]
       const net = revenue - cos - overheads
+
+      // WIP REVERSES OUT ON THE 1st, SO THE FORECAST MONTHS SHOULD NOT CARRY IT.
+      //
+      // Actual months are left exactly as Xero has them - the asset really was on the
+      // balance sheet at that date, and re-basing onto Xero is the whole point of a
+      // closed month. What is wrong is that every forecast month afterwards inherits it
+      // and rolls it forward, when in reality it is journalled straight back out.
+      //
+      // Applied ONCE, at the first forecast month, and carried by the running balances
+      // from there. Taken off reserves AND off the financing catch-all (which is where
+      // an unmodelled asset like WIP already sits), so both sides move together and
+      // "Out by" still ties.
+      const wipOff = (pl.wip.available && !pl.wip.include && pl.wip.lastActual
+        && mo > pl.wip.lastActual && !wipApplied) ? pl.wip.amount : 0
+      if (wipOff) { wipApplied = true; reserves -= wipOff; financing -= wipOff }
 
       // Retention withheld on this month's billing, released after retMonths.
       const withheld = revenue * retPct
@@ -287,7 +304,7 @@ export default function ForecastBalanceSheet() {
         financing = xeroNet - (bank + debtors + retention + cards + creditors)
       }
       rows.push({
-        mo, isActual, isManual, fromXero: useXero, revenue, cos, overheads, net,
+        mo, isActual, isManual, fromXero: useXero, revenue, cos, overheads, net, wipOff,
         bank, debtors, retention, cards, creditors, financing,
         assets, liabs, netAssets: useXero ? xeroNet : (assets + liabs), reserves,
         // The whole point of the third statement. If this is not ~0 the model does not
@@ -297,7 +314,7 @@ export default function ForecastBalanceSheet() {
         check: useXero ? 0 : (assets + liabs) - reserves,
       })
     })
-    return { fyEnd, months, rows, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasMonthly, hasOpening: accounts.length > 0 }
+    return { fyEnd, months, rows, wip: pl.wip, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasMonthly, hasOpening: accounts.length > 0 }
   }, [bs, oh, mg, cf, a])
 
   if (!ok) return null
@@ -378,14 +395,29 @@ export default function ForecastBalanceSheet() {
               {saved && <span style={{ fontSize: 11.5, fontWeight: 700, color: saved === 'saved' ? '#16a34a' : saved === 'saving' ? '#b45309' : '#dc2626' }}>{saved}</span>}
             </div>
 
+            {model.wip && model.wip.available && !model.wip.include ? (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
+                <strong>{gbp(model.wip.amount)} of WIP taken out from {monthShort(model.wip.lastActual)} onwards.</strong>
+                <div style={{ marginTop: 3 }}>
+                  Actual months are left exactly as Xero has them - the asset really was there on those dates.
+                  The journal reverses on the 1st, so the forecast months should not carry it forward. Taken off
+                  reserves and off the financing catch-all together, so &quot;Out by&quot; still ties.
+                  Change this with the tick on the Forecast P&amp;L.
+                </div>
+              </div>
+            ) : null}
+
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', minWidth: 1150 }}>
                 <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                   <th style={{ ...th, textAlign: 'left', position: 'sticky', left: 0, background: '#faf9f7' }}>Month end</th>
                   {model.rows.map(r => (
-                    <th key={r.mo} style={{ ...th, background: r.isActual ? '#f4faf6' : '#fffdf5' }}>
+                    <th key={r.mo} style={{ ...th, background: r.isManual ? '#eff6ff' : (r.isActual ? '#f4faf6' : '#fffdf5') }}>
                       {monthShort(r.mo)}
-                      <div style={{ fontSize: 9, fontWeight: 700, color: r.isActual ? '#16a34a' : '#b45309' }}>{r.isActual ? 'ACTUAL' : 'forecast'}</div>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: r.isManual ? '#1d4ed8' : (r.isActual ? '#16a34a' : '#b45309') }}>
+                        {r.isManual ? 'MANUAL' : r.isActual ? 'ACTUAL' : 'forecast'}
+                      </div>
+                      {r.wipOff ? <div style={{ fontSize: 8.5, fontWeight: 700, color: '#b45309' }}>WIP OUT</div> : null}
                     </th>
                   ))}
                 </tr></thead>
@@ -399,6 +431,8 @@ export default function ForecastBalanceSheet() {
                   <Row label="Net assets" rows={model.rows} pick={r => r.netAssets} bold band />
                   <Row label="Reserves (opening + profit)" rows={model.rows} pick={r => r.reserves} />
                   <Row label="Out by" rows={model.rows} pick={r => r.check} check />
+                  {/* Where the reversal lands, so the step down in net assets has a
+                      label instead of looking like a break in the roll-forward. */}
                   <tr><td colSpan={model.rows.length + 1} style={{ padding: '6px 8px', fontSize: 10.5, color: '#8a857c' }}>
                     Months marked ACTUAL take Xero&apos;s own <strong>Net Assets</strong> figure, so they are fact and cannot disagree. The forecast is re-based onto the last actual, so it starts from the truth rather than from twelve months of accumulated drift.
                   </td></tr>

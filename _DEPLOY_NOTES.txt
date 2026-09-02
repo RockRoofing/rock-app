@@ -1,29 +1,71 @@
-pkg723 - Bibby availability in the cash flow chart tooltip
-===========================================================
+pkg724 - WIP adjustment on the Forecast P&L and Forecast Balance Sheet
+=======================================================================
 
-REPLACE:
-  pages/business-financials/cashflow.js
+REPLACE (no new files):
+  lib/forecastMonths.js
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-balance-sheet.js
+  pages/api/business-financials.js
 
-No new files. Deploy pkg722 first if you have not.
+Built on the exact pkg722 files - verified against the pkg722 zip before
+starting, not against my working copy.
 
-WHAT CHANGED
+WHERE THE FIGURE COMES FROM
+---------------------------
+wip:lock:<YYYY-MM>, written when WIP is signed off in Commercial. The lock for
+the LAST ACTUAL month is used.
+
+If that month has never been signed off, the most recent earlier lock is used
+INSTEAD and the page says so in amber, naming both months. It does not quietly
+substitute. Sign off the right month in Commercial and the banner clears.
+
+FORECAST P&L
 ------------
-Hovering any week on "Projected cash balance" now gives a full breakdown
-instead of two bare figures:
+New "Work in progress" panel above the table:
+  - the month, the signed-off figure, and a tick "include in the FY total"
+  - excluded by default; automatically INCLUDED when the last actual month is
+    the year end (November), where the journal is genuine FY revenue
+  - the tick is an explicit override; "back to automatic" returns it to
+    following the year end as it moves
 
-  Closing cash
-  Total available
-  -- Invoice finance --
-  Bibby availability (gross)     <- the whole advance the facility supports
-  less drawn                        against the ledger that week, BEFORE
-  Still drawable                    deducting what you have borrowed
-  -- --
-  Card headroom
-  Overdraft headroom             <- moves with the balance, as it should
+In the table:
+  - EVERY MONTHLY COLUMN IS UNCHANGED. Each month still reads exactly what
+    Xero reports. Nothing has been taken off a month.
+  - one new row, "less WIP in <month>", carrying the deduction in the FY
+    column only, with dashes across the months
+  - a "Net profit after WIP" row underneath
+  - the five summary boxes use the adjusted figures
 
-Gross and net are tracked separately rather than one derived from the other.
-Both are floored at zero, so once either hits the floor "net + drawn" stops
-equalling gross and deriving it would quietly be wrong.
+CONSEQUENCE, STATED ON THE PAGE: the FY total no longer equals the sum of the
+monthly columns, and the gap is exactly the WIP figure. That is deliberate.
+The panel says so rather than leaving it looking like an arithmetic fault.
 
-The dashed "total available" line still uses the NET figure and that has not
-changed - money already drawn is in the bank and cannot be drawn twice.
+Revenue only. The journal is Dr WIP, Cr Sales - there is no cost side.
+
+FORECAST BALANCE SHEET
+----------------------
+Actual months are left EXACTLY as Xero has them - the asset really was on the
+balance sheet on those dates, and re-basing onto Xero is what a closed month is
+for.
+
+The deduction lands on the FORECAST months only, applied once at the first one
+after the last actual month and carried by the running balances from there. The
+column heading for that month shows "WIP OUT".
+
+Taken off reserves AND off the financing catch-all together, so both sides of
+the sheet move by the same amount and "Out by" still ties. Bank is untouched -
+WIP is not cash.
+
+Driven by the same tick on the Forecast P&L. One setting, both pages.
+
+Month headings on the BS now also show MANUAL in blue, matching the P&L.
+
+WHAT TO CHECK
+-------------
+  - Forecast P&L: WIP panel shows the right month and figure. Untick / retick
+    and the FY total moves by exactly that amount while the columns do not.
+  - The amber "no signed-off WIP for <month>" warning is ABSENT. If it shows,
+    sign that month off in Commercial.
+  - Forecast BS: "Out by" still near zero on every month, including the one
+    marked WIP OUT.
+  - Net assets step down by the WIP amount at the first forecast month.

@@ -161,6 +161,17 @@ export default async function handler(req, res) {
       // here rather than on either page's own view because both read this payload, so
       // one save reaches both. Overheads are deliberately NOT overridable - the
       // Budgets grid already has them right.
+      // WIP inclusion tick for the Forecast P&L / Forecast Balance Sheet.
+      // null means "automatic" - included only when the last actual month is the year
+      // end. true / false is an explicit override. Stored as one value rather than a
+      // per-month map: there is only ever one WIP that matters, the last actual month's.
+      if (req.body && req.body.action === 'save-wip-include') {
+        const v = req.body.wipInclude
+        if (v === null || v === undefined || v === 'auto') await redis.del('config:pl-wip-include')
+        else await redis.set('config:pl-wip-include', !!v)
+        return res.json({ ok: true, plWipInclude: (v === null || v === undefined || v === 'auto') ? null : !!v })
+      }
+
       if (req.body && req.body.action === 'save-pl-manual') {
         const src = (req.body.plManualMonths && typeof req.body.plManualMonths === 'object') ? req.body.plManualMonths : {}
         const clean = {}
@@ -226,6 +237,26 @@ export default async function handler(req, res) {
     const cellComments = await redis.get('config:overhead-cell-comments').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
     // Manual month figures for the Forecast P&L / Forecast Balance Sheet.
     const plManualMonths = await redis.get('config:pl-manual-months').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
+    const plWipInclude = await redis.get('config:pl-wip-include').then(v => (v === true || v === false) ? v : null).catch(() => null)
+    // SIGNED-OFF WIP PER MONTH, from the locks written when WIP is completed in
+    // Commercial. Scanned rather than guessed at, because the months that have been
+    // signed off are not predictable - and a missing one has to be visible on the page
+    // rather than silently reading zero.
+    const wipLocks = {}
+    try {
+      let cursor = 0, guard = 0
+      do {
+        const step = await redis.scan(cursor, { match: 'wip:lock:*', count: 200 })
+        cursor = typeof step[0] === 'string' ? parseInt(step[0]) : step[0]
+        for (const k of (Array.isArray(step[1]) ? step[1] : [])) {
+          const mo = String(k).slice('wip:lock:'.length)
+          if (!/^\d{4}-\d{2}$/.test(mo)) continue
+          const lock = await redis.get(k).catch(() => null)
+          if (lock && lock.totalWip != null) wipLocks[mo] = { totalWip: Number(lock.totalWip) || 0, lockedAt: lock.lockedAt || null, lockedBy: lock.lockedBy || '' }
+        }
+        guard++
+      } while (cursor !== 0 && guard < 50)
+    } catch {}
     const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
     const cashCommitments = await redis.get('config:cash-commitments').then(v => v || []).catch(() => ([]))
     const chartNames = {}
@@ -302,6 +333,8 @@ export default async function handler(req, res) {
       // view, so neither needs an extra round trip and neither can go stale
       // relative to the other.
       plManualMonths: plManualMonths || {},
+      plWipInclude,
+      wipLocks,
     })
   }
 

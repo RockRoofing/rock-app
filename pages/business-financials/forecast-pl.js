@@ -23,6 +23,7 @@ export default function ForecastPL() {
   const [draftMo, setDraftMo] = useState('')
   const [draft, setDraft] = useState({ revenue: '', cos: '', materials: '', labour: '' })
   const [saved, setSaved] = useState('')
+  const [wipInclude, setWipInclude] = useState(undefined)   // undefined = follow what the API stored
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -40,12 +41,15 @@ export default function ForecastPL() {
       ]).then(([a, b, c]) => {
         setOh(a); setMg(b); setCf(c)
         setManual((a && a.plManualMonths) || {})
+        setWipInclude(a ? a.plWipInclude : null)
         setLoading(false)
       })
     })
   }, [])
 
-  const model = useMemo(() => buildForecastMonths({ oh, mg, cf, manual }), [oh, mg, cf, manual])
+  const model = useMemo(
+    () => buildForecastMonths({ oh, mg, cf, manual, wipLocks: (oh && oh.wipLocks) || {}, wipInclude }),
+    [oh, mg, cf, manual, wipInclude])
 
   async function saveManual(next) {
     setManual(next); setSaved('saving')
@@ -53,6 +57,18 @@ export default function ForecastPL() {
       const r = await fetch('/api/business-financials', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ view: 'budgets-overheads', action: 'save-pl-manual', plManualMonths: next }),
+      })
+      setSaved(r.ok ? 'saved' : 'NOT SAVED')
+      if (r.ok) setTimeout(() => setSaved(''), 1600)
+    } catch { setSaved('NOT SAVED') }
+  }
+
+  async function saveWipInclude(next) {
+    setWipInclude(next); setSaved('saving')
+    try {
+      const r = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'budgets-overheads', action: 'save-wip-include', wipInclude: next === undefined ? null : next }),
       })
       setSaved(r.ok ? 'saved' : 'NOT SAVED')
       if (r.ok) setTimeout(() => setSaved(''), 1600)
@@ -124,12 +140,12 @@ export default function ForecastPL() {
         {model && (
           <>
             <div style={{ display: 'flex', gap: 12, margin: '18px 0', flexWrap: 'wrap' }}>
-              <Box label="Revenue (FY)" value={gbp(model.totals.revenue)} sub={`${gbp(model.totals.aRev)} actual/manual + ${gbp(model.totals.fRev)} forecast`} />
+              <Box label="Revenue (FY)" value={gbp(model.adjTotals.revenue)} sub={`${gbp(model.adjTotals.aRev)} actual/manual + ${gbp(model.adjTotals.fRev)} forecast`} />
               <Box label="Cost of sale" value={gbp(-model.totals.cos)} colour="#dc2626" />
-              <Box label="Gross profit" value={gbp(model.totals.gross)} colour={model.totals.gross < 0 ? '#dc2626' : '#0f766e'}
-                sub={model.totals.revenue > 0 ? `${((model.totals.gross / model.totals.revenue) * 100).toFixed(1)}%` : ''} />
+              <Box label="Gross profit" value={gbp(model.adjTotals.gross)} colour={model.adjTotals.gross < 0 ? '#dc2626' : '#0f766e'}
+                sub={model.adjTotals.revenue > 0 ? `${((model.adjTotals.gross / model.adjTotals.revenue) * 100).toFixed(1)}%` : ''} />
               <Box label="Overheads" value={gbp(-model.totals.overheads)} colour="#b45309" />
-              <Box label="Net profit (FY)" value={gbp(model.totals.net)} colour={model.totals.net < 0 ? '#dc2626' : '#16a34a'} strong
+              <Box label="Net profit (FY)" value={gbp(model.adjTotals.net)} colour={model.adjTotals.net < 0 ? '#dc2626' : '#16a34a'} strong
                 sub={`${model.actualCount} actual, ${model.manualCount} manual of 12`} />
             </div>
 
@@ -178,6 +194,53 @@ export default function ForecastPL() {
               ))}
             </div>
 
+            {/* WIP. Stated plainly, because a figure being taken off the year without
+                anything saying so is exactly the kind of silent adjustment that gets
+                mistrusted the first time somebody checks the arithmetic. */}
+            <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: 13, color: INK }}>Work in progress</strong>
+                {model.wip.available ? (
+                  <>
+                    <span style={{ fontSize: 12.5 }}>
+                      {monthShort(model.wip.month)} signed-off WIP <strong>{gbp(model.wip.amount)}</strong>
+                    </span>
+                    <label style={{ fontSize: 12.5, color: '#57534e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="checkbox" checked={!!model.wip.include}
+                        onChange={e => saveWipInclude(e.target.checked)} />
+                      include in the FY total
+                    </label>
+                    {wipInclude === true || wipInclude === false ? (
+                      <button onClick={() => saveWipInclude(undefined)} style={btn}>back to automatic</button>
+                    ) : (
+                      <span style={{ fontSize: 11.5, color: '#8a857c' }}>
+                        automatic - {model.wip.isFyEnd ? 'included, because the last actual month is the year end' : 'excluded'}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12.5, color: '#8a857c' }}>Nothing to adjust - {model.wip.reason}.</span>
+                )}
+              </div>
+              {model.wip.available ? (
+                <div style={{ fontSize: 11.5, color: '#8a857c', marginTop: 6, lineHeight: 1.45, maxWidth: 900 }}>
+                  The journal is inside Xero&apos;s income for {monthShort(model.wip.month)} and reverses on the 1st.
+                  Between two closed months that cancels out, but the reversal after the last actual month falls in a
+                  FORECAST month, which never sees it - and the forecast then earns the same work again when it is
+                  certified. So it comes off the year once, not off any month.
+                  {model.wip.exact ? null : (
+                    <strong style={{ color: '#b45309' }}>
+                      {' '}{monthShort(model.wip.lastActual)} has no signed-off WIP, so {monthShort(model.wip.month)} is being used instead.
+                      Sign off {monthShort(model.wip.lastActual)} in Commercial for the right figure.
+                    </strong>
+                  )}
+                  {model.wip.include ? null : (
+                    <span> The FY total is therefore {gbp(model.wip.amount)} below the sum of the monthly columns, by design.</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
                 <thead>
@@ -216,7 +279,17 @@ export default function ForecastPL() {
                   <Line label="Gross margin %" rows={model.rows} pick={r => r.revenue > 0 ? (r.gross / r.revenue) * 100 : null} pct
                     total={model.totals.revenue > 0 ? (model.totals.gross / model.totals.revenue) * 100 : null} />
                   <Line label="Net margin %" rows={model.rows} pick={r => r.revenue > 0 ? (r.net / r.revenue) * 100 : null} pct
-                    total={model.totals.revenue > 0 ? (model.totals.net / model.totals.revenue) * 100 : null} />
+                    total={model.adjTotals.revenue > 0 ? (model.adjTotals.net / model.adjTotals.revenue) * 100 : null} />
+                  {/* WIP COMES OFF THE YEAR, NOT OFF A MONTH. Every monthly column above
+                      is left exactly as Xero reports it; this single row carries the
+                      adjustment in the FY column, which is why the total no longer sums
+                      the columns. */}
+                  {model.wip.available && !model.wip.include ? (
+                    <WipLine rows={model.rows} amount={model.wip.amount} month={model.wip.month} />
+                  ) : null}
+                  {model.wip.available && !model.wip.include ? (
+                    <Line label="Net profit after WIP" rows={model.rows} pick={() => null} colour={INK} bold band total={model.adjTotals.net} />
+                  ) : null}
                 </tbody>
               </table>
 
@@ -320,6 +393,20 @@ function DraftField({ label, k, draft, setDraft }) {
       <input type="number" value={draft[k]} placeholder="-"
         onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))} style={inp} />
     </div>
+  )
+}
+
+// One row, one figure, in the FY column only. The monthly cells are deliberately blank -
+// nothing has been taken off any month, and putting a number in a month would say it had.
+function WipLine({ rows, amount, month }) {
+  return (
+    <tr style={{ borderBottom: '1px solid #f2f0ec', background: '#fffdf5' }}>
+      <td style={{ ...lbl, fontSize: 11.5, color: '#b45309', position: 'sticky', left: 0, background: '#fffdf5' }}>
+        less WIP in {monthShort(month)}
+      </td>
+      {rows.map(r => <td key={r.mo} style={{ ...td, color: '#e5e1d8' }}>-</td>)}
+      <td style={{ ...td, fontWeight: 700, background: '#eef3fb', color: '#b45309' }}>{gbp(-Math.abs(amount || 0))}</td>
+    </tr>
   )
 }
 
