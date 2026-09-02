@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -8,6 +8,63 @@ import { pad, normName, mondayOf, isoDay, monthKey, daysInMonth, clampDay, overh
 const MONTHS = 12
 const monthShort = (mk) => { const [y, m] = mk.split('-').map(Number); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} ${String(y).slice(2)}` }
 
+// One drillable cell. Module scope - a component declared inside another remounts on
+// every render and loses focus.
+function Drill({ v, open, onClick, colour, neg }) {
+  if (!v) return <td style={{ ...td, color: '#ccc' }}>-</td>
+  return (
+    <td style={{ ...td, color: colour, cursor: 'pointer', textDecoration: 'underline dotted #ddd' }} onClick={onClick}
+      title="Click to see what is in this figure">
+      {gbp(neg ? -v : v)}
+      <span style={{ fontSize: open ? 12 : 9, fontWeight: open ? 700 : 400, color: open ? '#1a1a19' : '#bbb', marginLeft: 3 }}>
+        {open ? '\u25B2' : '\u25BC'}
+      </span>
+    </td>
+  )
+}
+
+function DrillTable({ which, row }) {
+  const cfg = {
+    inv:  { title: 'Invoices due', rows: row.invDetail || [], cols: ['Customer', 'Invoice', 'Project', 'Date used', 'Amount'] },
+    bill: { title: 'Bills due', rows: row.billDetail || [], cols: ['Supplier', 'Reference', 'Project', 'Date used', 'Amount'] },
+    proj: { title: 'Project forecasts', rows: row.projDetail || [], cols: ['Project', 'Sales', 'Materials', 'Labour (net)'] },
+  }[which]
+  if (!cfg || !cfg.rows.length) return <div style={{ fontSize: 12, color: '#999' }}>Nothing to show.</div>
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{cfg.title} in {row.label}</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+        <thead><tr style={{ color: '#888' }}>
+          {cfg.cols.map((c, i) => <th key={i} style={{ textAlign: i === 0 ? 'left' : (which === 'proj' ? 'right' : 'left'), padding: '3px 6px' }}>{c}</th>)}
+        </tr></thead>
+        <tbody>
+          {cfg.rows.map((x, i) => (
+            <tr key={i} style={{ borderTop: '1px solid #efefec' }}>
+              {which === 'proj' ? <>
+                <td style={{ padding: '3px 6px' }}>{x.name}</td>
+                <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{x.sales ? gbp(x.sales) : '-'}</td>
+                <td style={{ padding: '3px 6px', textAlign: 'right', color: x.mat ? '#dc2626' : '#ccc' }}>{x.mat ? gbp(-x.mat) : 'none'}</td>
+                <td style={{ padding: '3px 6px', textAlign: 'right', color: x.labour ? '#dc2626' : '#ccc' }}>{x.labour ? gbp(-x.labour) : 'none'}</td>
+              </> : <>
+                <td style={{ padding: '3px 6px' }}>{x.name}</td>
+                <td style={{ padding: '3px 6px', color: '#777' }}>{x.ref || '-'}</td>
+                <td style={{ padding: '3px 6px', color: '#777' }}>{x.project || '-'}</td>
+                {/* Whether the date was set by hand or defaulted from Xero - the same
+                    distinction the 13-week makes, and the one that decides how much a
+                    month is worth trusting. */}
+                <td style={{ padding: '3px 6px', color: x.set ? '#0f766e' : '#999' }}>{x.date || '-'}{x.set ? ' (set)' : ' (Xero)'}</td>
+                <td style={{ padding: '3px 6px', textAlign: 'right', color: which === 'bill' ? '#dc2626' : '#0f766e' }}>
+                  {gbp(which === 'bill' ? -x.amount : x.amount)}
+                </td>
+              </>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function MonthlyCashFlow() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
@@ -16,6 +73,7 @@ export default function MonthlyCashFlow() {
   const [startCash, setStartCash] = useState('')
   const [lumps, setLumps] = useState([])
   const [savingLumps, setSavingLumps] = useState(false)
+  const [open, setOpen] = useState(null)   // 'YYYY-MM:inv' | ':bill' | ':proj'
 
   useEffect(() => { (async () => {
     try {
@@ -133,7 +191,12 @@ export default function MonthlyCashFlow() {
       // Invoices Owed page shows and what you expect. I briefly spread undated overdue
       // invoices here on a diagnosis that was wrong: only 3,175 of the ledger is undated
       // AND overdue, not the 355,547 I claimed. Reverted.
-      const invoicesIn = (data.receivables || []).filter(i => inMonth(i.expectedDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
+      const invDetail = (data.receivables || [])
+        .filter(i => (!i.type || i.type === 'ACCREC') && inMonth(i.expectedDate || i.dueDate, mk))
+        .map(i => ({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '', project: i.projectName || '',
+          amount: i.amountDue || 0, date: i.expectedDate || i.dueDate || '', set: !!i.expectedDate }))
+        .sort((a, b) => b.amount - a.amount)
+      const invoicesIn = invDetail.reduce((a, i) => a + i.amount, 0)
       const retIn = retEvents.filter(r => inMonth(r.date, mk)).reduce((a, r) => a + r.amount, 0)
       // FORWARD VAT RECLAIM, as the 13-week does. vatByMonth only ever held filed returns
       // and the current estimate, so every future month showed nothing - on a twelve-month
@@ -150,7 +213,12 @@ export default function MonthlyCashFlow() {
       const vatRaw = vatByMonth[mk] != null ? vatByMonth[mk] : vatEst
       const vatIn = vatRaw > 0 ? vatRaw : 0
       const vatOut = vatRaw < 0 ? -vatRaw : 0
-      const billsOut = (data.bills || []).filter(i => inMonth(i.payDate || i.dueDate, mk)).reduce((a, i) => a + (i.amountDue || 0), 0)
+      const billDetail = (data.bills || [])
+        .filter(i => inMonth(i.payDate || i.dueDate, mk))
+        .map(i => ({ name: i.contact || i.supplier || '(no supplier)', ref: i.reference || i.invoiceNumber || '',
+          project: i.project || '', amount: Math.abs(i.amountDue || 0), date: i.payDate || i.dueDate || '', set: !!i.payDate }))
+        .sort((a, b) => b.amount - a.amount)
+      const billsOut = billDetail.reduce((a, i) => a + i.amount, 0)
       const ohOut = ohEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => a + x.amount, 0)
       const commOut = commEvents.filter(x => inMonth(x.date, mk)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inMonth(c.date, mk)).reduce((a, c) => a + c.amount, 0)
@@ -179,6 +247,7 @@ export default function MonthlyCashFlow() {
       const today = new Date().toISOString().slice(0, 10)
 
       let fcSalesIn = 0, fcCostOut = 0, fcLabGross = 0, fcMatOut = 0, fcLabNet = 0
+      const projDetail = []
       for (const fc of (data.projForecasts || [])) {
         // Applied for -> the real invoice and bills have replaced it.
         const bound = fc.valDate || fc.latestAppEnd || fc.to || ''
@@ -217,6 +286,8 @@ export default function MonthlyCashFlow() {
         fcCostOut += Math.max(0, rawL - offL) + Math.max(0, rawM - offM)
         fcLabNet += Math.max(0, rawL - offL)
         fcMatOut += Math.max(0, rawM - offM)
+        const nS = Math.max(0, rawS - offS), nL = Math.max(0, rawL - offL), nM = Math.max(0, rawM - offM)
+        if (nS || nL || nM) projDetail.push({ name: fc.projectName || fc.projectKey || '(unnamed)', sales: nS, labour: nL, mat: nM })
         fcLabGross += rawLg
       }
       // CIS on forecast labour, paid the 22nd of the following month - so it lands in the
@@ -239,6 +310,7 @@ export default function MonthlyCashFlow() {
       rows.push({
         mk, label: monthShort(mk),
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatIn),
+        invDetail, billDetail, projDetail,
         bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut + cisOnFc), cisEstimated: cisOnFc > 0,
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut),
         projMatOut: Math.round(fcMatOut), projLabOut: Math.round(fcLabNet),
@@ -412,20 +484,21 @@ export default function MonthlyCashFlow() {
                 </thead>
                 <tbody>
                   {forecast.map((r) => (
-                    <tr key={r.mk} style={{ borderBottom: '1px solid #f4f4f4' }}>
+                    <Fragment key={r.mk}>
+                    <tr style={{ borderBottom: '1px solid #f4f4f4' }}>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600, position: 'sticky', left: 0, background: '#fff' }}>{r.label}</td>
-                      <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
+                      <Drill v={r.invoicesIn} open={open === r.mk + ':inv'} onClick={() => setOpen(open === r.mk + ':inv' ? null : r.mk + ':inv')} colour="#16a34a" />
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}>{r.vatIn ? gbp(r.vatIn) : '-'}</td>
                       {/* THREE COLUMNS, not one net figure. Netted together, a month with
                           166,381 of sales and no cost at all looks identical to one with
                           250,000 of sales and 84,000 of cost - and the curve only ever
                           rises. Same fault the 13-week had before it was split. */}
-                      <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc' }}>{r.projSalesIn ? gbp(r.projSalesIn) : '-'}</td>
+                      <Drill v={r.projSalesIn} open={open === r.mk + ':proj'} onClick={() => setOpen(open === r.mk + ':proj' ? null : r.mk + ':proj')} colour="#0f766e" />
                       <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#c00' }}>{r.projMatOut ? gbp(-r.projMatOut) : 'none'}</td>
                       <td style={{ ...td, color: r.projLabOut ? '#dc2626' : '#c00' }}>{r.projLabOut ? gbp(-r.projLabOut) : 'none'}</td>
                       <td style={{ ...td, color: r.lumpIn ? '#16a34a' : '#ccc' }}>{r.lumpIn ? gbp(r.lumpIn) : '-'}</td>
-                      <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
+                      <Drill v={r.bills} neg open={open === r.mk + ':bill'} onClick={() => setOpen(open === r.mk + ':bill' ? null : r.mk + ':bill')} colour="#dc2626" />
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc' }}>{r.overheads ? gbp(-r.overheads) : '-'}</td>
                       <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
@@ -434,6 +507,14 @@ export default function MonthlyCashFlow() {
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 700, color: r.closing < 0 ? '#dc2626' : INK }}>{gbp(r.closing)}</td>
                     </tr>
+                    {open && open.startsWith(r.mk + ':') && (
+                      <tr>
+                        <td colSpan={16} style={{ background: '#faf9f7', padding: '10px 14px' }}>
+                          <DrillTable which={open.split(':')[1]} row={r} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
                 <tfoot>
