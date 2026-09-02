@@ -18,6 +18,7 @@ const TABS = [
   ['Invoices Owed', '/business-financials/invoices'],
   ['Payment Perf', '/business-financials/payment-performance'],
   ['Reconcile', '/business-financials/reconciliation'],
+  ['Store Audit', '/business-financials/invoice-store-audit'],
   ['Retentions Due', '/business-financials/retentions-due'],
   ['VAT Refund', '/business-financials/vat-refund'],
   ['Budgets', '/business-financials/budgets'],
