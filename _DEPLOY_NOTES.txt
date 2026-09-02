@@ -1,57 +1,51 @@
-pkg709 - Retention is right. The forecasts running out is the problem.
-=======================================================================
+pkg710 - The overheads: TWO IMPLEMENTATIONS of the same rule
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg708. ***
+*** SUPERSEDES pkg591 - pkg709. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js
+  pages/api/business-financials.js
   ... and the rest of the set as before
 
 
-YOUR RETENTION QUESTION - BOTH RIGHT ALREADY
-----------------------------------------------
-    fcSalesIn += salesSchedule[].amount
+HIDDEN ROWS WAS NOT IT EITHER - THE GAPS DID NOT MOVE
+-------------------------------------------------------
+Identical to before: 11,408 in Aug and Sept, 951 in Oct and Nov. So removing the
+28 hidden accounts changed nothing, which means they are empty - and your own
+Reconcile line said so: "All: 767,312 | Shown: 767,311 - matches".
 
-amount is revenueThisPeriod, which is NET of retention. And Retention in reads
-GBP 0 across all twelve months, so nothing is released without dates in the
-tracker. Exactly as you specified. Not the problem.
-
-
-WHAT IS THE PROBLEM - AND IT IS NOT ARITHMETIC
-------------------------------------------------
-    opening ledger collected      552,576
-    forecast project sales        1,365,645
-    total collected               1,918,221
-
-    your forecasts hold in total  1,371,624
-
-100% OF EVERYTHING YOU WILL EVER BILL on these jobs is collected inside the
-window, leaving CLOSING DEBTORS OF ALMOST NIL. You always carry 500-600k of
-debtors. That cannot happen.
-
-The cause is on your own screenshot:
-
-    Jul 27   project sales  14,224
-    Aug 27   project sales       -
-
-THE FORECASTS RUN OUT BEFORE THE WINDOW DOES. First three months carry 665,122 of
-project sales; the last three carry 85,344 - thirteen per cent. So the back half
-banks the debtor book and bills nothing new, and the closing 197,454 is flattered
-by a pipeline that stops rather than a business that stops.
-
-This is not a bug I can fix in code. There is no work in the model for those
-months because none has been forecast.
+That was my fifth wrong answer on this. So this time I stopped guessing at
+candidates and read what the Budgets page ACTUALLY does.
 
 
-WHAT THE PAGE NOW DOES
-----------------------
-Fires a banner when the last three months carry under 40% of the first three, and
-says what to do: add the work you expect but have not forecast as MANUAL LUMPS -
-revenue AND its cost - and the back half becomes meaningful.
+IT DOES NOT USE THE API'S FIGURES AT ALL
+------------------------------------------
+    Budgets page:  forecastOf(code, mo), its own baseForecast(), its own isComplete()
+    API:           computePredictedByCodeMonth(), its own baseForecastOf(), isCompleteMo()
 
-Until then, READ THE FIRST SIX MONTHS AND TREAT THE REST AS A FLOOR. Those months
-are built on real forecasts, real invoices and real bills, and after today's fixes
-I would trust them.
+TWO SEPARATE IMPLEMENTATIONS OF ONE RULE. They will always drift, and they had:
+
+    Budgets page   isComplete    = actualSet.has(mo) && availableSet.has(mo)
+    API            isCompleteMo  = mo < nowKey && availableSet.has(mo)
+
+The API also required the month to be IN THE PAST. August is in the past and is
+not switched to actual, so the two tests disagree on exactly that month - and the
+averaging methods ("last 3 months", "avg this FY") then draw on a DIFFERENT SET OF
+MONTHS on each side, which is why the gap changes between September and October.
+
+The API now uses the identical test. Same rule, same months, same answer.
+
+
+A TDZ CAUGHT IN BUILD
+---------------------
+isCompleteMo now reads actualSet, which was declared four lines below it. Compiles
+cleanly, throws on the first call. Moved.
+
+
+IF THIS ONE IS STILL OUT, tell me and I will make the Forecast P&L read the
+Budgets page's own total rather than recomputing it. That is the only way to
+guarantee they agree, and after six attempts it is the right call - I should
+probably have done it three packages ago.

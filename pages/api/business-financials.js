@@ -53,10 +53,21 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
   const curFyEnd = fyOfMonth(nowKey)
   const fyMonthList = (endYear) => { const out = [`${endYear - 1}-12`]; for (let m = 1; m <= 11; m++) out.push(`${endYear}-${String(m).padStart(2, '0')}`); return out }
   const curFyMonths = fyMonthList(curFyEnd)
-  const isCompleteMo = (mo) => mo < nowKey && availableSet.has(mo)
+  // THE SAME TEST THE BUDGETS PAGE USES: actualSet && availableSet.
+  //
+  // The API also required `mo < nowKey`, the Budgets page does not. That is a second
+  // implementation of the same rule, and two implementations of one rule will always drift
+  // - which is what has kept the overheads apart through four attempted fixes.
+  //
+  // A month is complete when it has been SWITCHED TO ACTUAL and there is Xero data for it.
+  // Nothing else.
   // Which months the user has actually SWITCHED to actual on Budgets. Absent (an older
   // caller) falls back to the old behaviour so nothing else changes.
   const actualSet = new Set(Array.isArray(actualMonths) ? actualMonths : (availableMonths || []))
+  // Matches budgets.js: `actualSet.has(mo) && availableSet.has(mo)`. Used both to decide
+  // which months take actuals AND which months the averaging methods draw on, exactly as
+  // the page does - so "last 3 months" means the same three on both.
+  const isCompleteMo = (mo) => actualSet.has(mo) && availableSet.has(mo)
   const actualOfCode = (code, mo) => {
     const m = actualsByCode[code] || {}
     if (mo in m) return m[mo]
@@ -91,7 +102,7 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
       // month with Xero data as complete returned actuals-to-date - fine for a cash flow,
       // where it is what is left to pay, but wrong for a P&L. August read 12,198 against a
       // 54,370 budget because only a fortnight of invoices had been entered.
-      if (isCompleteMo(mo) && actualSet.has(mo)) { out[code][mo] = actualOfCode(code, mo); continue }
+      if (actualSet.has(mo) && availableSet.has(mo)) { out[code][mo] = actualOfCode(code, mo); continue }
       const ov = forecastOverrides[code]?.[mo]
       if (ov != null && ov !== '') { out[code][mo] = Number(ov); continue }
       const base = baseForecastOf(code)
