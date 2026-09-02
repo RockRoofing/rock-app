@@ -24,6 +24,7 @@ export default function ForecastPL() {
   const [draft, setDraft] = useState({ revenue: '', cos: '', materials: '', labour: '' })
   const [saved, setSaved] = useState('')
   const [wipInclude, setWipInclude] = useState(undefined)   // undefined = follow what the API stored
+  const [yeWip, setYeWip] = useState({ enabled: true, override: null })
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -42,14 +43,16 @@ export default function ForecastPL() {
         setOh(a); setMg(b); setCf(c)
         setManual((a && a.plManualMonths) || {})
         setWipInclude(a ? a.plWipInclude : null)
+        setYeWip((a && a.plYeWip) || { enabled: true, override: null })
         setLoading(false)
       })
     })
   }, [])
 
   const model = useMemo(
-    () => buildForecastMonths({ oh, mg, cf, manual, wipLocks: (oh && oh.wipLocks) || {}, wipInclude }),
-    [oh, mg, cf, manual, wipInclude])
+    () => buildForecastMonths({ oh, mg, cf, manual, wipLocks: (oh && oh.wipLocks) || {}, wipInclude,
+      yeWipEnabled: yeWip.enabled !== false, yeWipOverride: yeWip.override }),
+    [oh, mg, cf, manual, wipInclude, yeWip])
 
   async function saveManual(next) {
     setManual(next); setSaved('saving')
@@ -69,6 +72,18 @@ export default function ForecastPL() {
       const r = await fetch('/api/business-financials', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ view: 'budgets-overheads', action: 'save-wip-include', wipInclude: next === undefined ? null : next }),
+      })
+      setSaved(r.ok ? 'saved' : 'NOT SAVED')
+      if (r.ok) setTimeout(() => setSaved(''), 1600)
+    } catch { setSaved('NOT SAVED') }
+  }
+
+  async function saveYeWip(next) {
+    setYeWip(next); setSaved('saving')
+    try {
+      const r = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'budgets-overheads', action: 'save-ye-wip', yeWipEnabled: next.enabled, yeWipOverride: next.override }),
       })
       setSaved(r.ok ? 'saved' : 'NOT SAVED')
       if (r.ok) setTimeout(() => setSaved(''), 1600)
@@ -194,6 +209,73 @@ export default function ForecastPL() {
               ))}
             </div>
 
+            {/* YEAR-END WIP ACCRUAL panel, with the per-project working shown. On a
+                figure this soft the arithmetic is a starting point, not an answer. */}
+            {model.yeWip.applies || model.yeWip.reason ? (
+              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 13, color: INK }}>Year-end WIP accrual</strong>
+                  {model.yeWip.applies ? (
+                    <>
+                      <span style={{ fontSize: 12.5 }}>
+                        revenue <strong style={{ color: '#0f766e' }}>{gbp(model.yeWip.revenue)}</strong>
+                        {' '}on {gbp(model.yeWip.accrued)} of work at {(model.yeWip.margin * 100).toFixed(1)}%
+                      </span>
+                      <label style={{ fontSize: 12.5, color: '#57534e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="checkbox" checked={yeWip.enabled !== false}
+                          onChange={e => saveYeWip({ ...yeWip, enabled: e.target.checked })} />
+                        include
+                      </label>
+                      <span style={{ fontSize: 12, color: '#8a857c' }}>or type a figure</span>
+                      <input type="number" value={yeWip.override == null ? '' : yeWip.override} placeholder="auto"
+                        onChange={e => setYeWip({ ...yeWip, override: e.target.value === '' ? null : e.target.value })}
+                        onBlur={() => saveYeWip({ ...yeWip, override: yeWip.override === '' || yeWip.override == null ? null : Number(yeWip.override) || 0 })}
+                        style={{ ...inp, width: 110 }} />
+                      {model.yeWip.overridden ? <span style={{ fontSize: 11.5, color: '#1d4ed8' }}>typed figure in use</span> : null}
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 12.5, color: '#8a857c' }}>Not applied - {model.yeWip.reason}.</span>
+                  )}
+                </div>
+                {model.yeWip.applies ? (
+                  <>
+                    <div style={{ fontSize: 11.5, color: '#8a857c', marginTop: 6, lineHeight: 1.45, maxWidth: 940 }}>
+                      Work done between each project&apos;s November valuation date and the 30th, which is not in any
+                      application until December. Materials are taken on their delivery date and are ALREADY in
+                      November&apos;s cost, so only the revenue is missing; labour is pro-rated on WORKING DAYS and is added
+                      as cost too, because it sits at the end of its instalment window in December. The margin excludes
+                      that orphaned cost, otherwise it would drag itself down.
+                    </div>
+                    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr style={{ background: '#faf9f7', borderBottom: '1px solid #eee' }}>
+                          <th style={{ ...th, textAlign: 'left' }}>Project</th>
+                          <th style={{ ...th, textAlign: 'left' }}>Period</th>
+                          <th style={th}>Materials</th><th style={th}>Labour (wd)</th>
+                          <th style={th}>Accrued cost</th><th style={th}>Already in Nov</th>
+                          <th style={th}>Cost added</th><th style={th}>Revenue</th>
+                        </tr></thead>
+                        <tbody>
+                          {model.yeWip.projects.map(p2 => (
+                            <tr key={p2.name} style={{ borderBottom: '1px solid #f5f4f1' }}>
+                              <td style={{ ...td, textAlign: 'left', color: '#5b7085' }}>{p2.name}</td>
+                              <td style={{ ...td, textAlign: 'left', color: '#999', fontSize: 11 }}>{p2.from} to {p2.to}</td>
+                              <td style={td}>{gbp(p2.materials)}</td>
+                              <td style={td}>{gbp(p2.labour)} <span style={{ color: '#bbb', fontSize: 10 }}>{p2.wdBefore}/{p2.wdAll}</span></td>
+                              <td style={td}>{gbp(p2.accrued)}</td>
+                              <td style={{ ...td, color: '#999' }}>{gbp(p2.alreadyIn)}</td>
+                              <td style={{ ...td, color: p2.costTopUp ? '#dc2626' : '#ccc' }}>{p2.costTopUp ? gbp(p2.costTopUp) : '-'}</td>
+                              <td style={{ ...td, color: '#0f766e', fontWeight: 600 }}>{gbp(p2.revenue)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
             {/* WIP. Stated plainly, because a figure being taken off the year without
                 anything saying so is exactly the kind of silent adjustment that gets
                 mistrusted the first time somebody checks the arithmetic. */}
@@ -287,8 +369,17 @@ export default function ForecastPL() {
                   {model.wip.available && !model.wip.include ? (
                     <WipLine rows={model.rows} amount={model.wip.amount} month={model.wip.month} />
                   ) : null}
-                  {model.wip.available && !model.wip.include ? (
-                    <Line label="Net profit after WIP" rows={model.rows} pick={() => null} colour={INK} bold band total={model.adjTotals.net} />
+                  {/* YEAR-END WIP ACCRUAL. Cost after the November valuation date is
+                      already in November for materials, so only the labour shortfall is
+                      added; the revenue against the whole accrual is what was missing. */}
+                  {model.yeWip.applies ? (
+                    <YeWipLine rows={model.rows} label={`plus year-end WIP cost (labour to 30 Nov)`} amount={-model.yeWip.costTopUp} colour="#dc2626" />
+                  ) : null}
+                  {model.yeWip.applies ? (
+                    <YeWipLine rows={model.rows} label="plus year-end WIP revenue" amount={model.yeWip.revenue} colour="#0f766e" />
+                  ) : null}
+                  {(model.wip.available && !model.wip.include) || model.yeWip.applies ? (
+                    <Line label="Net profit after adjustments" rows={model.rows} pick={() => null} colour={INK} bold band total={model.adjTotals.net} />
                   ) : null}
                 </tbody>
               </table>
@@ -398,6 +489,16 @@ function DraftField({ label, k, draft, setDraft }) {
 
 // One row, one figure, in the FY column only. The monthly cells are deliberately blank -
 // nothing has been taken off any month, and putting a number in a month would say it had.
+function YeWipLine({ rows, label, amount, colour }) {
+  return (
+    <tr style={{ borderBottom: '1px solid #f2f0ec', background: '#fffdf5' }}>
+      <td style={{ ...lbl, fontSize: 11.5, color: colour, position: 'sticky', left: 0, background: '#fffdf5' }}>{label}</td>
+      {rows.map(r => <td key={r.mo} style={{ ...td, color: '#e5e1d8' }}>-</td>)}
+      <td style={{ ...td, fontWeight: 700, background: '#eef3fb', color: colour }}>{gbp(amount)}</td>
+    </tr>
+  )
+}
+
 function WipLine({ rows, amount, month }) {
   return (
     <tr style={{ borderBottom: '1px solid #f2f0ec', background: '#fffdf5' }}>

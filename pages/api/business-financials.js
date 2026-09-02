@@ -165,6 +165,18 @@ export default async function handler(req, res) {
       // null means "automatic" - included only when the last actual month is the year
       // end. true / false is an explicit override. Stored as one value rather than a
       // per-month map: there is only ever one WIP that matters, the last actual month's.
+      // Year-end WIP accrual: on/off, and an optional typed total. On a figure this soft
+      // the judgement at the time beats the arithmetic, so it can be overtyped.
+      if (req.body && req.body.action === 'save-ye-wip') {
+        const en = req.body.yeWipEnabled
+        const ov = req.body.yeWipOverride
+        await redis.set('config:pl-ye-wip', {
+          enabled: en === false ? false : true,
+          override: (ov === null || ov === undefined || ov === '') ? null : (Number(ov) || 0),
+        })
+        return res.json({ ok: true })
+      }
+
       if (req.body && req.body.action === 'save-wip-include') {
         const v = req.body.wipInclude
         if (v === null || v === undefined || v === 'auto') await redis.del('config:pl-wip-include')
@@ -238,6 +250,7 @@ export default async function handler(req, res) {
     // Manual month figures for the Forecast P&L / Forecast Balance Sheet.
     const plManualMonths = await redis.get('config:pl-manual-months').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
     const plWipInclude = await redis.get('config:pl-wip-include').then(v => (v === true || v === false) ? v : null).catch(() => null)
+    const plYeWip = await redis.get('config:pl-ye-wip').then(v => (v && typeof v === 'object') ? v : { enabled: true, override: null }).catch(() => ({ enabled: true, override: null }))
     // SIGNED-OFF WIP PER MONTH, from the locks written when WIP is completed in
     // Commercial. Scanned rather than guessed at, because the months that have been
     // signed off are not predictable - and a missing one has to be visible on the page
@@ -335,6 +348,7 @@ export default async function handler(req, res) {
       plManualMonths: plManualMonths || {},
       plWipInclude,
       wipLocks,
+      plYeWip,
     })
   }
 

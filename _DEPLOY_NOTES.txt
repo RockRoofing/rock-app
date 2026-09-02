@@ -1,81 +1,75 @@
-pkg725 - Per-card clearance on the 12-month, card balances on hover
-====================================================================
+pkg726 - Year-end WIP accrual on the Forecast P&L
+==================================================
 
-SUPERSEDES pkg724. This package CONTAINS every pkg724 file unchanged, so it is
-safe to deploy on its own whether or not pkg724 went out. If you already did
-pkg724, two of these five are identical and GitHub will show no change.
+SUPERSEDES pkg724 and pkg725. Contains every file from both, so it is safe to
+deploy on its own regardless of what went before.
 
 REPLACE (no new files):
-  lib/forecastMonths.js                                (same as pkg724)
-  pages/business-financials/forecast-pl.js             (same as pkg724)
-  pages/business-financials/forecast-balance-sheet.js  (pkg724 + this)
-  pages/api/business-financials.js                     (pkg724 + this)
-  pages/business-financials/monthly.js                 (new in this package)
+  lib/forecastMonths.js
+  pages/business-financials/forecast-pl.js
+  pages/business-financials/forecast-balance-sheet.js   (unchanged from pkg725)
+  pages/business-financials/monthly.js                  (unchanged from pkg725)
+  pages/api/business-financials.js
 
-WHAT WAS WRONG
---------------
-Cards were parked everywhere. On the Forecast BS the balance is set from the
-opening position and only ever reassigned on ACTUAL months, so the row was flat
-across every forecast month - never paid, never grown. On both cash flows cards
-are filtered out of opening cash entirely and appear only as headroom in the
-dashed availability line. So no card payment ever left the bank in any forecast.
+YOUR SCENARIO, AS THE CODE COMPUTES IT
+--------------------------------------
+Valuation 25 Nov. Next period 26 Nov - 23 Dec.
+Materials 20,000 delivered 26 Nov. Labour 32,000 over the period.
 
-12-MONTH CASH FLOW - per-card clearance
----------------------------------------
-New "Credit card clearance" panel below the table. Each card shows what it owes
-today, what you have scheduled, and what is still owing at the end of the
-window. Add as many payments per card as you like, each with a month and an
-amount.
+  materials in window          20,000  (exact, on delivery date)
+  labour, working days 3/20     4,800  (26-30 Nov is 3 working days)
+  accrued cost                 24,800
+  already in November          20,000  (the materials - dated, so already there)
+  cost ADDED to November        4,800  (labour only)
+  revenue recognised           31,000  (24,800 / 0.80 at 20% margin)
+  effect on net profit         26,200
 
-  - New "Cards" column in the table and in the totals row
-  - Payments are capped at what is left on that card, so a balance cannot go
-    through zero and invent cash
-  - Cards come from your manual balances of kind "card" where they exist,
-    otherwise from Xero's card accounts - the same precedence as everything
-    else on the page
+Two rows at the foot of the table, under the WIP deduction, plus a "Net profit
+after adjustments" line.
 
-ONLY THE OPENING BALANCE IS SCHEDULED, and this matters. Your ongoing card
-spend is already in the forecast, inside Overheads and Bills. If a payment were
-modelled as a general monthly outflow, that same cost would leave the bank
-twice. What is cleared here is what is already owed. Same reasoning as the
-Bibby drawn balance.
+WHY ONLY THE LABOUR IS ADDED AS COST
+-------------------------------------
+Materials sit on their DELIVERY date, so a delivery on the 26th is already in
+November's cost with no revenue against it. Labour sits at the END of its
+instalment window, which for a period running to 23 December is December - so
+the days worked in November are not in November at all.
 
-HOVER
------
-The month tooltip on "Projected cash balance" now gives closing cash, money in,
-money out, then each card's balance owed at that month end, a total where there
-is more than one card, and what was paid that month.
+The accrual is netted against whatever the model already placed. Adding the
+accrued cost gross would count the materials twice; adding none of it would
+leave the labour out. The drill-down shows accrued / already in November / cost
+added per project, so the netting is visible rather than buried.
 
-FORECAST BALANCE SHEET - diagnosis only, no payments wired in
---------------------------------------------------------------
-As you asked, payments do not touch the balance sheet yet.
+THE MARGIN IS COMPUTED TWICE, ON PURPOSE
+-----------------------------------------
+Those orphaned materials sitting in November with no revenue DEPRESS the blended
+margin - the exact thing the accrual exists to fix. Left alone, the bigger the
+year-end WIP the smaller the correction. So a first pass at zero margin
+identifies the orphaned cost, the margin is worked out on the rest, and the
+accrual then runs for real. In testing this was the difference between 0% and
+20%.
 
-You said the Credit cards row is all zeros while the sheet still matches Xero.
-I have NOT guessed at why. Every Xero account is now classified by the same
-tests the roll-forward uses, and shown:
+Revenue is grossed up TO the margin, not marked up BY it: cost / (1 - m).
+At 20% on 24,800 that is 31,000, not 29,760.
 
-  - a red banner naming any account that looks like a card but is being counted
-    somewhere else, and where it is going instead
-  - "How Xero's accounts are being classified" - expandable, every account with
-    its section, opening balance, the bucket it fell into, and whether it has
-    monthly values
+CONTROLS
+--------
+Panel above the table: include tick, and a box to type your own total which
+overrides the calculation entirely. Per-project working shown underneath.
 
-The likely cause is the name pattern: it matches "credit card", "visa",
-"mastercard", "amex", "american express", "capital on tap". An account called
-"Barclaycard" or "Company Card" matches none of them and falls into Financing,
-which is the catch-all that balances the sheet - which is exactly why net
-assets still tie while the row reads nil.
-
-Open that panel and send me what it says. I will widen the rule to the real
-names rather than adding more guesses to the pattern.
-
-Note: paying a card does NOT change net assets - bank down, liability down. So
-nothing about this should move the balance sheet bottom line when it is wired
-in later.
+GUARDS
+------
+  - Only fires when November is still a FORECAST month. Once it is switched to
+    Actual, Xero's own WIP journal is in the income figure and the existing
+    include-at-year-end rule takes over. The two can never both apply.
+  - Superseded periods excluded, same test as everywhere else.
+  - If no period straddles 30 November the row says so rather than showing a
+    bare zero - that would mean the forecasts have run out before the year end,
+    which is a pipeline problem, not a fault here.
+  - Balance sheet untouched by this.
 
 WHAT TO CHECK
 -------------
-  - 12-month: cards listed with the right balances. Schedule one and the Cards
-    column, Net, Closing cash and the tooltip all move by that amount.
-  - A payment larger than the balance is capped, not overpaid.
-  - Forecast BS: open the classification panel and send me the card rows.
+  - The per-project table: does the working-day split look right for your jobs?
+  - "Already in Nov" should equal the materials for most projects. Where it
+    equals the full accrued cost, that project's labour is already dated in
+    November and no top-up is needed - correct, not a miss.
