@@ -1,55 +1,54 @@
-pkg707 - 263,150 of cost was being DROPPED, not netted
-=======================================================
+pkg708 - The overheads: HIDDEN ROWS. And the Nov sales gap.
+============================================================
 
-*** SUPERSEDES pkg591 - pkg706. ***
+*** SUPERSEDES pkg591 - pkg707. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/monthly.js
-  pages/business-financials/cashflow.js
-  pages/business-financials/forecast-balance-sheet.js
+  pages/api/business-financials.js
+  pages/project-cashflow.js
   ... and the rest of the set as before
 
 
-YOU WERE RIGHT, AND YOUR OWN TOTALS PROVE IT
-----------------------------------------------
-    cost in your forecasts               920,154
-    cost reaching the 12-month           358,092
-    difference, supposedly netted        562,062
-    total bills available to net against 298,912
+1. THE OVERHEADS - AND WHY IT TOOK FOUR ATTEMPTS
+--------------------------------------------------
+You asked several times and I fixed the wrong thing three times: the call site,
+then the actual-months list, then the account seeding. All were real, none was
+this.
 
-YOU CANNOT NET 562,062 AGAINST 298,912. 263,150 of cost was not netted - it was
-DROPPED. That is why materials read "none" for eight of the twelve months while
-your forecasts are full of them, and it is why the balance climbs and never comes
-back down when the materials get paid.
+    config:overhead-hidden-rows
 
+The BUDGETS page totals visibleAccounts ONLY - your screenshot says "28 accounts
+hidden", and its TOTAL row excludes them. The cash flow summed every overhead
+code including all 28.
 
-THE LINE
---------
-    const past = (x) => bound && x.date && x.date <= bound
-    ...filter(x => inMonth(x.date, mk) && !past(x))
+Two pages counting different sets of accounts can never agree, and that is exactly
+the signature: a FIXED gap within each pair of months - 11,408 in Aug and Sept,
+951 in Oct and Nov - because the hidden SET is fixed while the forecast method
+changes between the pairs.
 
-Any cost dated on or before the valuation date was excluded outright, on the
-assumption a supplier had already billed it. THAT IS ONLY TRUE WHERE A BILL
-EXISTS - and the netting immediately below already handles exactly that case. So
-the cost came out twice: once by exclusion, once by netting.
-
-Removed from both the 12-month and the 13-week. Anything a supplier has invoiced
-still nets; anything they have not now stands as forecast cost, which is what it
-is.
-
-    12-month closing at Aug 27   718,408  ->  about 455,258
-
-And the SHAPE changes, which is what you have been describing all along - Sept 26
-and Feb-Aug 27 get their materials back instead of showing "none" against live
-sales.
+I should have diffed the two call sites' inputs the first time you raised it
+rather than guessing at candidates. That is what found it in the end, in about ten
+minutes.
 
 
-ALSO IN THIS PACKAGE (pkg706)
------------------------------
-The Forecast Balance Sheet never read a single expected date - it lagged all
-revenue by a flat 45 days, so it held 1,021,667 of debtors at November while the
-cash flow had banked 451,383 of them in September on your dates. It now collects
-the existing ledger when you say it will.
+2. NOVEMBER SALES: 155k vs 194k
+--------------------------------
+    const salesValue = (net, ret) => { const d = 1 - num(ret) / 100; ... }
+
+retentionPct is a PERCENTAGE on some forecasts and a FRACTION on others. Divide
+0.05 by 100 and you get 0.0005 - so a 5% retention grossed up by nothing at all,
+and the row read below the P&L on every project stored that way.
+
+    retentionPct 5     divisor 0.9500   correct before and after
+    retentionPct 0.05  divisor 0.9995 -> 0.9500
+
+The same dual-format trap the P&L already handles. The band row is labelled "inc.
+Retention - matches P&L sales" and now actually does.
+
+CAVEAT: this closes most of the 39k, not necessarily all. The two pages also date
+differently - the project page uses each line's appDate, the P&L uses the spread
+grid's month - so a period straddling a month end can still differ. If November is
+still out by a few thousand after this, that is why, and it is not worth chasing.

@@ -917,6 +917,15 @@ export default async function handler(req, res) {
     // showing a fortnight of posted invoices instead of its budget.
     const cfActualMonths = await redis.get('config:overhead-actual-months')
       .then(v => Array.isArray(v) ? v : null).catch(() => null)
+    // HIDDEN ROWS - the last difference between the two account lists.
+    //
+    // The Budgets page totals visibleAccounts only, so its TOTAL excludes the 28 hidden
+    // accounts. The cash flow summed every overhead code. Two pages counting different
+    // sets of accounts can never agree, and that is the fixed monthly gap - 11,408 in Aug
+    // and Sept, 951 in Oct and Nov, constant within each pair because the SET is constant.
+    const cfHidden = await redis.get('config:overhead-hidden-rows')
+      .then(v => Array.isArray(v) ? v.map(String) : []).catch(() => ([]))
+    for (const code of cfHidden) ohCodes.delete(String(code))
     const { predicted: predictedByCodeMonth } = computePredictedByCodeMonth(
       [...ohCodes], ohActualsByCode, availMonths, ohBudgets, ohForecastMethods, ohForecastOverrides,
       cfActualMonths

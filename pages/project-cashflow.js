@@ -252,7 +252,13 @@ export default function ProjectCashflow() {
     // BEFORE retention, so only the retention is added back - the MCD stays deducted,
     // which is what makes this match the sales line in the P&L.
     const salesValue = (net, ret) => {
-      const d = 1 - num(ret) / 100
+      // retentionPct is a PERCENTAGE on some forecasts and a FRACTION on others - the same
+      // dual format the P&L already handles. Dividing 0.05 by 100 gives 0.0005, so a 5%
+      // retention grossed up by almost nothing and this row read below the P&L on every
+      // project stored the fraction way.
+      const rp = num(ret)
+      const r = rp > 0 && rp < 1 ? rp : rp / 100
+      const d = 1 - r
       return d > 0 ? net / d : net
     }
     const monthEnd = (mk) => { const [y, m] = String(mk).split('-').map(Number); return y && m ? isoOf(new Date(y, m, 0)) : '' }
