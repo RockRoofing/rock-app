@@ -157,6 +157,30 @@ export default async function handler(req, res) {
   // Stores per-code/per-month budgets and a per-code forecast method.
   if (view === 'budgets-overheads') {
     if (req.method === 'POST') {
+      // MANUAL MONTH FIGURES for the Forecast P&L and Forecast Balance Sheet. Stored
+      // here rather than on either page's own view because both read this payload, so
+      // one save reaches both. Overheads are deliberately NOT overridable - the
+      // Budgets grid already has them right.
+      if (req.body && req.body.action === 'save-pl-manual') {
+        const src = (req.body.plManualMonths && typeof req.body.plManualMonths === 'object') ? req.body.plManualMonths : {}
+        const clean = {}
+        for (const mo of Object.keys(src)) {
+          if (!/^\d{4}-\d{2}$/.test(mo)) continue
+          const e = src[mo] || {}
+          const row = {}
+          for (const k of ['revenue', 'cos', 'materials', 'labour']) {
+            const v = e[k]
+            // An explicit 0 is a real figure and must survive. `v || null` would drop
+            // it, which is the same trap as the 0% margin override.
+            if (v === null || v === undefined || v === '') continue
+            const n = Number(v)
+            if (!isNaN(n)) row[k] = n
+          }
+          if (Object.keys(row).length) clean[mo] = row
+        }
+        await redis.set('config:pl-manual-months', clean)
+        return res.json({ ok: true, plManualMonths: clean })
+      }
       const { budgets, forecastMethods, forecastOverrides, hiddenRows, lockForecast } = req.body || {}
       if (budgets !== undefined) await redis.set('config:overhead-budgets', budgets || {})
       if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
@@ -200,6 +224,8 @@ export default async function handler(req, res) {
     ])
     const actualMonthsStored = await redis.get('config:overhead-actual-months').then(v => Array.isArray(v) ? v : null).catch(() => null)
     const cellComments = await redis.get('config:overhead-cell-comments').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
+    // Manual month figures for the Forecast P&L / Forecast Balance Sheet.
+    const plManualMonths = await redis.get('config:pl-manual-months').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
     const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
     const cashCommitments = await redis.get('config:cash-commitments').then(v => v || []).catch(() => ([]))
     const chartNames = {}
@@ -271,6 +297,11 @@ export default async function handler(req, res) {
       card3moCodes,
       cashflowSchedule,
       cashCommitments,
+      // Read by BOTH the Forecast P&L and the Forecast Balance Sheet, via
+      // lib/forecastMonths.js. Returned here because both pages already fetch this
+      // view, so neither needs an extra round trip and neither can go stale
+      // relative to the other.
+      plManualMonths: plManualMonths || {},
     })
   }
 

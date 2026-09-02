@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BizNav, INK, GOLD, gbp } from '../../components/BizNav'
+import { buildForecastMonths } from '../../lib/forecastMonths'
 
 function fyMonths(endYear) {
   const out = [`${endYear - 1}-12`]
@@ -130,44 +131,18 @@ export default function ForecastBalanceSheet() {
     const openOther = accounts.reduce((t, x) => t + (x.balance || 0), 0) - openBank - openCards - openDebtors - openCreditors
     const openEquityish = openBank + openCards + openDebtors + openCreditors + openOther
 
-    // ---- P&L, the same composition the Forecast P&L tab uses --------------------------
-    const byMonth = {}
-    for (const m of (mg.months || [])) byMonth[m.month] = m
-    // Same as the P&L: an invoice raised in a forecast month IS revenue that month.
-    // Without this the balance sheet builds debtors from forecasts alone and diverges from
-    // the P&L, which is exactly what "Out by" exists to catch.
-    const invByMonth = {}
-    for (const i of (cf.receivables || [])) {
-      const d = i.date || i.dueDate || ''
-      if (!d) continue
-      const k = String(d).slice(0, 7)
-      invByMonth[k] = (invByMonth[k] || 0) + (i.total || i.amountDue || 0)
-    }
-    const fRev = {}, fCos = {}
-    for (const fc of (cf.projForecasts || [])) {
-      const acc = fc.accrual
-      if (!acc) continue
-      // Same as the P&L: a period already overtaken by a real application is in Xero's
-      // figures, so counting the forecast too puts the same work in twice.
-      if (fc.latestAppEnd && fc.to && fc.to <= fc.latestAppEnd) continue
-      for (const r of (acc.revenueByMonth || [])) if (r.month && r.amount) fRev[r.month] = (fRev[r.month] || 0) + r.amount
-      // Same as the P&L: cost is held against the period it belongs to, capped at the
-      // valuation date, and an undated line falls to the period end rather than vanishing.
-      // Without this the balance sheet builds reserves from a margin the P&L no longer
-      // shows, and "Out by" would catch it as a difference with no obvious cause.
-      const cbound = (fc.valDate || fc.to || '').slice(0, 7)
-      const putC = (x) => {
-        const own = x.date ? String(x.date).slice(0, 7) : cbound
-        const k = (cbound && own > cbound) ? cbound : own
-        if (k && x.amount) fCos[k] = (fCos[k] || 0) + x.amount
-      }
-      for (const x of (acc.materials || [])) putC(x)
-      for (const x of (acc.labour || [])) putC(x)
-    }
-    const fOh = {}
-    for (const byM of Object.values(oh.predictedByCodeMonth || {})) {
-      for (const [mo, v] of Object.entries(byM || {})) fOh[mo] = (fOh[mo] || 0) + (Number(v) || 0)
-    }
+    // ---- P&L, from the SHARED month model ---------------------------------------------
+    //
+    // This file used to rebuild revenue and cost of sale from cf.projForecasts with the
+    // supersede test, the valuation-date cap and the undated-line rule written out again.
+    // The Forecast P&L had its own copy and Forecast Margin a third, and they drifted
+    // every time one was fixed and the others were not. One implementation now, in
+    // lib/forecastMonths.js - which is also how a manual month typed on the P&L reaches
+    // this page without being stored twice.
+    const pl = buildForecastMonths({ oh, mg, cf, manual: (oh && oh.plManualMonths) || {}, fyEnd })
+    if (!pl) return null
+    const plByMonth = {}
+    for (const r of pl.rows) plByMonth[r.mo] = r
 
     // ---- FINANCING, from the tracked balance sheet items ------------------------------
     const finByMonth = {}
@@ -219,12 +194,10 @@ export default function ForecastBalanceSheet() {
     // Revenue and cost by month, kept so receipts and payments can lag them.
     const revOf = [], cosOf = [], ohOf = []
     for (const mo of months) {
-      const isActual = actualSet.has(mo)
-      const m = byMonth[mo] || {}
-      // Reverted with the P&L - same reason. Revenue without its cost is not revenue.
-      revOf.push(isActual ? (m.income || 0) : (fRev[mo] || 0))
-      cosOf.push(isActual ? (m.cos || 0) : (fCos[mo] || 0))
-      ohOf.push(isActual ? (m.overheads || 0) : (fOh[mo] || 0))
+      const r = plByMonth[mo] || { revenue: 0, cos: 0, overheads: 0 }
+      revOf.push(r.revenue || 0)
+      cosOf.push(r.cos || 0)
+      ohOf.push(r.overheads || 0)
     }
     // A lag in months, rounded - 45 days is one and a half months, so half of a month's
     // billing is collected in the following month and half the one after.
@@ -236,7 +209,12 @@ export default function ForecastBalanceSheet() {
     }
 
     months.forEach((mo, i) => {
-      const isActual = actualSet.has(mo)
+      // A MANUAL month is NOT an actual month here. Re-basing onto Xero is the whole
+      // point of an actual month, and the reason a month was typed by hand is that
+      // Xero's figures for it are not usable yet - so re-basing would throw away the
+      // figures and put back the ones being overridden.
+      const isActual = !!(plByMonth[mo] && plByMonth[mo].isActual)
+      const isManual = !!(plByMonth[mo] && plByMonth[mo].isManual)
       const revenue = revOf[i], cos = cosOf[i], overheads = ohOf[i]
       const net = revenue - cos - overheads
 
@@ -309,7 +287,7 @@ export default function ForecastBalanceSheet() {
         financing = xeroNet - (bank + debtors + retention + cards + creditors)
       }
       rows.push({
-        mo, isActual, fromXero: useXero, revenue, cos, overheads, net,
+        mo, isActual, isManual, fromXero: useXero, revenue, cos, overheads, net,
         bank, debtors, retention, cards, creditors, financing,
         assets, liabs, netAssets: useXero ? xeroNet : (assets + liabs), reserves,
         // The whole point of the third statement. If this is not ~0 the model does not
