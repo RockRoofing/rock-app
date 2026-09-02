@@ -461,6 +461,28 @@ export default function MonthlyCashFlow() {
                   </div>
                 )
               })()}
+{(() => {
+                // OVERHEADS AGAINST BUDGETS, over the year rather than per month.
+                //
+                // A cash flow month can legitimately differ from a budget month - a code
+                // scheduled to pay on the 5th of the following month belongs in that month
+                // here and this one there. But the TWELVE-MONTH TOTALS must agree, because
+                // the same money leaves the bank either way. When they do not, a code is
+                // not being paid at all.
+                const cfOh = forecast.reduce((a, r) => a + (r.overheads || 0), 0)
+                // `data.predictedByCodeMonth` - there is no `oh` on this page. Compiles
+                // clean, throws on render.
+                const budOh = Object.values(data.predictedByCodeMonth || {})
+                  .reduce((t, byM) => t + Object.values(byM || {}).reduce((x, v) => x + (Number(v) || 0), 0), 0)
+                if (!(budOh > 0) || Math.abs(cfOh - budOh) < budOh * 0.02) return null
+                return (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#b91c1c' }}>
+                    <strong>Overheads here total {gbp(cfOh)} against {gbp(budOh)} on Budgets - {gbp(Math.abs(budOh - cfOh))} {cfOh < budOh ? 'short' : 'over'}.</strong>{' '}
+                    Individual months can differ, because a cost scheduled to pay in the following month belongs there here and here there.
+                    The YEAR cannot: the same money leaves the bank either way. A gap this size means a code is not being paid at all.
+                  </div>
+                )
+              })()}
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #eee' }}>
