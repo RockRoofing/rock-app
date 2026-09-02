@@ -71,6 +71,39 @@ function DrillTable({ which, row }) {
   )
 }
 
+// Module scope. Everything it draws comes off the chart datum, so it cannot reach into
+// page state by accident - which is the failure this file has hit repeatedly.
+function MonthTip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null
+  const p = payload[0] && payload[0].payload
+  if (!p) return null
+  const bals = p.cardBalances || {}
+  const names = Object.keys(bals).sort()
+  const owed = names.reduce((t, n) => t + (bals[n] || 0), 0)
+  const line = (k, v, colour, bold) => (
+    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, fontSize: 12, marginTop: 2 }}>
+      <span style={{ color: '#6b6b68' }}>{k}</span>
+      <span style={{ color: colour || INK, fontWeight: bold ? 700 : 500 }}>{v}</span>
+    </div>
+  )
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 8, padding: '9px 12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 250 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 4 }}>{label}</div>
+      {line('Closing cash', gbp(p.closing || 0), (p.closing || 0) < 0 ? '#dc2626' : INK, true)}
+      {line('Money in', gbp(p.moneyIn || 0), '#0f766e')}
+      {line('Money out', gbp(p.moneyOut || 0), '#dc2626')}
+      {names.length ? (
+        <div style={{ borderTop: '1px solid #f0eee9', marginTop: 6, paddingTop: 5 }}>
+          <div style={{ fontSize: 10.5, color: '#9a958c', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>Card balances owed</div>
+          {names.map(n => line(n, gbp(-(bals[n] || 0)), (bals[n] || 0) > 0 ? '#dc2626' : '#16a34a'))}
+          {names.length > 1 ? line('Total owed', gbp(-owed), '#dc2626', true) : null}
+          {p.cardOut ? line('paid this month', gbp(-(p.cardOut || 0)), '#b45309') : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function MonthlyCashFlow() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
@@ -80,6 +113,8 @@ export default function MonthlyCashFlow() {
   const [lumps, setLumps] = useState([])
   const [savingLumps, setSavingLumps] = useState(false)
   const [open, setOpen] = useState(null)   // 'YYYY-MM:inv' | ':bill' | ':proj'
+  const [cardPays, setCardPays] = useState([])
+  const [savingCards, setSavingCards] = useState(false)
 
   useEffect(() => { (async () => {
     try {
@@ -89,6 +124,7 @@ export default function MonthlyCashFlow() {
       const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
       setData(d)
       setLumps(Array.isArray(d.cashflowLumps) ? d.cashflowLumps : [])
+      setCardPays(Array.isArray(d.cardPayments) ? d.cardPayments : [])
     } catch {}
     setLoading(false)
   })() }, [])
@@ -101,6 +137,47 @@ export default function MonthlyCashFlow() {
     for (let i = 0; i < MONTHS; i++) { out.push(`${y}-${pad(m + 1)}`); m++; if (m > 11) { m = 0; y++ } }
     return out
   }, [])
+
+  // CARD BALANCES AND THEIR CLEARANCE SCHEDULE.
+  //
+  // Cards are deliberately OUT of opening cash (kind !== 'card'), so the bank line has
+  // never carried them - they were a liability nothing ever paid, flat forever.
+  //
+  // Only the OPENING balance is scheduled. Ongoing card spend is already in overheads and
+  // in the bills, so treating a payment as a general outflow would take the same cost out
+  // of the bank twice. What is modelled here is clearing what is already owed.
+  //
+  // Manual balances win over Xero's, the same precedence the rest of the page uses.
+  const cardModel = useMemo(() => {
+    if (!data) return { cards: [], byMonth: {}, payByMonth: {} }
+    const manual = (data.manualBalances || []).filter(b => b && b.kind === 'card' && String(b.name || '').trim())
+    const src = manual.length
+      ? manual.map(b => ({ name: String(b.name).trim(), opening: Math.abs(Number(b.balance) || 0) }))
+      : (data?.balances?.accounts || []).filter(a2 => a2.isCard)
+          .map(a2 => ({ name: String(a2.name || 'Card').trim(), opening: Math.abs(Number(a2.balance) || 0) }))
+
+    const left = {}
+    for (const c of src) left[c.name] = c.opening
+    const byMonth = {}     // month -> { cardName: balance owed at month end }
+    const payByMonth = {}  // month -> total paid that month
+    for (const mk of months) {
+      let paid = 0
+      for (const p of cardPays) {
+        if (p.month !== mk) continue
+        const name = String(p.card || '')
+        if (left[name] == null) continue
+        // Capped at what is left - you cannot repay more than you owe, and letting the
+        // balance go through zero would create cash out of nothing.
+        const amt = Math.min(Math.abs(Number(p.amount) || 0), left[name])
+        if (amt <= 0) continue
+        left[name] -= amt
+        paid += amt
+      }
+      payByMonth[mk] = paid
+      byMonth[mk] = { ...left }
+    }
+    return { cards: src, byMonth, payByMonth }
+  }, [data, months, cardPays])
 
   const forecast = useMemo(() => {
     if (!data) return []
@@ -326,8 +403,9 @@ export default function MonthlyCashFlow() {
         if (l.dir === 'out') lumpOut += amt; else lumpIn += amt
       }
 
+      const cardOut = cardModel.payByMonth[mk] || 0
       const moneyIn = invoicesIn + retIn + vatIn + fcSalesIn + lumpIn
-      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + cisOnFc + fcCostOut + lumpOut
+      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + cisOnFc + fcCostOut + lumpOut + cardOut
       const net = moneyIn - moneyOut
       running += net
       rows.push({
@@ -338,12 +416,24 @@ export default function MonthlyCashFlow() {
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut),
         projMatOut: Math.round(fcMatOut), projLabOut: Math.round(fcLabNet),
         lumpIn: Math.round(lumpIn), lumpOut: Math.round(lumpOut),
+        cardOut: Math.round(cardOut), cardBalances: cardModel.byMonth[mk] || {},
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
     }
     return rows
-  }, [data, startCash, months, lumps])
+  }, [data, startCash, months, lumps, cardModel])
+
+  async function saveCardPays(next) {
+    setCardPays(next); setSavingCards(true)
+    try {
+      await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'cashflow', action: 'save-card-payments', cardPayments: next }),
+      })
+    } catch {}
+    setSavingCards(false)
+  }
 
   async function saveLumps(next) {
     setLumps(next); setSavingLumps(true)
@@ -358,7 +448,7 @@ export default function MonthlyCashFlow() {
   if (!ok) return null
 
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
-  const chartData = forecast.map(r => ({ mk: r.label, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut }))
+  const chartData = forecast.map(r => ({ mk: r.label, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, cardBalances: r.cardBalances, cardOut: r.cardOut }))
   const inpS = { padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }
 
   return (
@@ -388,7 +478,7 @@ export default function MonthlyCashFlow() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                     <XAxis dataKey="mk" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => gbpK(v)} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v) => gbp(v)} />
+                    <Tooltip content={<MonthTip />} />
                     <Legend />
                     <ReferenceLine y={0} stroke="#dc2626" />
                     <Bar dataKey="moneyIn" name="Money in" fill="#bbf7d0" />
@@ -523,6 +613,7 @@ export default function MonthlyCashFlow() {
                     <th style={th}>VAT out</th>
                     <th style={th}>CIS to HMRC</th>
                     <th style={th}>Manual out</th>
+                    <th style={th} title="Scheduled clearance of the OPENING card balances. New card spend is already in Overheads and Bills - only what is already owed is paid here.">Cards</th>
                     <th style={th}>Net</th>
                     <th style={th}>Closing cash</th>
                   </tr>
@@ -549,12 +640,13 @@ export default function MonthlyCashFlow() {
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
                       <td style={{ ...td, color: r.lumpOut ? '#dc2626' : '#ccc' }}>{r.lumpOut ? gbp(-r.lumpOut) : '-'}</td>
+                      <td style={{ ...td, color: r.cardOut ? '#dc2626' : '#ccc' }}>{r.cardOut ? gbp(-r.cardOut) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 700, color: r.closing < 0 ? '#dc2626' : INK }}>{gbp(r.closing)}</td>
                     </tr>
                     {open && open.startsWith(r.mk + ':') && (
                       <tr>
-                        <td colSpan={16} style={{ background: '#faf9f7', padding: '10px 14px' }}>
+                        <td colSpan={17} style={{ background: '#faf9f7', padding: '10px 14px' }}>
                           <DrillTable which={open.split(':')[1]} row={r} />
                         </td>
                       </tr>
@@ -581,6 +673,7 @@ export default function MonthlyCashFlow() {
                         <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('vatOut'))}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('cisOut'))}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('lumpOut'))}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{gbp(-sum('cardOut'))}</td>
                         <td style={{ ...td, color: sum('net') < 0 ? '#dc2626' : '#16a34a' }}>{gbp(sum('net'))}</td>
                         <td style={{ ...td }}></td>
                       </tr>
@@ -588,6 +681,65 @@ export default function MonthlyCashFlow() {
                   })()}
                 </tfoot>
               </table>
+            </div>
+
+            {/* CARD CLEARANCE. Only the opening balance is scheduled here - ongoing card
+                spend is already in overheads and in the bills, and paying it again would
+                take the same cost out of the bank twice. */}
+            <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginTop: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Credit card clearance</div>
+                <span style={{ fontSize: 11.5, color: '#8a857c', maxWidth: 620 }}>
+                  Schedule payments against what each card owes today. New spend on the card is already in
+                  overheads and bills, so only the opening balance is cleared here. Cards are not in the
+                  cash line until you schedule a payment.
+                </span>
+                {savingCards ? <span style={{ fontSize: 11.5, color: '#16a34a' }}>saving...</span> : null}
+              </div>
+
+              {cardModel.cards.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#b45309', marginTop: 8 }}>
+                  No card accounts found. Add them as manual balances with kind &quot;card&quot; on the 13-week Facilities panel.
+                </div>
+              ) : (
+                <div style={{ marginTop: 10 }}>
+                  {cardModel.cards.map(c => {
+                    const paid = cardPays.filter(x => x.card === c.name).reduce((t, x) => t + Math.abs(Number(x.amount) || 0), 0)
+                    const endBal = cardModel.byMonth[months[months.length - 1]] || {}
+                    return (
+                      <div key={c.name} style={{ borderTop: '1px solid #f2f0ec', padding: '9px 0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: 13, minWidth: 170 }}>{c.name}</strong>
+                          <span style={{ fontSize: 12.5, color: '#dc2626' }}>owes {gbp(c.opening)}</span>
+                          <span style={{ fontSize: 12, color: '#8a857c' }}>scheduled {gbp(Math.min(paid, c.opening))}</span>
+                          <span style={{ fontSize: 12, color: (endBal[c.name] || 0) > 0 ? '#b45309' : '#16a34a' }}>
+                            still owing at {monthShort(months[months.length - 1])}: {gbp(endBal[c.name] || 0)}
+                          </span>
+                          <button onClick={() => saveCardPays([...cardPays, { card: c.name, month: months[0], amount: 0 }])}
+                            style={{ background: '#fff', border: '1px solid #ddd9d2', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', color: '#57534e' }}>
+                            + payment
+                          </button>
+                        </div>
+                        {cardPays.map((x, i) => x.card !== c.name ? null : (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, marginLeft: 12 }}>
+                            <select value={x.month}
+                              onChange={e => saveCardPays(cardPays.map((y, j) => j === i ? { ...y, month: e.target.value } : y))}
+                              style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12 }}>
+                              {months.map(mk => <option key={mk} value={mk}>{monthShort(mk)}</option>)}
+                            </select>
+                            <input type="number" value={x.amount}
+                              onChange={e => setCardPays(cardPays.map((y, j) => j === i ? { ...y, amount: e.target.value } : y))}
+                              onBlur={() => saveCardPays(cardPays.map(y => ({ ...y, amount: Math.abs(Number(y.amount) || 0) })))}
+                              style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, width: 110, textAlign: 'right' }} />
+                            <button onClick={() => saveCardPays(cardPays.filter((y, j) => j !== i))}
+                              style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 12, cursor: 'pointer' }}>remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Manual lumps */}

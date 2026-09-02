@@ -845,7 +845,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, bsItems, custOffsets, paidRecStore, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, bsItems, custOffsets, paidRecStore, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments, cardPayments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -866,6 +866,7 @@ export default async function handler(req, res) {
       redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),
       redis.get('config:cash-commitments').then(v => v || []).catch(() => ([])),
+      redis.get('config:card-payments').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
     ])
 
     // Invoice-finance availability, matching the Invoice Finance page rules:
@@ -1265,6 +1266,7 @@ export default async function handler(req, res) {
       predictedByCodeMonth,
       overheadNames,
       cashCommitments,
+      cardPayments,
       cashflowSchedule,
       vatFiled,
       vatEstimateMonths: vatEstimate.months || {},
@@ -1448,6 +1450,24 @@ export default async function handler(req, res) {
         }))
       await redis.set('config:manual-balances', clean)
       return res.json({ ok: true, manualBalances: clean })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
+  // PER-CARD CLEARANCE SCHEDULE. Only the OPENING balance is ever scheduled here:
+  // ongoing card spend is already inside overheads and bills, so treating a payment as a
+  // general outflow would take the same cost out of the bank twice.
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-card-payments') {
+    try {
+      const list = Array.isArray((req.body || {}).cardPayments) ? req.body.cardPayments : []
+      const clean = list
+        .filter(x => x && String(x.card || '').trim() && /^\d{4}-\d{2}$/.test(String(x.month || '')))
+        .map(x => ({
+          card: String(x.card).trim().slice(0, 80),
+          month: String(x.month).slice(0, 7),
+          amount: Math.abs(Number(x.amount) || 0),
+        }))
+      await redis.set('config:card-payments', clean)
+      return res.json({ ok: true, cardPayments: clean })
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 

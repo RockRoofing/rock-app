@@ -1,71 +1,81 @@
-pkg724 - WIP adjustment on the Forecast P&L and Forecast Balance Sheet
-=======================================================================
+pkg725 - Per-card clearance on the 12-month, card balances on hover
+====================================================================
+
+SUPERSEDES pkg724. This package CONTAINS every pkg724 file unchanged, so it is
+safe to deploy on its own whether or not pkg724 went out. If you already did
+pkg724, two of these five are identical and GitHub will show no change.
 
 REPLACE (no new files):
-  lib/forecastMonths.js
-  pages/business-financials/forecast-pl.js
-  pages/business-financials/forecast-balance-sheet.js
-  pages/api/business-financials.js
+  lib/forecastMonths.js                                (same as pkg724)
+  pages/business-financials/forecast-pl.js             (same as pkg724)
+  pages/business-financials/forecast-balance-sheet.js  (pkg724 + this)
+  pages/api/business-financials.js                     (pkg724 + this)
+  pages/business-financials/monthly.js                 (new in this package)
 
-Built on the exact pkg722 files - verified against the pkg722 zip before
-starting, not against my working copy.
+WHAT WAS WRONG
+--------------
+Cards were parked everywhere. On the Forecast BS the balance is set from the
+opening position and only ever reassigned on ACTUAL months, so the row was flat
+across every forecast month - never paid, never grown. On both cash flows cards
+are filtered out of opening cash entirely and appear only as headroom in the
+dashed availability line. So no card payment ever left the bank in any forecast.
 
-WHERE THE FIGURE COMES FROM
----------------------------
-wip:lock:<YYYY-MM>, written when WIP is signed off in Commercial. The lock for
-the LAST ACTUAL month is used.
+12-MONTH CASH FLOW - per-card clearance
+---------------------------------------
+New "Credit card clearance" panel below the table. Each card shows what it owes
+today, what you have scheduled, and what is still owing at the end of the
+window. Add as many payments per card as you like, each with a month and an
+amount.
 
-If that month has never been signed off, the most recent earlier lock is used
-INSTEAD and the page says so in amber, naming both months. It does not quietly
-substitute. Sign off the right month in Commercial and the banner clears.
+  - New "Cards" column in the table and in the totals row
+  - Payments are capped at what is left on that card, so a balance cannot go
+    through zero and invent cash
+  - Cards come from your manual balances of kind "card" where they exist,
+    otherwise from Xero's card accounts - the same precedence as everything
+    else on the page
 
-FORECAST P&L
-------------
-New "Work in progress" panel above the table:
-  - the month, the signed-off figure, and a tick "include in the FY total"
-  - excluded by default; automatically INCLUDED when the last actual month is
-    the year end (November), where the journal is genuine FY revenue
-  - the tick is an explicit override; "back to automatic" returns it to
-    following the year end as it moves
+ONLY THE OPENING BALANCE IS SCHEDULED, and this matters. Your ongoing card
+spend is already in the forecast, inside Overheads and Bills. If a payment were
+modelled as a general monthly outflow, that same cost would leave the bank
+twice. What is cleared here is what is already owed. Same reasoning as the
+Bibby drawn balance.
 
-In the table:
-  - EVERY MONTHLY COLUMN IS UNCHANGED. Each month still reads exactly what
-    Xero reports. Nothing has been taken off a month.
-  - one new row, "less WIP in <month>", carrying the deduction in the FY
-    column only, with dashes across the months
-  - a "Net profit after WIP" row underneath
-  - the five summary boxes use the adjusted figures
+HOVER
+-----
+The month tooltip on "Projected cash balance" now gives closing cash, money in,
+money out, then each card's balance owed at that month end, a total where there
+is more than one card, and what was paid that month.
 
-CONSEQUENCE, STATED ON THE PAGE: the FY total no longer equals the sum of the
-monthly columns, and the gap is exactly the WIP figure. That is deliberate.
-The panel says so rather than leaving it looking like an arithmetic fault.
+FORECAST BALANCE SHEET - diagnosis only, no payments wired in
+--------------------------------------------------------------
+As you asked, payments do not touch the balance sheet yet.
 
-Revenue only. The journal is Dr WIP, Cr Sales - there is no cost side.
+You said the Credit cards row is all zeros while the sheet still matches Xero.
+I have NOT guessed at why. Every Xero account is now classified by the same
+tests the roll-forward uses, and shown:
 
-FORECAST BALANCE SHEET
-----------------------
-Actual months are left EXACTLY as Xero has them - the asset really was on the
-balance sheet on those dates, and re-basing onto Xero is what a closed month is
-for.
+  - a red banner naming any account that looks like a card but is being counted
+    somewhere else, and where it is going instead
+  - "How Xero's accounts are being classified" - expandable, every account with
+    its section, opening balance, the bucket it fell into, and whether it has
+    monthly values
 
-The deduction lands on the FORECAST months only, applied once at the first one
-after the last actual month and carried by the running balances from there. The
-column heading for that month shows "WIP OUT".
+The likely cause is the name pattern: it matches "credit card", "visa",
+"mastercard", "amex", "american express", "capital on tap". An account called
+"Barclaycard" or "Company Card" matches none of them and falls into Financing,
+which is the catch-all that balances the sheet - which is exactly why net
+assets still tie while the row reads nil.
 
-Taken off reserves AND off the financing catch-all together, so both sides of
-the sheet move by the same amount and "Out by" still ties. Bank is untouched -
-WIP is not cash.
+Open that panel and send me what it says. I will widen the rule to the real
+names rather than adding more guesses to the pattern.
 
-Driven by the same tick on the Forecast P&L. One setting, both pages.
-
-Month headings on the BS now also show MANUAL in blue, matching the P&L.
+Note: paying a card does NOT change net assets - bank down, liability down. So
+nothing about this should move the balance sheet bottom line when it is wired
+in later.
 
 WHAT TO CHECK
 -------------
-  - Forecast P&L: WIP panel shows the right month and figure. Untick / retick
-    and the FY total moves by exactly that amount while the columns do not.
-  - The amber "no signed-off WIP for <month>" warning is ABSENT. If it shows,
-    sign that month off in Commercial.
-  - Forecast BS: "Out by" still near zero on every month, including the one
-    marked WIP OUT.
-  - Net assets step down by the WIP amount at the first forecast month.
+  - 12-month: cards listed with the right balances. Schedule one and the Cards
+    column, Net, Closing cash and the tooltip all move by that amount.
+  - A payment larger than the balance is capped, not overpaid.
+  - Forecast BS: open the classification panel and send me the card rows.

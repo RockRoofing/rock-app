@@ -314,7 +314,32 @@ export default function ForecastBalanceSheet() {
         check: useXero ? 0 : (assets + liabs) - reserves,
       })
     })
-    return { fyEnd, months, rows, wip: pl.wip, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasMonthly, hasOpening: accounts.length > 0 }
+    // WHY A ROW IS EMPTY. Cards read nil on this page while Xero's own balance sheet
+    // shows them, which means the matching rules below are not catching the account
+    // names in use. Rather than guess at the names, every account is classified here by
+    // the SAME tests the roll-forward uses, and shown on the page.
+    //
+    // Note the two card rules already differ: the opening figure matches the name
+    // anywhere, the monthly one also requires the section to be "cash at bank" or
+    // "creditors". Two rules for one thing is how this drifts.
+    const isCardName = (n) => /credit card|visa|mastercard|amex|american express|capital on tap/.test(n)
+    const classify = accounts.map(x => {
+      const sec = String(x.section || '').toLowerCase()
+      const nm = String(x.name || '').toLowerCase()
+      let bucket = 'Financing (catch-all)'
+      if (sec.includes('cash at bank') && !isCardName(nm)) bucket = 'Bank'
+      else if ((sec.includes('cash at bank') || sec.includes('creditor')) && isCardName(nm)) bucket = 'Credit cards'
+      else if (nm.includes('retention') && sec.includes('asset')) bucket = 'Retention held'
+      else if (sec.includes('asset') && (nm.includes('receivable') || nm.includes('debtor')) && !nm.includes('retention')) bucket = 'Debtors'
+      else if (sec.includes('creditor') && !isCardName(nm)) bucket = 'Creditors'
+      return {
+        section: x.section || '', name: x.name || '', balance: x.balance || 0, bucket,
+        looksLikeCard: isCardName(nm) || nm.includes('card'),
+        hasMonthly: Array.isArray(x.values) && x.values.length > 1,
+      }
+    }).sort((p1, p2) => Math.abs(p2.balance) - Math.abs(p1.balance))
+
+    return { fyEnd, months, rows, wip: pl.wip, classify, openBank, openDebtors, openCreditors, openCards, openOther, actualNetKeys: actualNet, hasMonthly, hasOpening: accounts.length > 0 }
   }, [bs, oh, mg, cf, a])
 
   if (!ok) return null
@@ -394,6 +419,53 @@ export default function ForecastBalanceSheet() {
                 <input type="number" value={a.retentionMonths} onChange={e => saveAssumptions({ ...a, retentionMonths: e.target.value })} style={inp} /></div>
               {saved && <span style={{ fontSize: 11.5, fontWeight: 700, color: saved === 'saved' ? '#16a34a' : saved === 'saving' ? '#b45309' : '#dc2626' }}>{saved}</span>}
             </div>
+
+            {/* THE CARDS ROW IS NIL WHILE XERO SHOWS A BALANCE. Rather than assume why,
+                every Xero account is listed with the bucket it fell into. A card account
+                whose name is not in the pattern - "Barclaycard", "Company Card", a bank
+                brand - lands in Financing and the Credit cards row stays empty while net
+                assets still tie, because Financing is the catch-all that balances. */}
+            {model.classify && model.classify.some(x => x.looksLikeCard && x.bucket !== 'Credit cards') ? (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#991b1b', maxWidth: 940 }}>
+                <strong>Card accounts are not being matched, which is why the Credit cards row reads nil.</strong>
+                <div style={{ marginTop: 4 }}>
+                  {model.classify.filter(x => x.looksLikeCard && x.bucket !== 'Credit cards')
+                    .map(x => `"${x.name}" (${x.section || 'no section'}) is counted in ${x.bucket}`).join('; ')}.
+                  {' '}Net assets still tie because Financing absorbs anything unmatched. Tell me the exact
+                  names and I will widen the rule - I am not going to guess at them.
+                </div>
+              </div>
+            ) : null}
+
+            {model.classify ? (
+              <details style={{ marginBottom: 14 }}>
+                <summary style={{ fontSize: 12.5, color: '#8a857c', cursor: 'pointer' }}>
+                  How Xero&apos;s accounts are being classified ({model.classify.length})
+                </summary>
+                <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 10, padding: '10px 14px', marginTop: 8, overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr style={{ background: '#faf9f7', borderBottom: '1px solid #eee' }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Section</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Account</th>
+                      <th style={th}>Opening</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Counted in</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Monthly?</th>
+                    </tr></thead>
+                    <tbody>
+                      {model.classify.map((x, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f5f4f1' }}>
+                          <td style={{ ...td, textAlign: 'left', color: '#8a857c' }}>{x.section || '-'}</td>
+                          <td style={{ ...td, textAlign: 'left' }}>{x.name}</td>
+                          <td style={td}>{gbp(x.balance)}</td>
+                          <td style={{ ...td, textAlign: 'left', color: x.bucket === 'Financing (catch-all)' ? '#b45309' : '#57534e' }}>{x.bucket}</td>
+                          <td style={{ ...td, textAlign: 'left', color: x.hasMonthly ? '#16a34a' : '#dc2626' }}>{x.hasMonthly ? 'yes' : 'no'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ) : null}
 
             {model.wip && model.wip.available && !model.wip.include ? (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
