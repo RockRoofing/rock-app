@@ -361,6 +361,34 @@ export default function MonthlyCashFlow() {
                   </div>
                 )
               })()}
+{(() => {
+                // THE FORECAST HORIZON.
+                //
+                // Over twelve months this collects the whole opening ledger AND every
+                // forecast sale, so closing debtors come out at almost nil - which never
+                // happens in a real business. The cause is not the arithmetic: the
+                // forecasts simply run out. There is no pipeline in the back half, so the
+                // model banks everything and bills nothing new.
+                //
+                // Saying so is more use than letting the closing balance look like a bug.
+                const last3 = forecast.slice(-3)
+                const tail = last3.reduce((a, r) => a + (r.projSalesIn || 0), 0)
+                const early = forecast.slice(0, 3).reduce((a, r) => a + (r.projSalesIn || 0), 0)
+                if (!(early > 0) || tail > early * 0.4) return null
+                const close = forecast.length ? forecast[forecast.length - 1].closing : 0
+                return (
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
+                    <strong>The forecasts run out before the window does.</strong>{' '}
+                    The last three months carry {gbp(tail)} of project sales against {gbp(early)} in the first three. So the back half collects
+                    the debtor book and bills almost nothing new, and the closing {gbp(close)} is flattered by a pipeline that stops rather
+                    than a business that stops.
+                    <div style={{ marginTop: 4 }}>
+                      Add the work you expect but have not forecast yet as <strong>Manual lumps</strong> below - revenue and its cost - and the
+                      back half becomes meaningful. Until then, read the first six months and treat the rest as a floor.
+                    </div>
+                  </div>
+                )
+              })()}
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #eee' }}>

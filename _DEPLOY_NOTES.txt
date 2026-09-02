@@ -1,54 +1,57 @@
-pkg708 - The overheads: HIDDEN ROWS. And the Nov sales gap.
-============================================================
+pkg709 - Retention is right. The forecasts running out is the problem.
+=======================================================================
 
-*** SUPERSEDES pkg591 - pkg707. ***
+*** SUPERSEDES pkg591 - pkg708. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js
-  pages/project-cashflow.js
+  pages/business-financials/monthly.js
   ... and the rest of the set as before
 
 
-1. THE OVERHEADS - AND WHY IT TOOK FOUR ATTEMPTS
---------------------------------------------------
-You asked several times and I fixed the wrong thing three times: the call site,
-then the actual-months list, then the account seeding. All were real, none was
-this.
+YOUR RETENTION QUESTION - BOTH RIGHT ALREADY
+----------------------------------------------
+    fcSalesIn += salesSchedule[].amount
 
-    config:overhead-hidden-rows
-
-The BUDGETS page totals visibleAccounts ONLY - your screenshot says "28 accounts
-hidden", and its TOTAL row excludes them. The cash flow summed every overhead
-code including all 28.
-
-Two pages counting different sets of accounts can never agree, and that is exactly
-the signature: a FIXED gap within each pair of months - 11,408 in Aug and Sept,
-951 in Oct and Nov - because the hidden SET is fixed while the forecast method
-changes between the pairs.
-
-I should have diffed the two call sites' inputs the first time you raised it
-rather than guessing at candidates. That is what found it in the end, in about ten
-minutes.
+amount is revenueThisPeriod, which is NET of retention. And Retention in reads
+GBP 0 across all twelve months, so nothing is released without dates in the
+tracker. Exactly as you specified. Not the problem.
 
 
-2. NOVEMBER SALES: 155k vs 194k
---------------------------------
-    const salesValue = (net, ret) => { const d = 1 - num(ret) / 100; ... }
+WHAT IS THE PROBLEM - AND IT IS NOT ARITHMETIC
+------------------------------------------------
+    opening ledger collected      552,576
+    forecast project sales        1,365,645
+    total collected               1,918,221
 
-retentionPct is a PERCENTAGE on some forecasts and a FRACTION on others. Divide
-0.05 by 100 and you get 0.0005 - so a 5% retention grossed up by nothing at all,
-and the row read below the P&L on every project stored that way.
+    your forecasts hold in total  1,371,624
 
-    retentionPct 5     divisor 0.9500   correct before and after
-    retentionPct 0.05  divisor 0.9995 -> 0.9500
+100% OF EVERYTHING YOU WILL EVER BILL on these jobs is collected inside the
+window, leaving CLOSING DEBTORS OF ALMOST NIL. You always carry 500-600k of
+debtors. That cannot happen.
 
-The same dual-format trap the P&L already handles. The band row is labelled "inc.
-Retention - matches P&L sales" and now actually does.
+The cause is on your own screenshot:
 
-CAVEAT: this closes most of the 39k, not necessarily all. The two pages also date
-differently - the project page uses each line's appDate, the P&L uses the spread
-grid's month - so a period straddling a month end can still differ. If November is
-still out by a few thousand after this, that is why, and it is not worth chasing.
+    Jul 27   project sales  14,224
+    Aug 27   project sales       -
+
+THE FORECASTS RUN OUT BEFORE THE WINDOW DOES. First three months carry 665,122 of
+project sales; the last three carry 85,344 - thirteen per cent. So the back half
+banks the debtor book and bills nothing new, and the closing 197,454 is flattered
+by a pipeline that stops rather than a business that stops.
+
+This is not a bug I can fix in code. There is no work in the model for those
+months because none has been forecast.
+
+
+WHAT THE PAGE NOW DOES
+----------------------
+Fires a banner when the last three months carry under 40% of the first three, and
+says what to do: add the work you expect but have not forecast as MANUAL LUMPS -
+revenue AND its cost - and the back half becomes meaningful.
+
+Until then, READ THE FIRST SIX MONTHS AND TREAT THE REST AS A FLOOR. Those months
+are built on real forecasts, real invoices and real bills, and after today's fixes
+I would trust them.
