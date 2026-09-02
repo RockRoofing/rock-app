@@ -147,6 +147,9 @@ export default function ForecastBalanceSheet() {
     for (const fc of (cf.projForecasts || [])) {
       const acc = fc.accrual
       if (!acc) continue
+      // Same as the P&L: a period already overtaken by a real application is in Xero's
+      // figures, so counting the forecast too puts the same work in twice.
+      if (fc.latestAppEnd && fc.to && fc.to <= fc.latestAppEnd) continue
       for (const r of (acc.revenueByMonth || [])) if (r.month && r.amount) fRev[r.month] = (fRev[r.month] || 0) + r.amount
       // Same as the P&L: cost is held against the period it belongs to, capped at the
       // valuation date, and an undated line falls to the period end rather than vanishing.

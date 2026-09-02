@@ -82,6 +82,16 @@ export default function ForecastPL() {
     for (const fc of (cf.projForecasts || [])) {
       const a = fc.accrual
       if (!a) continue
+      // SUPERSEDED BY A REAL APPLICATION - skip it.
+      //
+      // The project cash flow has always done this; the P&L counted every forecast,
+      // including periods already overtaken by an application whose income is in Xero.
+      // So the same work was in both the actual months and the forecast months, and
+      // November read about 40,000 above the project page.
+      //
+      // Same test the project page uses: the period ends on or before the latest
+      // application, so the application has replaced it.
+      if (fc.latestAppEnd && fc.to && fc.to <= fc.latestAppEnd) continue
       const nm = projLabel(fc)
       for (const r of (a.revenueByMonth || [])) {
         if (!r.month || !r.amount) continue

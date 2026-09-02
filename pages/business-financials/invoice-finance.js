@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BizNav, INK, GOLD, gbp, SyncButton } from '../../components/BizNav'
@@ -144,9 +144,10 @@ export default function InvoiceFinance() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: '', highInvolvementPct: 35, ageDays: 90 })
+  const [settings, setSettings] = useState({ releaseDays: 2, advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: '', highInvolvementPct: 35, ageDays: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [cf, setCf] = useState(null)                  // project forecasts, for the projection
+  const [openMonth, setOpenMonth] = useState(null)
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [apiVersion, setApiVersion] = useState(null)
   const [dashEmpty, setDashEmpty] = useState(false)
@@ -181,6 +182,7 @@ export default function InvoiceFinance() {
       setData(d)
       setSettings({
         advanceRate: d.settings?.advanceRate ?? 60,
+        releaseDays: d.settings?.releaseDays ?? 2,
         drawn: d.settings?.drawn ?? 0,
         facilityCap: d.settings?.facilityCap ?? 500000,
         // Bibby's eligibility caps. Editable rather than hard-coded - they are facility
@@ -311,7 +313,11 @@ export default function InvoiceFinance() {
         // The APPLICATION date - when the debt comes into existence and becomes fundable.
         const d = x.appDate || x.date
         if (!d || !(Number(x.amount) > 0)) continue
-        rows.push({ date: d, customer: cust, project: fc.projectName || fc.projectKey || '', amount: Number(x.amount) || 0 })
+        // RELEASED a set number of days after the application goes in - Bibby do not pay
+        // the same day. Defaults to 2; change it in the settings above.
+        const rel = new Date(d); rel.setDate(rel.getDate() + (Number(settings.releaseDays) ?? 2))
+        rows.push({ date: d, release: rel.toISOString().slice(0, 10), customer: cust,
+          project: fc.projectName || fc.projectKey || '', amount: Number(x.amount) || 0 })
       }
     }
     rows.sort((a, b) => a.date.localeCompare(b.date))
@@ -319,9 +325,10 @@ export default function InvoiceFinance() {
     const byMonth = {}
     for (const r of rows) {
       const mk = r.date.slice(0, 7)
-      const m = byMonth[mk] || (byMonth[mk] = { mk, applied: 0, byCust: {} })
+      const m = byMonth[mk] || (byMonth[mk] = { mk, applied: 0, byCust: {}, lines: [] })
       m.applied += r.amount
       m.byCust[r.customer] = (m.byCust[r.customer] || 0) + r.amount
+      m.lines.push(r)
     }
     const months = Object.values(byMonth).sort((a, b) => a.mk.localeCompare(b.mk)).map(m => {
       let advance = 0, capped = 0
@@ -333,7 +340,15 @@ export default function InvoiceFinance() {
         advance += insurable * rate
         capped += over
       }
-      return { ...m, advance, capped }
+      // Per line, so the drill-down can show what each application releases.
+      const lines = m.lines.map(l => {
+        const insured = Number((limits[l.customer] || {}).insuredLimit) || 0
+        const custTotal = m.byCust[l.customer] || 0
+        const over = insured > 0 ? Math.max(0, custTotal - insured) : custTotal
+        const share = custTotal > 0 ? (custTotal - over) / custTotal : 0
+        return { ...l, advance: l.amount * share * rate, funded: share > 0 }
+      }).sort((a, b) => a.release.localeCompare(b.release))
+      return { ...m, advance, capped, lines }
     })
     return { rows, months }
   }, [cf, limits, settings.advanceRate])
@@ -750,8 +765,15 @@ export default function InvoiceFinance() {
                   </tr></thead>
                   <tbody>
                     {projected.months.map((m, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
-                        <td style={{ padding: '6px 9px' }}>{m.mk}</td>
+                      <Fragment key={i}>
+                      <tr style={{ borderBottom: '1px solid #f2f0ec', cursor: 'pointer' }}
+                        onClick={() => setOpenMonth(openMonth === m.mk ? null : m.mk)}>
+                        <td style={{ padding: '6px 9px' }}>
+                          <span style={{ fontSize: openMonth === m.mk ? 12 : 9, fontWeight: openMonth === m.mk ? 700 : 400,
+                            color: openMonth === m.mk ? '#1a1a19' : '#bbb', marginRight: 4 }}>
+                            {openMonth === m.mk ? '\u25BC' : '\u25B6'}
+                          </span>{m.mk}
+                        </td>
                         <td style={{ padding: '6px 9px', textAlign: 'right' }}>{gbp(m.applied)}</td>
                         {/* Debt above the insured limit is not funded - and where no limit
                             is recorded, none of that customer is. Worth seeing before you
@@ -761,6 +783,39 @@ export default function InvoiceFinance() {
                         </td>
                         <td style={{ padding: '6px 9px', textAlign: 'right', fontWeight: 700, color: '#0f766e' }}>{gbp(m.advance)}</td>
                       </tr>
+                      {openMonth === m.mk && (
+                        <tr>
+                          <td colSpan={4} style={{ background: '#faf9f7', padding: '10px 14px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                              <thead><tr style={{ color: '#888' }}>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Customer</th>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Applied</th>
+                                <th style={{ textAlign: 'left', padding: '3px 6px' }}>Cash released</th>
+                                <th style={{ textAlign: 'right', padding: '3px 6px' }}>Application</th>
+                                <th style={{ textAlign: 'right', padding: '3px 6px' }}>Advance</th>
+                              </tr></thead>
+                              <tbody>
+                                {m.lines.map((l, k) => (
+                                  <tr key={k} style={{ borderTop: '1px solid #efefec' }}>
+                                    <td style={{ padding: '3px 6px' }}>{l.project || '-'}</td>
+                                    <td style={{ padding: '3px 6px', color: '#777' }}>{l.customer}</td>
+                                    <td style={{ padding: '3px 6px', color: '#777' }}>{l.date}</td>
+                                    {/* The date the money actually lands, which is what the
+                                        cash flow needs - not the application date. */}
+                                    <td style={{ padding: '3px 6px', color: '#0f766e', fontWeight: 600 }}>{l.release}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right' }}>{gbp(l.amount)}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right', color: l.funded ? '#0f766e' : '#dc2626' }}>
+                                      {l.funded ? gbp(l.advance) : 'not funded'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                   <tfoot><tr style={{ borderTop: '2px solid #ddd', fontWeight: 700 }}>

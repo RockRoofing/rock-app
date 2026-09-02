@@ -895,6 +895,26 @@ export default function CashFlow() {
 
     // Weeks to delay every receipt by. 0 = the plan as entered.
     const riskDays = (Number(finance.riskWeeks) || 0) * 7
+    // INVOICE FINANCE DRAWN - a liability repaid out of collections.
+    //
+    // The advance is already sitting in your bank; what is NOT modelled is that when a
+    // funded invoice pays, the money goes to Bibby. Collecting those invoices at 100%
+    // overstates cash by the whole drawn balance as they pay down.
+    //
+    // Repaid from Invoices in, oldest first, until the balance is clear. New drawings are
+    // NOT assumed - drawing again is a decision, and one the availability line already
+    // shows you have the room for.
+    // OFF where the drawn balance is entered as an account instead.
+    //
+    // Both give the identical closing figure - reducing the collections by 122k, or
+    // opening 122k lower and collecting in full. But entering it as an ACCOUNT is the
+    // better of the two: the liability is on screen, a new drawdown works naturally
+    // (the balance goes further negative, the bank goes up), and it matches how cards
+    // already work. Doing both would count it twice.
+    const ifAsAccount = (data.manualBalances || []).some(b => b && b.kind === 'if')
+    let ifDrawnLeft = (ifAsAccount || finance.repayIf === false)
+      ? 0
+      : Math.max(0, Number(data?.ifAvailability?.drawn) || 0)
     const usePerf = finance.usePaymentPerf === true
     const rows = []
     // Bill allowance already consumed, per month per project - prevents one bill netting
@@ -923,6 +943,7 @@ export default function CashFlow() {
       //
       // Only applies where a date has NOT been set by hand: an expected date is a
       // judgement somebody has already made, and shifting it would overrule them.
+      let ifRepaid = 0
       const inWkIn = (dstr, extraDays = 0) => {
         if (!dstr) return false
         const add = riskDays + (Number(extraDays) || 0)
@@ -1271,7 +1292,13 @@ export default function CashFlow() {
       const fcCostOut = fcLabourOut + fcMatOut
       const projNet = fcSalesIn - fcCostOut
 
-      const moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
+      // Bibby take their repayment out of what the customer pays, so it never reaches
+      // your account. Capped at what was collected - it cannot repay more than came in.
+      if (ifDrawnLeft > 0 && invoicesIn > 0) {
+        ifRepaid = Math.min(ifDrawnLeft, invoicesIn)
+        ifDrawnLeft -= ifRepaid
+      }
+      const moneyIn = (invoicesIn - ifRepaid) + retIn + vatInPos + fcSalesIn
       const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut
       const net = moneyIn - moneyOut
       // ARREARS ROW, before week 1 only. Everything already past its date, swept forward
@@ -1304,7 +1331,8 @@ export default function CashFlow() {
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
-        invoicesIn: Math.round(invoicesIn), invDetail: invDetail.sort((a, b) => b.amount - a.amount),
+        invoicesIn: Math.round(invoicesIn - ifRepaid), ifRepaid: Math.round(ifRepaid),
+        invDetail: invDetail.sort((a, b) => b.amount - a.amount),
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         vatEstimated, vatSrcs, cisEstimated,
         cisDetail: inWkCis,
@@ -1600,17 +1628,28 @@ export default function CashFlow() {
                           <select value={m.kind} onChange={e => upd({ kind: e.target.value })} style={{ ...inpS, width: 74 }}>
                             <option value="bank">Bank</option>
                             <option value="card">Card</option>
+                            {/* Invoice finance drawn. Held NEGATIVE like a card, but it
+                                counts toward cash rather than card debt: the advance has
+                                already been spent, and the ledger it was drawn against
+                                will be collected in full in this forecast. Netting it off
+                                the opening balance is the same answer as reducing the
+                                collections, and it is visible instead of buried in a rule. */}
+                            <option value="if">Invoice finance drawn</option>
                           </select>
                           <input value={m.name} placeholder="Account name" onChange={e => upd({ name: e.target.value })} style={{ ...inpS, width: 210 }} />
                           <span style={{ color: '#bbb' }}>&pound;</span>
                           <input type="number" value={m.balance} placeholder="0.00" onChange={e => upd({ balance: e.target.value })}
-                            title={m.kind === 'card' ? 'NEGATIVE = owed on the card, matching Xero. A positive figure means the card is in credit.' : 'Cash in the account. Negative if overdrawn.'}
+                            title={m.kind === 'if' ? 'NEGATIVE = drawn from the facility and already spent. Netted off opening cash, because the invoices it was advanced against are collected in full in this forecast.'
+                              : m.kind === 'card' ? 'NEGATIVE = owed on the card, matching Xero. A positive figure means the card is in credit.' : 'Cash in the account. Negative if overdrawn.'}
                             style={{ ...inpS, width: 120, textAlign: 'right', color: (Number(m.balance) || 0) < 0 ? '#dc2626' : undefined }} />
                           {/* Flagged, not silently flipped. A card typed positive is far
                               more likely to be the amount owed entered without the minus
                               than a genuine credit balance - but guessing which is how the
                               cross-check ended up comparing a positive against Xero's
                               negative. */}
+                          {m.kind === 'if' && (Number(m.balance) || 0) > 0 && (
+                            <div style={{ fontSize: 10, color: '#b45309' }}>Drawn should be NEGATIVE - you owe it.</div>
+                          )}
                           {m.kind === 'card' && (Number(m.balance) || 0) > 0 && (
                             <span title="Cards are held negative, like Xero. Did you mean to type this as a minus?"
                               style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', cursor: 'help' }}>in credit?</span>
