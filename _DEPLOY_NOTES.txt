@@ -1,54 +1,38 @@
-pkg713 - Yes, and you had already spotted it
-=============================================
+pkg714 - FIX: "td is not defined", and full width
+==================================================
 
-*** SUPERSEDES pkg591 - pkg712. ***
+*** SUPERSEDES pkg591 - pkg713. ***
 *** SEVEN NEW FILES - create these in GitHub (as before) ***
 *** lib/cashflowEvents.js IS IN THIS PACKAGE - replace it ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
   pages/business-financials/monthly.js
-  lib/cashflowEvents.js
+  pages/business-financials/forecast-pl.js
   ... and the rest of the set as before
 
 
-YOUR QUESTION: YES, THERE WAS A DOUBLE COUNT
-----------------------------------------------
-Bills out pays EVERY outstanding Xero bill - including overhead ones: insurance,
-rent, accountancy, hire. The Overheads column then pays the PREDICTED figure for
-the same month. The same cost left the bank twice.
+THE ERROR - MY BUG, AND THE SAME SHAPE AS EVER
+------------------------------------------------
+I put the Drill component at MODULE SCOPE, which is right - a component declared
+inside another remounts on every render. But `td` and `th` were declared INSIDE
+the page component, so Drill could not see them.
 
-    insurance predicted 4,000, real bill 4,000 due 15 Sept
-      BEFORE  bills 4,000 + overheads 4,000 = 8,000
-      AFTER   bills 4,000 + overheads     0 = 4,000
+Compiles clean. Throws "td is not defined" the moment the table renders.
 
-Every bill has carried lineCodes from the sync all along - the account codes on
-its lines - and nothing was reading them. Now netted per overhead code within the
-week or month, using the same code list the API builds the predicted grid from.
+Both style objects hoisted to module scope, above the components that use them.
 
-NETTED, NOT DROPPED. A month with no bill yet still pays the full budget:
-
-    predicted 4,000, bill 1,500 -> bills 1,500 + overheads 2,500 = 4,000
-
-Applied to the 13-week and the 12-month.
+I also ran a scan for any other module-scope component reaching into page scope on
+both pages - clean. The three it flagged in DrillTable were map callback
+parameters, `(c, i)` and `(x, i)`, declared where they are used.
 
 
-YOUR SECOND QUESTION - NO, DO NOT HOLD OFF
---------------------------------------------
-Switching a month to Actual is the RIGHT thing to do as soon as the month is
-closed, and it is now safe:
+FULL WIDTH
+----------
+    12-MONTH   was maxWidth 1300 with sixteen columns, so it scrolled sideways on
+               every screen including ones with room to spare. Now full width, and
+               the table minWidth raised to 1500 so the columns are not crushed.
 
-  - the Forecast P&L takes revenue AND cost from Xero together for that month,
-    which is the only way the two sides tie
-  - the cash flow nets real bills against predicted overheads either way
-
-Holding off does not protect you from anything - it just leaves the P&L reading a
-budget when Xero has the real figure. What was unsafe was the double count, and
-that is what this fixes.
-
-THE ONE THING TO AVOID is switching a month to Actual BEFORE the purchase ledger
-is complete. Then Xero's cost of sales is understated, and the P&L will show a
-margin that is too good. Wait until the month end accounts are closed - which is
-what you were already proposing - and switch it then.
+    FORECAST P&L   the table had no width set, so it sized to its content and left
+               a third of a wide monitor empty. Now width 100%.

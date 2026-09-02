@@ -8,6 +8,12 @@ import { pad, normName, mondayOf, isoDay, monthKey, daysInMonth, clampDay, overh
 const MONTHS = 12
 const monthShort = (mk) => { const [y, m] = mk.split('-').map(Number); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} ${String(y).slice(2)}` }
 
+// Module scope. These were declared INSIDE the page component, so the Drill component -
+// which is correctly at module scope so it does not remount on every render - could not
+// see `td`. Compiles clean, throws "td is not defined" on render.
+const th = { padding: '8px 10px', fontSize: 11, color: '#8a857c', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }
+const td = { padding: '8px 10px', fontSize: 12.5, textAlign: 'right', whiteSpace: 'nowrap' }
+
 // One drillable cell. Module scope - a component declared inside another remounts on
 // every render and loses focus.
 function Drill({ v, open, onClick, colour, neg }) {
@@ -351,8 +357,6 @@ export default function MonthlyCashFlow() {
 
   if (!ok) return null
 
-  const th = { padding: '8px 10px', fontSize: 11, color: '#8a857c', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }
-  const td = { padding: '8px 10px', fontSize: 12.5, textAlign: 'right', whiteSpace: 'nowrap' }
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
   const chartData = forecast.map(r => ({ mk: r.label, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut }))
   const inpS = { padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }
@@ -361,7 +365,9 @@ export default function MonthlyCashFlow() {
     <>
       <Head><title>12-Month Cash Flow - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1300, margin: '0 auto', padding: '24px 20px 60px' }}>
+      {/* FULL WIDTH. A sixteen-column table inside a 1300px box meant horizontal
+          scrolling on every screen, including ones with room to spare. */}
+      <div style={{ padding: '24px 26px 60px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>12-Month Cash Flow</h1>
@@ -500,7 +506,7 @@ export default function MonthlyCashFlow() {
                   </div>
                 )
               })()}
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500, tableLayout: 'auto' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left', position: 'sticky', left: 0, background: '#fff' }}>Month</th>

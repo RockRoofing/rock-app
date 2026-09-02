@@ -227,7 +227,9 @@ export default function ForecastPL() {
             </div>
 
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', minWidth: 1100 }}>
+              {/* width 100% so it fills the page - it was sized to its content and left
+                  a third of the screen empty on a wide monitor. */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
                 <thead>
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left', position: 'sticky', left: 0, background: '#faf9f7' }}>Month</th>
