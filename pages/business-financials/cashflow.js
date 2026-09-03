@@ -613,6 +613,15 @@ export default function CashFlow() {
     // closer to the truth than a generic month end and it degrades predictably.
     const isApplied = (fc) => !!(fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd)
 
+    // EVERY INVOICE THAT NEVER LANDED ANYWHERE.
+    //
+    // Placement is `if (isArrears) ... else if (inWkIn) ...` - two branches and no else.
+    // An invoice matching neither is dropped in silence: no date at all, or a date pushed
+    // past the 13-week window by the payment-performance offset. Nothing counted it and
+    // nothing said so, and the column simply read lower than the ledger.
+    const placedInv = new Set()
+
+
     const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
     // TWO BASES, and mixing them is the whole problem.
     //
@@ -931,6 +940,15 @@ export default function CashFlow() {
       ? 0
       : Math.max(0, Number(data?.ifAvailability?.drawn) || 0)
     const usePerf = finance.usePaymentPerf === true
+    // The payment-performance offset, hoisted to memo scope so the reconciliation can
+    // report the same number the placement used. Defined ONCE - a second copy of this
+    // rule is exactly how the pages have drifted before.
+    const offsetRule = (i) => {
+      if (i.expectedDate || !usePerf) return 0
+      const typed = (data.custOffsets || {})[i.contact]
+      if (typed != null && typed !== '') return Number(typed) || 0
+      return Number((data.custPerf || {})[i.contact]?.medLate) || 0
+    }
     const rows = []
     // Bill allowance already consumed, per month per project - prevents one bill netting
     // against the same forecast money in more than one week.
@@ -973,12 +991,7 @@ export default function CashFlow() {
       //
       // A typed override wins over the measured figure; the measured figure is used where
       // nothing has been typed. Either way an expected date set by hand is untouched.
-      const offsetFor = (i) => {
-        if (i.expectedDate || !usePerf) return 0
-        const typed = (data.custOffsets || {})[i.contact]
-        if (typed != null && typed !== '') return Number(typed) || 0
-        return Number((data.custPerf || {})[i.contact]?.medLate) || 0
-      }
+      const offsetFor = offsetRule
       // OVERDUE LANDS IN WEEK 1, for money out as well as money in.
       //
       // A date before the horizon is not "never" - it is late, and late money out is the
@@ -1015,6 +1028,7 @@ export default function CashFlow() {
         if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue   // payables excluded; sales credit notes belong here as negatives
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) {
+          placedInv.add(invKey(i))
           arrInvoices += (i.amountDue || 0)
           // Recorded in the SAME shape as a normal week, so the arrears row's drill-down
           // works like every other. It was showing "Total (0)" against 434,338 - the
@@ -1024,6 +1038,7 @@ export default function CashFlow() {
             offset: 0, total: i.total || 0 })
         }
         else if (inWkIn(d, offsetFor(i))) {
+          placedInv.add(invKey(i))
           invoicesIn += (i.amountDue || 0)
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
           invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
@@ -1347,6 +1362,9 @@ export default function CashFlow() {
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
+        // The window's last day. The reconciliation needs it to tell "after the horizon"
+        // from "no date at all", and it was not on the row - so that test never fired.
+        weekEnd: e,
         invoicesIn: Math.round(invoicesIn - ifRepaid), ifRepaid: Math.round(ifRepaid),
         invDetail: invDetail.sort((a, b) => b.amount - a.amount),
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
@@ -1361,6 +1379,42 @@ export default function CashFlow() {
         net: Math.round(net), closing: Math.round(running),
       })
     }
+    // RECONCILE THE LEDGER AGAINST THE FORECAST. Attached to the rows so the existing
+    // consumers are untouched; the strip under the table reads it.
+    const lastWeekEnd = rows.reduce((acc, r) => (r.weekEnd && r.weekEnd > acc) ? r.weekEnd : acc, '')
+    const missed = []
+    for (const i of (data.receivables || [])) {
+      if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue
+      if (excluded[invKey(i)]) continue
+      if (placedInv.has(invKey(i))) continue
+      const d = i.expectedDate || i.dueDate || ''
+      const off = offsetRule(i)
+      missed.push({
+        name: i.contact || '(no customer)',
+        ref: i.invoiceNumber || i.number || '',
+        amount: i.amountDue || 0,
+        date: d,
+        offset: off,
+        reason: !d ? 'no due date and no expected date'
+          : (lastWeekEnd && d > lastWeekEnd) ? 'falls after the 13-week window'
+          : off ? `pushed past the window by a ${off}-day payment-performance offset`
+          : 'date outside every week - check the format',
+      })
+    }
+    missed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    const owedTotal = (data.receivables || [])
+      .filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT'))
+      .reduce((t, i) => t + (i.amountDue || 0), 0)
+    const excludedTotal = (data.receivables || [])
+      .filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT') && excluded[invKey(i)])
+      .reduce((t, i) => t + (i.amountDue || 0), 0)
+    rows.recon = {
+      owedTotal, excludedTotal,
+      missedTotal: missed.reduce((t, m) => t + m.amount, 0),
+      missed,
+      count: (data.receivables || []).length,
+    }
+
     return rows
   // finance is in the deps because the VAT reclaim estimate reads finance.vatRate -
   // without it the forecast would keep a stale rate until something else changed.
@@ -1646,6 +1700,44 @@ export default function CashFlow() {
                                   {r.forecastGross ? gbp(r.forecastGross) : 'none'}
                                 </td>
                                 <td style={{ ...td, fontWeight: 700, color: '#b45309' }}>{gbp(r.gap)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
+
+                  {/* WHERE THE LEDGER AND THE FORECAST DISAGREE.
+                      Owed, less what you excluded, less anything that never landed in a
+                      week, should equal invoices in. Anything left over is itemised. */}
+                  {forecast.recon && forecast.recon.missed.length > 0 && (
+                    <details open style={{ marginBottom: 10 }}>
+                      <summary style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, color: '#991b1b', cursor: 'pointer', listStyle: 'none' }}>
+                        <strong>{gbp(forecast.recon.missedTotal)} of invoices owed never landed in any week</strong>
+                        {' '}({forecast.recon.missed.length} of {forecast.recon.count}). Total owed {gbp(forecast.recon.owedTotal)}
+                        {forecast.recon.excludedTotal ? `, of which ${gbp(forecast.recon.excludedTotal)} you excluded` : ''}.
+                        {' '}Click for the list and the reason for each.
+                      </summary>
+                      <div style={{ border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fffafa', padding: '10px 14px', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead><tr style={{ borderBottom: '1px solid #fecaca' }}>
+                            <th style={{ ...th, textAlign: 'left' }}>Customer</th>
+                            <th style={{ ...th, textAlign: 'left' }}>Invoice</th>
+                            <th style={th}>Date used</th>
+                            <th style={th}>Offset</th>
+                            <th style={th}>Amount</th>
+                            <th style={{ ...th, textAlign: 'left' }}>Why it is not in the forecast</th>
+                          </tr></thead>
+                          <tbody>
+                            {forecast.recon.missed.map((m, i) => (
+                              <tr key={m.ref + i} style={{ borderBottom: '1px solid #fdeaea' }}>
+                                <td style={{ ...td, textAlign: 'left' }}>{m.name}</td>
+                                <td style={{ ...td, textAlign: 'left', color: '#999' }}>{m.ref || '-'}</td>
+                                <td style={td}>{m.date || <span style={{ color: '#dc2626' }}>none</span>}</td>
+                                <td style={{ ...td, color: m.offset ? '#b45309' : '#ccc' }}>{m.offset ? `+${m.offset}d` : '-'}</td>
+                                <td style={{ ...td, fontWeight: 600 }}>{gbp(m.amount)}</td>
+                                <td style={{ ...td, textAlign: 'left', color: '#991b1b' }}>{m.reason}</td>
                               </tr>
                             ))}
                           </tbody>

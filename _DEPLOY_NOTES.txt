@@ -1,62 +1,57 @@
-pkg736 - The missing invoices sync
-===================================
+pkg737 - Find the missing 127k
+===============================
 
-DEPLOY OVER pkg735. Two files.
+DEPLOY OVER pkg736. One file.
 
 REPLACE:
-  pages/business-financials/invoices.js
   pages/business-financials/cashflow.js
 
-WHAT THE MARKER TOLD US
-------------------------
-  116 rows in the store, 0 TYPED, last synced 21/07/2026.
+THE MECHANISM
+-------------
+Invoice placement reads:
 
-Zero typed is the whole story. lib/xero.js stamps `type` on every row, and that
-stamp went in as part of the SAME fix that moved Type=="ACCREC" into the WHERE
-clause. A store where nothing is typed was written BEFORE that fix - by the
-version using the bare Type= parameter that Xero ignores.
+    if (isArrears(d))              { ... }
+    else if (inWkIn(d, offsetFor(i))) { ... }
 
-So those 116 rows are exactly the ones that can contain supplier bills.
+Two branches and NO else. An invoice matching neither is dropped in silence.
+Three ways that happens:
 
-MY pkg734 REASONING WAS WRONG
-------------------------------
-I argued "provenance is the guarantee - this store is only written by
-fetchOutstandingReceivables, so whatever is in it is a receivable."
+  - no due date AND no expected date
+  - a date after the end of the 13-week window
+  - a date pushed past the window by the payment-performance offset
 
-Provenance only guarantees anything if the code that wrote it was correct. This
-store was written six weeks ago by pre-fix code. My normalise stamps all 116
-rows ACCREC and passes them through, bills included. That is why you are still
-seeing supplier invoices as customer invoices.
+Nothing counted them, nothing reported them, and Invoices in simply read lower
+than the ledger. That is the 127k, or most of it.
 
-The store is not trustworthy. It has to be rewritten.
+WHAT THIS ADDS
+--------------
+A red strip above the table whenever anything fails to land:
 
-THE FIX
--------
-A "Sync outstanding (cash flow)" button on Invoices Owed, next to the existing
-one. Blue, so the two are not confused.
+  "X of invoices owed never landed in any week (N of M). Total owed Y, of which
+   Z you excluded. Click for the list and the reason for each."
 
-  Sync invoices from Xero      -> invoiced:lines:  (Invoices Owed table, WIP,
-                                                    margins, commercial)
-  Sync outstanding (cash flow) -> bank:outstanding-receivables  (both cash flows)
+Per invoice: customer, invoice number, the date used, the offset applied, the
+amount, and WHY it is not in the forecast. Your invoice due tomorrow will be in
+that list with the reason next to it.
 
-The Bills page has always had its equivalent. Invoices never did, which is why
-that store was last written on 21 July and nothing in the app could refresh it.
-The endpoint already existed - there was simply no button.
-
-PRESS IT ONCE AFTER DEPLOYING. That rewrites all 116 rows with the current
-fetch: ACCREC in the WHERE clause, a defensive post-filter on inv.Type, and a
-type on every row. Supplier bills cannot survive it.
-
-The marker now also tells you when the store is untyped rather than just
-printing "0 typed", so this cannot sit unnoticed again.
-
-WHAT TO CHECK AFTER PRESSING IT
+TWO THINGS FIXED WHILE IN THERE
 --------------------------------
-  1. The marker should read "N in the store (N typed)" - the two numbers equal.
-  2. The untyped warning should be gone.
-  3. Overdue - brought forward: no supplier names in the green rows.
-  4. The swing between -500k and +500k should be gone.
-  5. The invoices-owed total should tie to Xero's Aged Receivables.
+The offset rule was defined inside the week loop, so the reconciliation could
+not see it. Hoisted to ONE definition that both use - a second copy is how these
+pages have drifted before. Moved below `usePerf` rather than above it, so there
+is no temporal dead zone for whoever edits this next.
 
-If it still shows bills AFTER a fresh sync, then lib/xero.js is still wrong and
-that is a different fix - tell me and I will look there rather than at the store.
+The week rows carried weekStart but NOT weekEnd. My first cut of the "after the
+horizon" test read r.weekEnd, which did not exist - so it would have silently
+reported every such invoice as "no date" instead. weekEnd is now set on the row,
+and the horizon is taken as the latest week rather than by array position.
+
+ON PAYMENT PERFORMANCE
+----------------------
+You said that is not the cause. It may not be - but the strip names the offset
+per invoice, so if a 30-day median is pushing September invoices into December
+it will say so explicitly rather than either of us assuming. If the Offset
+column reads "-" throughout, you were right and it is the dates.
+
+NOTHING ABOUT THE FIGURES CHANGES. This only reports what was already being
+dropped.
