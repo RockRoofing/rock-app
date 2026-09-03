@@ -1668,8 +1668,19 @@ export default function CashFlow() {
                         {' '}&middot; dashboard cache {data.recDiag.dashCacheWarm ? 'warm' : 'cold'}
                         {data.recDiag.storeRows === 0 ? (
                           <div style={{ marginTop: 4, color: '#991b1b' }}>
-                            <strong>The store is empty.</strong> Nothing in the app fills it - the Bills page has a sync,
-                            invoices never had one. That is the next fix.
+                            <strong>The store is empty.</strong> Press &quot;Sync outstanding (cash flow)&quot; on Invoices Owed.
+                          </div>
+                        ) : data.recDiag.typedRows === 0 ? (
+                          <div style={{ marginTop: 4, color: '#991b1b' }}>
+                            <strong>Not one row carries a type, so this store predates the ACCREC fix and can contain
+                            supplier bills.</strong> Everything is being treated as a receivable because there is nothing
+                            on the rows to tell them apart. Press &quot;Sync outstanding (cash flow)&quot; on Invoices Owed
+                            to rewrite it with the current fetch - after that every row is typed and bills cannot get in.
+                          </div>
+                        ) : data.recDiag.typedRows < data.recDiag.storeRows ? (
+                          <div style={{ marginTop: 4, color: '#b45309' }}>
+                            {data.recDiag.storeRows - data.recDiag.typedRows} rows have no type - a partial sync. Re-sync
+                            from Invoices Owed.
                           </div>
                         ) : null}
                       </>

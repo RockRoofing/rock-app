@@ -1,61 +1,62 @@
-pkg735 - Build marker: prove which code is live
-================================================
+pkg736 - The missing invoices sync
+===================================
 
-DEPLOY OVER pkg734. Two files. Contains pkg734's fix as well, so it is safe
-whether or not 734 landed.
+DEPLOY OVER pkg735. Two files.
 
 REPLACE:
-  pages/api/business-financials.js
+  pages/business-financials/invoices.js
   pages/business-financials/cashflow.js
 
-WHY
----
-Pressing "Sync invoices from Xero" changed the cash flow. That sync writes
-invoiced:lines: and deletes dashboard:cache. It does NOT touch
-bank:outstanding-receivables.
+WHAT THE MARKER TOLD US
+------------------------
+  116 rows in the store, 0 TYPED, last synced 21/07/2026.
 
-pkg733/734 made the cash flow read ONLY bank:outstanding-receivables. If that
-code were live, that button could not have changed the forecast.
+Zero typed is the whole story. lib/xero.js stamps `type` on every row, and that
+stamp went in as part of the SAME fix that moved Type=="ACCREC" into the WHERE
+clause. A store where nothing is typed was written BEFORE that fix - by the
+version using the bare Type= parameter that Xero ignores.
 
-It did. So the old dashboard:cache branch is still running. Either the packages
-did not reach main, or the deploy did not take. I am not going to keep guessing,
-so the page now says.
+So those 116 rows are exactly the ones that can contain supplier bills.
 
-WHAT YOU WILL SEE
------------------
-A blue bar at the top of the 13-week cash flow:
+MY pkg734 REASONING WAS WRONG
+------------------------------
+I argued "provenance is the guarantee - this store is only written by
+fetchOutstandingReceivables, so whatever is in it is a receivable."
 
-  pkg735 - receivables from bank:outstanding-receivables - N rows in the
-  forecast, M in the store (T typed) - store synced <date> - dashboard cache
-  warm/cold
+Provenance only guarantees anything if the code that wrote it was correct. This
+store was written six weeks ago by pre-fix code. My normalise stamps all 116
+rows ACCREC and passes them through, bills included. That is why you are still
+seeing supplier invoices as customer invoices.
 
-If instead you get a RED bar saying "Old build still live", the API is not
-pkg735 and the deploy has not landed. That is the thing to chase before any
-more code changes.
+The store is not trustworthy. It has to be rewritten.
 
-READ THE NUMBERS
-----------------
-  "M in the store" = 0
-      bank:outstanding-receivables is EMPTY. This is what I now expect. Nothing
-      in the app fills it - the Bills page has a sync button, invoices never had
-      one. The dashboard:cache branch masked that completely.
-      -> pkg736 adds the missing sync.
+THE FIX
+-------
+A "Sync outstanding (cash flow)" button on Invoices Owed, next to the existing
+one. Blue, so the two are not confused.
 
-  "M in the store" > 0 but "N rows in the forecast" = 0
-      The store has data and the mapping is dropping it. Send me the typed
-      count and I will fix the mapping.
+  Sync invoices from Xero      -> invoiced:lines:  (Invoices Owed table, WIP,
+                                                    margins, commercial)
+  Sync outstanding (cash flow) -> bank:outstanding-receivables  (both cash flows)
 
-  Both > 0 and the figures look right
-      pkg734 landed after all and we are done with this thread.
+The Bills page has always had its equivalent. Invoices never did, which is why
+that store was last written on 21 July and nothing in the app could refresh it.
+The endpoint already existed - there was simply no button.
 
-NOTHING ELSE CHANGED. This is a diagnostic, not a fix. Delete the bar once this
-has settled.
+PRESS IT ONCE AFTER DEPLOYING. That rewrites all 116 rows with the current
+fetch: ACCREC in the WHERE clause, a defensive post-filter on inv.Type, and a
+type on every row. Supplier bills cannot survive it.
 
-ABOUT THE SWING
----------------
--500k to +500k is the signature of the dashboard:cache path: 793 rows in
-__UNASSIGNED__ carrying about 10m of historic value, with frozen amountDue
-figures that were never refreshed because sync-invoices preserves any line dated
-before its window. Bills and paid invoices from years back all landing in
-"Overdue - brought forward". It is not a calculation fault; it is the wrong
-source.
+The marker now also tells you when the store is untyped rather than just
+printing "0 typed", so this cannot sit unnoticed again.
+
+WHAT TO CHECK AFTER PRESSING IT
+--------------------------------
+  1. The marker should read "N in the store (N typed)" - the two numbers equal.
+  2. The untyped warning should be gone.
+  3. Overdue - brought forward: no supplier names in the green rows.
+  4. The swing between -500k and +500k should be gone.
+  5. The invoices-owed total should tie to Xero's Aged Receivables.
+
+If it still shows bills AFTER a fresh sync, then lib/xero.js is still wrong and
+that is a different fix - tell me and I will look there rather than at the store.

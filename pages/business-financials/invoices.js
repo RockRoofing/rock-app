@@ -63,6 +63,31 @@ export default function InvoicesOwed() {
     }).catch(() => router.replace('/login'))
   }, [])
 
+  // THE MISSING SYNC. The Bills page has had one since it was built; invoices never did.
+  // bank:outstanding-receivables was therefore only ever written by a one-off, and the
+  // store on the live system dated from 21 July with no type on any row - i.e. it predates
+  // the ACCREC fix and can contain supplier bills. Nothing in the app could refresh it.
+  //
+  // Same endpoint shape as bills: POST view=invoices, sync=true -> fetchOutstandingReceivables.
+  const [recSyncing, setRecSyncing] = useState(false)
+  const [recMsg, setRecMsg] = useState('')
+  async function syncReceivables() {
+    setRecSyncing(true); setRecMsg('')
+    try {
+      const res = await fetch('/api/business-financials?view=invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'invoices', sync: true }),
+      })
+      const d = await res.json().catch(() => ({}))
+      // Reported properly. A silent failure here is how the store went six weeks stale
+      // without anybody knowing it existed.
+      if (!res.ok || d.error) setRecMsg(d.error || 'Sync failed.')
+      else setRecMsg(`${d.count ?? 0} outstanding invoices written. The cash flow reads this store.`)
+    } catch (e) { setRecMsg(String(e.message || e)) }
+    setRecSyncing(false)
+    loadAll()
+  }
+
   async function loadAll() {
     setLoading(true)
     try {
@@ -226,6 +251,12 @@ export default function InvoicesOwed() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
             <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Invoices Owed <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(sales invoices)</span></h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={syncReceivables} disabled={recSyncing}
+                title="Rewrites bank:outstanding-receivables, which is what the cash flow reads"
+                style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: recSyncing ? 'default' : 'pointer', opacity: recSyncing ? 0.6 : 1, marginRight: 8 }}>
+                {recSyncing ? 'Syncing...' : 'Sync outstanding (cash flow)'}
+              </button>
+              {recMsg ? <span style={{ fontSize: 11.5, color: recMsg.includes('failed') || recMsg.includes('Failed') ? '#dc2626' : '#16a34a', marginRight: 8 }}>{recMsg}</span> : null}
               <SyncButton endpoint="/api/sync-invoices" label="Sync invoices from Xero" onDone={loadAll}
                 buildMsg={(d) => d.invoicesFetched != null ? `${d.invoicesMatched || 0} matched, ${d.invoicesUnassigned || 0} unassigned (of ${d.invoicesFetched}).` : 'Synced.'} />
               <div style={{ fontSize: 11, color: '#aaa' }}>Same source as the Outstanding Invoices page</div>
