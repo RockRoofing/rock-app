@@ -325,6 +325,8 @@ export default function CashFlow() {
   const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true, riskWeeks: 0, usePaymentPerf: false })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
+  const [cardPays, setCardPays] = useState([])
+  const [cardMsg, setCardMsg] = useState('')
   // { [key]: true }. Bills key on id, receivables on invoice number - the same key the
   // Invoices Owed page uses for its expected dates.
   const [excluded, setExcluded] = useState({})
@@ -373,6 +375,21 @@ export default function CashFlow() {
   }
   const [balMsg, setBalMsg] = useState('')
 
+  // SAME STORE AS THE 12-MONTH. That page schedules by month; this one needs a date, so
+  // the row carries both and the month is derived from the date when one is set. Two
+  // separate schedules for the same payments would drift the first time either was edited.
+  async function saveCardPays(next) {
+    setCardPays(next); setCardMsg('saving')
+    try {
+      const r = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'cashflow', action: 'save-card-payments', cardPayments: next }),
+      })
+      setCardMsg(r.ok ? 'saved' : 'NOT SAVED')
+      if (r.ok) setTimeout(() => setCardMsg(''), 1600)
+    } catch { setCardMsg('NOT SAVED') }
+  }
+
   async function saveManualBalances(next) {
     setManualBal(next)
     setBalMsg('saving')
@@ -414,6 +431,7 @@ export default function CashFlow() {
       const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
       setData(d)
       setManualBal(Array.isArray(d.manualBalances) ? d.manualBalances : [])
+      setCardPays(Array.isArray(d.cardPayments) ? d.cardPayments : [])
       setExcluded(d.cfExcluded && typeof d.cfExcluded === 'object' ? d.cfExcluded : {})
       setOffsets(d.custOffsets && typeof d.custOffsets === 'object' ? d.custOffsets : {})
       const fc = d.financeCfg || {}
@@ -523,9 +541,43 @@ export default function CashFlow() {
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
     // ONE COLUMN. Vehicles and commitments are financing too, so they sit with the
     // balance sheet items rather than in a column of their own.
+    // CREDIT CARD CLEARANCE, same store and same rule as the 12-month.
+    //
+    // Only the OPENING balance is scheduled. Ongoing card spend is already in Overheads
+    // and Bills, so treating a payment as a general outflow would take the same cost out
+    // of the bank twice. What is cleared here is what is already owed.
+    //
+    // Cards are OUT of opening cash (kind === 'card' is excluded from manualBankTotal),
+    // so a payment is a real outflow: bank down, card debt down, net position unchanged.
+    const cardAccounts = balancesNow
+      .filter(b => b && b.kind === 'card' && String(b.name || '').trim())
+      .map(b => ({ name: String(b.name).trim(), opening: Math.abs(Number(b.balance) || 0) }))
+    const cardLeft = {}
+    for (const c of cardAccounts) cardLeft[c.name] = c.opening
+    const cardEvents = []
+    for (const p of [...(cardPays || [])].sort((x, y) => String(x.date || x.month || '').localeCompare(String(y.date || y.month || '')))) {
+      const nm = String(p.card || '')
+      if (cardLeft[nm] == null) continue
+      // A month-only row from the 12-month lands on the last day of that month here -
+      // it has no day, and month end is when a card statement is normally settled.
+      const when = p.date || (() => {
+        const [yy, mm] = String(p.month || '').split('-').map(Number)
+        return (yy && mm) ? isoDay(new Date(yy, mm, 0)) : ''
+      })()
+      if (!when) continue
+      // Capped at what is left. A balance cannot go through zero and invent cash.
+      const amt = Math.min(Math.abs(Number(p.amount) || 0), cardLeft[nm])
+      if (amt <= 0) continue
+      cardLeft[nm] -= amt
+      cardEvents.push({ date: when, name: `${nm} - card payment`, amount: amt, kind: 'card' })
+    }
+
     const commEvents = [
       ...commitmentEvents(data.cashCommitments, start, end).map(e => ({ ...e, kind: e.kind || 'commitment' })),
       ...balanceSheetEvents(data.bsItems, start, end),
+      // Card repayment is financing, so it sits in the same column as the vehicle finance
+      // and the balance sheet items rather than getting a column of its own.
+      ...cardEvents,
     ]
 
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
@@ -898,6 +950,7 @@ export default function CashFlow() {
     })
 
     // Weeks to delay every receipt by. 0 = the plan as entered.
+    const todayIso = isoDay(new Date())
     const riskDays = (Number(finance.riskWeeks) || 0) * 7
     // INVOICE FINANCE DRAWN - a liability repaid out of collections.
     //
@@ -1049,11 +1102,27 @@ export default function CashFlow() {
       // index mm-1. Adding one gets the last day of the FOLLOWING month: August's VAT
       // settles 30 September, which is when it actually moves.
       let vatIn = 0
+      let vatAssumedPaid = 0
       const vatSrcs = []
       for (const mk of Object.keys(vatByMonth)) {
         const [yy, mm] = mk.split('-').map(Number)
         const settles = isoDay(new Date(yy, mm + 1, 0))
-        if (inWk(settles)) { vatIn += vatByMonth[mk]; vatSrcs.push({ mk, src: vatSrcByMonth[mk] || 'estimate', amount: vatByMonth[mk], settles }) }
+        if (!inWk(settles)) continue
+        const src = vatSrcByMonth[mk] || 'estimate'
+        const amt = vatByMonth[mk]
+        // ALREADY SETTLED. A filed return whose settlement date has passed has moved -
+        // HMRC are reliable, and forecasting money that is already in the account counts
+        // it twice against the opening balance.
+        //
+        // Only where the return is FILED. A past-dated ESTIMATE is not evidence of
+        // anything, and dropping it would quietly remove real money.
+        if (settles < todayIso && src === 'filed') {
+          vatAssumedPaid += amt
+          vatSrcs.push({ mk, src, amount: amt, settles, assumedPaid: true })
+          continue
+        }
+        vatIn += amt
+        vatSrcs.push({ mk, src, amount: amt, settles })
       }
       // Any contributor that is not a filed return makes the week's figure an estimate.
       const vatEstimated = vatSrcs.some(x => x.src !== 'filed')
@@ -1351,7 +1420,7 @@ export default function CashFlow() {
         weekEnd: e,
         invoicesIn: Math.round(invoicesIn - ifRepaid), ifRepaid: Math.round(ifRepaid),
         invDetail: invDetail.sort((a, b) => b.amount - a.amount),
-        retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
+        retIn: Math.round(retIn), vatIn: Math.round(vatInPos), vatAssumedPaid: Math.round(vatAssumedPaid),
         vatEstimated, vatSrcs, cisEstimated,
         cisDetail: inWkCis,
         bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), commDetail, vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
@@ -1419,7 +1488,7 @@ export default function CashFlow() {
     return rows
   // finance is in the deps because the VAT reclaim estimate reads finance.vatRate -
   // without it the forecast would keep a stale rate until something else changed.
-  }, [data, startCash, billOverrides, cisFlags, finance, manualBal, excluded])
+  }, [data, startCash, billOverrides, cisFlags, finance, manualBal, excluded, cardPays])
 
     // WORK WITH NO HOME: value that is neither certified nor still forecast.
   //
@@ -1971,6 +2040,56 @@ export default function CashFlow() {
                       )}
                     </div>
                     {manualBal.length === 0 && <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 6 }}>No manual balances set - the figures above are Xero&apos;s book balances and may be behind reconciliation.</div>}
+
+                    {/* CREDIT CARD CLEARANCE. Same store as the 12-month page - schedule it
+                        in either and both follow. Only the OPENING balance is cleared:
+                        ongoing card spend is already in Overheads and Bills, and paying it
+                        again would take the same cost out of the bank twice. */}
+                    <div style={{ borderTop: '1px solid #eceae5', marginTop: 14, paddingTop: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: 13, color: INK }}>Credit card clearance</strong>
+                        <span style={{ fontSize: 11.5, color: '#8a857c', maxWidth: 620 }}>
+                          Pay down what each card owes today. Shared with the 12-month cash flow. Payments show in
+                          Financing &amp; tax; cards are not in opening cash, so a payment is a real outflow.
+                        </span>
+                        {cardMsg ? <span style={{ fontSize: 11.5, color: cardMsg === 'NOT SAVED' ? '#dc2626' : '#16a34a' }}>{cardMsg}</span> : null}
+                      </div>
+                      {manualBal.filter(b => b && b.kind === 'card' && String(b.name || '').trim()).length === 0 ? (
+                        <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 6 }}>
+                          No card accounts. Add one above with kind &quot;Card&quot; and a NEGATIVE balance.
+                        </div>
+                      ) : manualBal.filter(b => b && b.kind === 'card' && String(b.name || '').trim()).map(c => {
+                        const nm = String(c.name).trim()
+                        const owed = Math.abs(Number(c.balance) || 0)
+                        const sched = cardPays.filter(x => x.card === nm).reduce((t, x) => t + Math.abs(Number(x.amount) || 0), 0)
+                        return (
+                          <div key={nm} style={{ borderTop: '1px solid #f5f4f1', padding: '8px 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <strong style={{ fontSize: 12.5, minWidth: 150 }}>{nm}</strong>
+                              <span style={{ fontSize: 12, color: '#dc2626' }}>owes {gbp(owed)}</span>
+                              <span style={{ fontSize: 12, color: sched > owed ? '#b45309' : '#8a857c' }}>
+                                scheduled {gbp(Math.min(sched, owed))}{sched > owed ? ` (${gbp(sched)} entered - capped at the balance)` : ''}
+                              </span>
+                              <button onClick={() => saveCardPays([...cardPays, { card: nm, date: new Date().toISOString().slice(0, 10), month: new Date().toISOString().slice(0, 7), amount: 0 }])}
+                                style={{ background: '#fff', border: '1px solid #ddd9d2', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', color: '#57534e' }}>+ payment</button>
+                            </div>
+                            {cardPays.map((x, i) => x.card !== nm ? null : (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, marginLeft: 12 }}>
+                                <input type="date" value={x.date || ''}
+                                  onChange={e => saveCardPays(cardPays.map((y, j) => j === i ? { ...y, date: e.target.value, month: String(e.target.value || '').slice(0, 7) } : y))}
+                                  style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12 }} />
+                                <input type="number" value={x.amount}
+                                  onChange={e => setCardPays(cardPays.map((y, j) => j === i ? { ...y, amount: e.target.value } : y))}
+                                  onBlur={() => saveCardPays(cardPays.map(y => ({ ...y, amount: Math.abs(Number(y.amount) || 0) })))}
+                                  style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, width: 110, textAlign: 'right' }} />
+                                <button onClick={() => saveCardPays(cardPays.filter((y, j) => j !== i))}
+                                  style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 12, cursor: 'pointer' }}>remove</button>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   {/* Facility settings */}
@@ -2147,12 +2266,16 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of
                           numbers. Anything not from a filed return is labelled. */}
-                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc', cursor: r.vatIn ? 'pointer' : 'default' }}
-                        onClick={() => r.vatIn && setOpenVatWk(openVatWk === i ? null : i)}
+                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : (r.vatAssumedPaid ? '#b0aca4' : '#ccc'), cursor: (r.vatIn || r.vatAssumedPaid) ? 'pointer' : 'default' }}
+                        onClick={() => (r.vatIn || r.vatAssumedPaid) && setOpenVatWk(openVatWk === i ? null : i)}
                         title={r.vatSrcs && r.vatSrcs.length ? r.vatSrcs.map(x => `${x.mk}: ${x.src === 'filed' ? 'filed return' : x.src === 'reclaim' ? 'estimated reclaim on forecast materials and bills' : 'VAT estimate'}`).join('; ') : ''}>
-                        {r.vatIn ? gbp(r.vatIn) : '-'}
+                        {r.vatIn ? gbp(r.vatIn) : (r.vatAssumedPaid ? <span style={{ textDecoration: 'line-through' }}>{gbp(r.vatAssumedPaid)}</span> : '-')}
                         {r.vatIn && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
-                        {r.vatIn ? <Caret open={openVatWk === i} /> : null}
+                        {/* Greyed and struck through, NOT removed. The reminder that it has
+                            already moved is the point - a blank cell would just look like a
+                            month with no VAT in it. */}
+                        {!r.vatIn && r.vatAssumedPaid ? <div style={{ fontSize: 8.5, fontWeight: 700, color: '#b0aca4', letterSpacing: 0.3 }}>ASSUMED PAID</div> : null}
+                        {(r.vatIn || r.vatAssumedPaid) ? <Caret open={openVatWk === i} /> : null}
                       </td>
                       {/* On the arrears row this is a mix of overdue bills and certified-
                           but-uninvoiced cost. Clicking opens exactly what it is made of,
@@ -2413,14 +2536,16 @@ export default function CashFlow() {
                           </tr></thead>
                           <tbody>
                             {(forecast[openVatWk].vatSrcs || []).map((x, k) => (
-                              <tr key={k} style={{ borderTop: '1px solid #e8f0ea' }}>
+                              <tr key={k} style={{ borderTop: '1px solid #e8f0ea', opacity: x.assumedPaid ? 0.55 : 1 }}>
                                 <td style={{ padding: '3px 6px' }}>{monthName(x.mk)}</td>
-                                <td style={{ padding: '3px 6px', color: x.src === 'filed' ? '#16a34a' : '#b45309' }}>
-                                  {x.src === 'filed' ? 'Filed return - Box 5 as submitted'
+                                <td style={{ padding: '3px 6px', color: x.assumedPaid ? '#8a857c' : (x.src === 'filed' ? '#16a34a' : '#b45309') }}>
+                                  {x.assumedPaid
+                                    ? `ASSUMED PAID - filed return, settled ${x.settles}, out of the forecast`
+                                    : x.src === 'filed' ? 'Filed return - Box 5 as submitted'
                                     : x.src === 'reclaim' ? `Estimated reclaim: forecast materials and bills that month x ${finance.vatRate}/${100 + Number(finance.vatRate || 0)}`
                                     : 'Current VAT estimate'}
                                 </td>
-                                <td style={{ padding: '3px 6px', textAlign: 'right', color: x.amount < 0 ? '#dc2626' : '#0f766e' }}>{gbp(x.amount)}</td>
+                                <td style={{ padding: '3px 6px', textAlign: 'right', textDecoration: x.assumedPaid ? 'line-through' : 'none', color: x.assumedPaid ? '#b0aca4' : (x.amount < 0 ? '#dc2626' : '#0f766e') }}>{gbp(x.amount)}</td>
                               </tr>
                             ))}
                           </tbody>

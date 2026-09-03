@@ -163,7 +163,10 @@ export default function MonthlyCashFlow() {
     for (const mk of months) {
       let paid = 0
       for (const p of cardPays) {
-        if (p.month !== mk) continue
+        // A row scheduled on the 13-week carries an exact date; the month is derived from
+        // it. Reading `month` alone would miss anything entered over there.
+        const pm = p.month || String(p.date || '').slice(0, 7)
+        if (pm !== mk) continue
         const name = String(p.card || '')
         if (left[name] == null) continue
         // Capped at what is left - you cannot repay more than you owe, and letting the

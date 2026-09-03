@@ -1,7 +1,7 @@
-pkg746 - Bibby: customers were never resolved
+pkg748 - Credit card clearance on the 13-week
 ==============================================
 
-DEPLOY OVER pkg745 (contains 742-745). Four files.
+DEPLOY OVER pkg747 (contains 742-747). Four files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -9,51 +9,49 @@ REPLACE:
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-WHAT WAS WRONG
+WHAT
+----
+A "Credit card clearance" section directly below Balances on the 13-week. Each
+card shows what it owes, what is scheduled, and lets you add payments - but with
+a DATE rather than a month, because a week-by-week forecast needs the day.
+
+ONE STORE, BOTH PAGES
+---------------------
+It shares config:card-payments with the 12-month. Schedule in either and both
+follow. A row carries an optional exact date; the month is derived from it.
+
+  entered on the 13-week   date 2026-09-18  -> 12-month puts it in 2026-09
+  entered on the 12-month  month 2026-10    -> 13-week puts it on 2026-10-31
+                                               (month end: no day given, and
+                                                that is when a card statement is
+                                                normally settled)
+
+Two separate schedules for the same payments would drift the first time either
+was edited - which is the fault that has cost the most time on this system.
+
+WHERE IT SHOWS
 --------------
-Every row read "(no customer)" and the project showed as "L:J248" - the raw key,
-not the job number. With no customer name, limits[cust] finds nothing, insured
-resolves to 0, and the rule "no limit recorded means none of it is insurable"
-disapproves the lot. Hence 1,367,621 applied for, 1,367,621 over insured limit,
-£0 advance.
+In FINANCING & TAX, alongside vehicle finance and the balance sheet items. Card
+repayment is financing, and a new column would have meant touching the header,
+body, totals and drill-down colSpan again for no gain. The drill-down names it
+"<card> - card payment".
 
-The insured limit list was never the problem. The names never arrived.
+THE RULE, same as the 12-month
+-------------------------------
+Only the OPENING balance is scheduled. Your ongoing card spend is already in
+Overheads and Bills; treating a payment as a general outflow would take the same
+cost out of the bank twice.
 
-WHY
----
-dashByNo and dashCustByNo were built from dashboard:cache alone. That key has a
-four-hour TTL, so when it is cold every forecast comes back with a blank
-projectName and a blank customer.
+Payments are capped at what is left on that card, so a balance cannot go through
+zero and invent cash. Enter more than is owed and the panel says so.
 
-The Forecast P&L shows "J248-Renshaw House" from the SAME payload, because it
-happened to load while the cache was warm. Your whole Bibby funding position
-depended on whether somebody had opened the Dashboard recently.
-
-Same class of fault as the receivables source flip - I fixed that one earlier
-today and left the project labels sitting on the same cache.
-
-THE FIX
--------
-A persistent index, config:project-index. Seeded from the store, overlaid with
-the cache when warm, written back afterwards. Names now survive the TTL.
-
-AND, so this cannot hide again: a blank customer is no longer reported as an
-uninsured one. A red banner says how many applications and how much value have
-no customer attached, and states plainly that it is missing data rather than a
-credit decision.
-
-ALSO IN THIS PACKAGE
---------------------
-pkg745  VAT was settling a month early on BOTH cash flows. August's VAT now
-        moves at the end of September, not the end of August.
-pkg744  The marker prints the stored kind of every manual balance.
-pkg743  Overdue brought-forward row removed, reported in an amber bar instead.
-pkg742  "Invoice finance drawn" persists; resizable lists.
+Cards are excluded from opening cash, so a payment is a real outflow - bank
+down, card debt down, net position unchanged.
 
 WHAT TO CHECK
 -------------
-  1. Deploy, open the DASHBOARD once (that seeds the index), then the Bibby page.
-  2. Customers and job numbers should appear on the drill-down rows.
-  3. "Over insured limit" should no longer equal "Applied for" on every month.
-  4. If the red banner is still showing afterwards, those projects genuinely have
-     no customer in their settings - tell me which and I will look there.
+  - Schedule a payment on AMEX or Capital on Tap and it appears in Financing &
+    tax in that week, with the drill-down naming the card.
+  - The same payment shows in the Cards column on the 12-month.
+  - Enter more than the balance: the panel flags it and the forecast uses the
+    capped figure.

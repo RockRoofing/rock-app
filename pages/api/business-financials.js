@@ -1329,7 +1329,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg746',
+        build: 'pkg748',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,
@@ -1588,10 +1588,17 @@ export default async function handler(req, res) {
     try {
       const list = Array.isArray((req.body || {}).cardPayments) ? req.body.cardPayments : []
       const clean = list
-        .filter(x => x && String(x.card || '').trim() && /^\d{4}-\d{2}$/.test(String(x.month || '')))
+        // A row is valid with a month; a date is optional and implies the month.
+        .filter(x => x && String(x.card || '').trim())
+        .map(x => ({ ...x, month: /^\d{4}-\d{2}$/.test(String(x.month || '')) ? x.month : String(x.date || '').slice(0, 7) }))
+        .filter(x => /^\d{4}-\d{2}$/.test(String(x.month || '')))
         .map(x => ({
           card: String(x.card).trim().slice(0, 80),
           month: String(x.month).slice(0, 7),
+          // OPTIONAL EXACT DATE, for the 13-week. The 12-month buckets by month and does
+          // not care which day; the 13-week does. One store either way - two schedules
+          // for the same payments would drift the moment one was edited.
+          date: /^\d{4}-\d{2}-\d{2}$/.test(String(x.date || '')) ? String(x.date) : '',
           amount: Math.abs(Number(x.amount) || 0),
         }))
       await redis.set('config:card-payments', clean)
