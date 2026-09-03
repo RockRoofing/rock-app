@@ -1,69 +1,74 @@
-pkg731 - Download Business Financials as PDF
-=============================================
+pkg733 - Cash flow receivables: ONE source, typed, no cache flip
+=================================================================
 
-SUPERSEDES pkg724-730. Contains every file from all of them.
-
-NEW FILE - create this in GitHub:
-  pages/business-financials/export.js
+SUPERSEDES pkg724-732. Contains every file from all of them.
 
 REPLACE:
-  pages/business-financials.js                          (adds the Download PDF button)
-  components/BizNav.js                                  (adds the tab, hides nav on export)
-  lib/forecastMonths.js                                 (as pkg730)
-  pages/business-financials/forecast-pl.js              (as pkg730)
-  pages/business-financials/forecast-balance-sheet.js   (as pkg727)
-  pages/business-financials/monthly.js                  (as pkg725)
-  pages/api/business-financials.js                      (as pkg729)
+  pages/api/business-financials.js                      (changed here)
+  pages/business-financials/cashflow.js                 (changed here)
+  everything else as pkg732
 
-HOW IT WORKS
-------------
-"Download PDF" next to the month selector on Summary, and a tab in the nav.
+NEW FILE (from pkg731, create if not already done):
+  pages/business-financials/export.js
 
-Tick any of the 17 tabs, press Load, then Download PDF. Each tab starts on a new
-page. Select all / Clear for the whole set. Paper defaults to A3 landscape so the
-12-column tables fit; A4 landscape is there if you prefer.
+WHAT THIS FIXES
+---------------
+This is the fix we agreed at the START of this session and I never shipped. I
+described it, you approved it, then we moved to the P&L work and it was left.
+Everything built since has been sitting on top of the flip.
 
-Add ?tabs=forecast-pl,cashflow,budgets to the URL to pre-tick a set - bookmark it
-for a monthly pack.
+The cash flow read receivables from dashboard:cache when that key existed, and
+from bank:outstanding-receivables when it did not. Two sources, one number, and
+which one you got depended on whether anyone had opened the Dashboard in the last
+four hours. That is why the opening balance moved on its own and moved back on
+its own.
 
-WHY IT IS NOT SERVER-SIDE
---------------------------
-The obvious build is pdf-lib on the server. That would mean a SECOND implementation
-of all seventeen models.
+The cache rows were built WITHOUT a type field. The guard downstream read
+`i.type && i.type !== 'ACCREC'` - and an ABSENT type makes that test pass. So
+every row went through, supplier bills included, counted as money in and swept
+into "Overdue - brought forward".
 
-Every time this codebase has held two implementations of one rule they have drifted -
-the Budgets page against the API, the P&L against the balance sheet, the cash flow
-against its own fallback, the WIP window against the applications. A PDF that quietly
-disagreed with the screen would be worse than no PDF, because there would be no way
-to tell which one was wrong.
+NOW
+---
+Receivables come from bank:outstanding-receivables. Always. That store is a
+direct Xero pull with Type=="ACCREC" inside the WHERE clause plus a defensive
+post-filter, so it cannot contain bills.
 
-So the export mounts the REAL page components, fetching the REAL endpoints. What
-prints is what the page computes. Change a tab and the PDF changes with it - there is
-nothing to keep in step.
+dashboard:cache is still read, but ONLY to put a project name against a row.
+Labels may improve when it is warm. No figure changes either way.
 
-The trade is that it uses the browser's print engine, so it is two steps: Download
-PDF opens the print dialog, and you choose "Save as PDF".
+Guards inverted throughout: `i.type !== 'ACCREC'` now EXCLUDES an untyped row.
+The old test let it through - it failed open, which is how this kept returning.
+arrInvList and overdueIn had no guard at all; both have one now.
 
-TWO THINGS TO DO IN THE PRINT DIALOG
--------------------------------------
-  1. Destination: Save as PDF
-  2. Turn ON "Background graphics" - without it the shading and the colour coding
-     print white and the ACTUAL / MANUAL / forecast badges lose their meaning
+ABOUT MY EARLIER "STORE AUDIT"
+-------------------------------
+It reported zero supplier bills and I treated that as settled. It was a weak
+test: 122 known bill IDs against 1,048 invoice rows. bank:outstanding-bills only
+holds CURRENTLY outstanding bills and costs:bills only holds tagged ones, so any
+paid or untagged supplier bill had nothing to match against. A negative from
+that test meant very little and I should not have reported it as a clean bill of
+health.
 
-WHAT THE PRINT STYLESHEET HANDLES
-----------------------------------
-  - Nav, controls and buttons removed. INPUTS ARE KEPT deliberately - they carry
-    values you need to read (debtor days, retention %, manual month figures).
-  - Full-height tinted page frames flattened, so you do not get a blank sheet
-    before each tab.
-  - Horizontal scrollers unwrapped. On screen the wide tables scroll; printed
-    inside a scroller, every column past the edge silently vanishes.
-  - Rows kept whole across page breaks.
+EXPECT THE LEDGER TOTAL TO MOVE - THIS IS THE FIX WORKING
+----------------------------------------------------------
+The two sources had different SCOPE, not just different type-safety:
 
-NOTES
------
-  - Loading all 17 fires a lot of requests at once. Give it time, and check nothing
-    still says "Loading..." before printing - it prints that way.
-  - Each tab is wrapped in its own error boundary, so one page failing costs you
-    that page rather than the whole export.
-  - Admin only, same as the rest of the section.
+  dashboard:cache            project-linked invoices only
+  bank:outstanding-receivables   EVERY outstanding ACCREC, tagged or not
+
+So the total should go UP by the value of outstanding sales invoices that carry
+no project tag in Xero, and DOWN by any supplier bills that were wrongly in
+there. It should now tie to Xero's Aged Receivables.
+
+If it moves DOWN overall, that is worth telling me about - it would mean genuine
+sales invoices are missing from the store, which is a different problem.
+
+WHAT TO CHECK
+-------------
+  1. Open the Dashboard, then the Cash Flow. The opening balance must NOT change.
+     That single test is the whole point of this package.
+  2. Open the "Overdue - brought forward" drill-down. Supplier names should be
+     gone from the green "owed to us" rows.
+  3. Compare the invoices-owed total against Xero's Aged Receivables. They should
+     now agree.

@@ -918,49 +918,54 @@ export default async function handler(req, res) {
     const liveBankTotal = balancesStore && balancesStore.ok ? (balancesStore.bankTotal || 0) : null
     const openingCash = liveBankTotal != null ? liveBankTotal : cashAtBank
 
-    // Build receivables from the SAME source as the Invoices Owed page - the dashboard
-    // project invoice lines (project-linked outstanding invoices) - so the two pages
-    // reconcile. Falls back to bank:outstanding-receivables only if the dashboard cache
-    // is empty. Only outstanding (amountDue > 0) lines are kept.
-    let receivables
+    // ONE SOURCE FOR RECEIVABLES. bank:outstanding-receivables, always.
+    //
+    // This used to read dashboard:cache when that key existed and fall back to this store
+    // when it did not. Two sources for one number, and which you got depended on whether
+    // anyone had opened the Dashboard in the last four hours - so the opening balance
+    // moved on its own, and moved back on its own four hours later.
+    //
+    // Worse, the cache rows were built WITHOUT a type field, so the ACCREC guard
+    // downstream (`i.type && i.type !== 'ACCREC'`) could never fire on them: an absent
+    // field makes that test pass. Supplier bills therefore counted as money in.
+    //
+    // This store is a direct Xero pull with Type=="ACCREC" inside the WHERE clause and a
+    // defensive post-filter on inv.Type, so it cannot contain bills. It also ties to
+    // Xero's Aged Receivables, which the project-linked source never did - that one
+    // dropped every outstanding invoice with no project tag.
+    //
+    // The dashboard cache is still read, but ONLY to put a project name against a row.
+    // Labels may improve when it is warm; no figure changes either way.
+    const projByTracking = {}
     if (dashCache && Array.isArray(dashCache)) {
-      const rows = []
       for (const p of dashCache) {
-        for (const inv of (p._invoiceLines || [])) {
-          const total = inv.total || 0
-          const paid = inv.amountPaid || 0
-          const due = inv.amountDue != null ? inv.amountDue : (total - paid)
-          if (!(due > 0.005)) continue
-          const number = inv.invoiceNumber || ''
-          const meta = invoiceMeta[number] || null
-          rows.push({
-            id: inv.invoiceID || number,
-            number,
-            invoiceNumber: number,
-            contact: inv.contact || p.customer || '',
-            date: inv.date || '',
-            dueDate: inv.dueDate || '',
-            total,
-            amountDue: due,
-            reference: inv.reference || '',
-            expectedDate: (meta && meta.expectedDate) || '',
-            projectName: p.name || '',
-            projectNo: p.jobNo || '',
-          })
-        }
+        if (!p) continue
+        const rec = { projectName: p.name || '', projectNo: p.jobNo || '' }
+        if (p.name) projByTracking[String(p.name).trim().toLowerCase()] = rec
+        if (p.jobNo) projByTracking[String(p.jobNo).trim().toLowerCase()] = rec
       }
-      receivables = rows
-    } else {
-      // Fallback: all outstanding receivables (previous behaviour).
-      receivables = (recStore.items || []).map(i => {
-        const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
-        // expectedConfirmed comes through too. The Invoices Owed page has recorded whether
-        // a date was agreed with the customer or merely typed, and nothing downstream was
-        // reading it - so a confirmed date and a guess carried identical weight in the
-        // forecast.
-        return { ...i, expectedDate: (meta && meta.expectedDate) || '', expectedConfirmed: !!(meta && meta.expectedConfirmed) }
-      })
     }
+    const receivables = (recStore.items || [])
+      // Belt and braces. The store is typed at source, but this is the row that ends up
+      // in the arrears line as money in, and a bill there is the fault that keeps coming
+      // back. An absent type is treated as NOT a receivable here - the opposite of the
+      // old guard, which let anything untyped through.
+      .filter(i => i && i.type === 'ACCREC')
+      .map(i => {
+        const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
+        const key = String(i.trackingProject || '').trim().toLowerCase()
+        const proj = projByTracking[key] || null
+        // expectedConfirmed comes through too. The Invoices Owed page records whether a
+        // date was agreed with the customer or merely typed, and nothing downstream read
+        // it - so a confirmed date and a guess carried identical weight in the forecast.
+        return {
+          ...i,
+          expectedDate: (meta && meta.expectedDate) || '',
+          expectedConfirmed: !!(meta && meta.expectedConfirmed),
+          projectName: proj ? proj.projectName : (i.trackingProject || ''),
+          projectNo: proj ? proj.projectNo : '',
+        }
+      })
 
     // Attach planned payment date + CIS status. CIS auto-defaults to bills on account
     // 321 (cisAuto from the sync); a manual flag in config overrides it either way.
@@ -1240,7 +1245,34 @@ export default async function handler(req, res) {
       }
     } catch {}
 
+    // PER-PROJECT VALUE AND WHAT HAS BEEN CLAIMED OF IT.
+    //
+    // For the "not yet forecast" warning. Once an application supersedes a forecast, the
+    // forecast is dropped whole - and if the application came in under it, the shortfall
+    // does not roll anywhere. Nothing currently says so.
+    //
+    // afaGross is contract plus INSTRUCTED variations, with a sent application's own
+    // Anticipated Final Account taking precedence where one exists. appliedForLatest is
+    // the cumulative GROSS certified at the latest application. Both are already computed
+    // on the dashboard record; neither reached this page.
+    const projectValues = (Array.isArray(dashCache) ? dashCache : [])
+      .filter(p => p && p.jobNo)
+      .map(p => ({
+        projectNo: String(p.jobNo),
+        name: p.name || '',
+        afaGross: Number(p.afaGross) || 0,
+        certifiedGross: Number(p.appliedForLatest) || 0,
+        // Stored as BOTH a fraction and a percentage depending on when it was saved.
+        retentionPct: (() => {
+          const rp = Number(p.retentionPct) || 0
+          return rp > 0 && rp < 1 ? rp : rp / 100
+        })(),
+        status: p.status || '',
+      }))
+
     return res.json({
+      projectValues,
+      projectValuesFromCache: Array.isArray(dashCache) && dashCache.length > 0,
       cashAtBank: openingCash,
       cashAtBankLegacy: cashAtBank,
       balances: balancesStore || null,
