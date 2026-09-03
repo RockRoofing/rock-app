@@ -619,7 +619,7 @@ export default function CashFlow() {
     // An invoice matching neither is dropped in silence: no date at all, or a date pushed
     // past the 13-week window by the payment-performance offset. Nothing counted it and
     // nothing said so, and the column simply read lower than the ledger.
-    const placedInv = new Set()
+    const placedInv = new Map()   // invKey -> which week it landed in
 
 
     const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
@@ -1028,7 +1028,7 @@ export default function CashFlow() {
         if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue   // payables excluded; sales credit notes belong here as negatives
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) {
-          placedInv.add(invKey(i))
+          placedInv.set(invKey(i), 'arrears')
           arrInvoices += (i.amountDue || 0)
           // Recorded in the SAME shape as a normal week, so the arrears row's drill-down
           // works like every other. It was showing "Total (0)" against 434,338 - the
@@ -1038,7 +1038,7 @@ export default function CashFlow() {
             offset: 0, total: i.total || 0 })
         }
         else if (inWkIn(d, offsetFor(i))) {
-          placedInv.add(invKey(i))
+          placedInv.set(invKey(i), `w/c ${s}`)
           invoicesIn += (i.amountDue || 0)
           // Kept so the week can say WHICH invoices, the same way Overheads out does.
           invDetail.push({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '',
@@ -1383,12 +1383,26 @@ export default function CashFlow() {
     // consumers are untouched; the strip under the table reads it.
     const lastWeekEnd = rows.reduce((acc, r) => (r.weekEnd && r.weekEnd > acc) ? r.weekEnd : acc, '')
     const missed = []
+    const placements = []
     for (const i of (data.receivables || [])) {
-      if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue
-      if (excluded[invKey(i)]) continue
-      if (placedInv.has(invKey(i))) continue
+      const key = invKey(i)
       const d = i.expectedDate || i.dueDate || ''
       const off = offsetRule(i)
+      const isExcl = !!excluded[key]
+      const wrongType = i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT'
+      const landed = placedInv.get(key) || null
+      // EVERY receivable, whatever happened to it. A diagnostic that only renders when
+      // it finds something cannot tell "nothing is wrong" from "not running" - which is
+      // exactly the position the last one left us in.
+      placements.push({
+        ref: i.invoiceNumber || i.number || '', name: i.contact || '(no customer)',
+        amount: i.amountDue || 0, date: d, offset: off,
+        landed: wrongType ? `EXCLUDED - type ${i.type || '(none)'}`
+          : isExcl ? 'EXCLUDED - unticked below'
+          : landed || 'NOT PLACED',
+        ok: !wrongType && !isExcl && !!landed,
+      })
+      if (wrongType || isExcl || landed) continue
       missed.push({
         name: i.contact || '(no customer)',
         ref: i.invoiceNumber || i.number || '',
@@ -1408,7 +1422,10 @@ export default function CashFlow() {
     const excludedTotal = (data.receivables || [])
       .filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT') && excluded[invKey(i)])
       .reduce((t, i) => t + (i.amountDue || 0), 0)
+    placements.sort((x, y) => (x.ok === y.ok) ? Math.abs(y.amount) - Math.abs(x.amount) : (x.ok ? 1 : -1))
     rows.recon = {
+      placements,
+      placedTotal: placements.filter(x => x.ok).reduce((t, x) => t + x.amount, 0),
       owedTotal, excludedTotal,
       missedTotal: missed.reduce((t, m) => t + m.amount, 0),
       missed,
@@ -1713,36 +1730,42 @@ export default function CashFlow() {
                     </details>
                   )}
 
-                  {/* WHERE THE LEDGER AND THE FORECAST DISAGREE.
-                      Owed, less what you excluded, less anything that never landed in a
-                      week, should equal invoices in. Anything left over is itemised. */}
-                  {forecast.recon && forecast.recon.missed.length > 0 && (
-                    <details open style={{ marginBottom: 10 }}>
-                      <summary style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, color: '#991b1b', cursor: 'pointer', listStyle: 'none' }}>
-                        <strong>{gbp(forecast.recon.missedTotal)} of invoices owed never landed in any week</strong>
-                        {' '}({forecast.recon.missed.length} of {forecast.recon.count}). Total owed {gbp(forecast.recon.owedTotal)}
-                        {forecast.recon.excludedTotal ? `, of which ${gbp(forecast.recon.excludedTotal)} you excluded` : ''}.
-                        {' '}Click for the list and the reason for each.
+                  {/* PLACEMENT MAP. Renders ALWAYS, even when everything is fine - a
+                      strip that only appears on failure cannot tell "nothing is wrong"
+                      from "not running", which is where the last one left us. */}
+                  {forecast.recon && (
+                    <details style={{ marginBottom: 10 }}>
+                      <summary style={{
+                        background: forecast.recon.missed.length ? '#fef2f2' : '#f0fdf4',
+                        border: `1px solid ${forecast.recon.missed.length ? '#fecaca' : '#bbf7d0'}`,
+                        borderLeft: `4px solid ${forecast.recon.missed.length ? '#b91c1c' : '#16a34a'}`,
+                        borderRadius: 8, padding: '9px 14px', fontSize: 12.5,
+                        color: forecast.recon.missed.length ? '#991b1b' : '#166534',
+                        cursor: 'pointer', listStyle: 'none' }}>
+                        <strong>Placement check:</strong> {forecast.recon.count} receivables,
+                        {' '}{forecast.recon.placements.filter(p => p.ok).length} placed ({gbp(forecast.recon.placedTotal)}),
+                        {' '}{forecast.recon.missed.length} not placed ({gbp(forecast.recon.missedTotal)}),
+                        {' '}total owed {gbp(forecast.recon.owedTotal)}. Click for every invoice and where it landed.
                       </summary>
-                      <div style={{ border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fffafa', padding: '10px 14px', overflowX: 'auto' }}>
+                      <div style={{ border: '1px solid #e6e3dc', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fff', padding: '10px 14px', maxHeight: 420, overflow: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead><tr style={{ borderBottom: '1px solid #fecaca' }}>
-                            <th style={{ ...th, textAlign: 'left' }}>Customer</th>
+                          <thead><tr style={{ borderBottom: '1px solid #eee' }}>
                             <th style={{ ...th, textAlign: 'left' }}>Invoice</th>
+                            <th style={{ ...th, textAlign: 'left' }}>Customer</th>
                             <th style={th}>Date used</th>
                             <th style={th}>Offset</th>
                             <th style={th}>Amount</th>
-                            <th style={{ ...th, textAlign: 'left' }}>Why it is not in the forecast</th>
+                            <th style={{ ...th, textAlign: 'left' }}>Landed in</th>
                           </tr></thead>
                           <tbody>
-                            {forecast.recon.missed.map((m, i) => (
-                              <tr key={m.ref + i} style={{ borderBottom: '1px solid #fdeaea' }}>
+                            {forecast.recon.placements.map((m, i) => (
+                              <tr key={m.ref + i} style={{ borderBottom: '1px solid #f5f4f1', background: m.ok ? 'transparent' : '#fffafa' }}>
+                                <td style={{ ...td, textAlign: 'left' }}>{m.ref || '-'}</td>
                                 <td style={{ ...td, textAlign: 'left' }}>{m.name}</td>
-                                <td style={{ ...td, textAlign: 'left', color: '#999' }}>{m.ref || '-'}</td>
                                 <td style={td}>{m.date || <span style={{ color: '#dc2626' }}>none</span>}</td>
                                 <td style={{ ...td, color: m.offset ? '#b45309' : '#ccc' }}>{m.offset ? `+${m.offset}d` : '-'}</td>
                                 <td style={{ ...td, fontWeight: 600 }}>{gbp(m.amount)}</td>
-                                <td style={{ ...td, textAlign: 'left', color: '#991b1b' }}>{m.reason}</td>
+                                <td style={{ ...td, textAlign: 'left', color: m.ok ? '#166534' : '#991b1b', fontWeight: m.ok ? 400 : 700 }}>{m.landed}</td>
                               </tr>
                             ))}
                           </tbody>

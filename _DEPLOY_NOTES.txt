@@ -1,43 +1,51 @@
-pkg739 - The 1.96m was mine. Warning now uses remaining-to-claim
-=================================================================
+pkg740 - Placement map: every invoice, and where it landed
+===========================================================
 
-DEPLOY OVER pkg738. Two files. Contains pkg737 and pkg738.
+DEPLOY OVER pkg739. Two files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-YOU WERE RIGHT
---------------
-The warning compared afaGross (contract + instructed variations - the WHOLE job)
-against appliedForLatest.
-
-appliedForLatest is initialised to 0 in dashboard.js and only filled when
-settings.applications has entries. Any project whose applications are not
-recorded there scored certified = 0, so the calculation became
-
-    whole contract - 0 - forecast
-
-and reported the entire job as unallocated. Twelve projects at roughly 164k
-average is exactly that. The project forecasts were never the problem.
-
-NOW
+WHY
 ---
-    remainingToClaim - still-forecast
+Risk shift is 0 and the total did not move, so that theory was wrong.
 
-remainingToClaim is max(0, afa - grossInvoiced - wip), computed on the dashboard
-record and anchored on what XERO says has been invoiced. It does not depend on
-anyone having typed applications into project settings.
+The real problem is that my last diagnostic only rendered when it found
+something. You got no red strip - which could mean "nothing is being dropped"
+OR "the check is not running". It cannot tell those apart, so it was useless
+exactly when it mattered.
 
-The table now shows Value (AFA), what has been invoiced/WIP'd off it, what is
-left to claim, what is still forecast, and the gap - so the working is visible
-rather than asserted.
+WHAT THIS DOES
+--------------
+A bar above the table that ALWAYS renders, green or red:
 
-Expect this figure to drop to something small, or vanish. If it does not, the
-remaining projects are worth looking at individually.
+  "Placement check: 45 receivables, N placed (£X), M not placed (£Y),
+   total owed £Z. Click for every invoice and where it landed."
 
-BUILD MARKER BUMPED TO pkg739
-------------------------------
-The marker still read pkg735 through 736, 737 and 738 because I never bumped
-the string. That made it useless for the one job it had - telling us which code
-was live. It now reads pkg739. I will bump it every package from here.
+Open it and you get all 45, one row each:
+
+  Invoice | Customer | Date used | Offset | Amount | Landed in
+
+"Landed in" says the actual week - "w/c 2026-08-31", "arrears" - or one of:
+
+  NOT PLACED                    matched no week and no arrears
+  EXCLUDED - unticked below     you removed it from the forecast
+  EXCLUDED - type (none)        wrong type on the row
+
+Not-placed rows are listed first and shaded.
+
+WHAT I NEED FROM YOU
+--------------------
+Open it, find INV-1772 (Kilburn Material On-Site, 04/09, £77,207) and send me
+that row plus the summary line.
+
+That one row answers it:
+  - "w/c 2026-08-31"  -> it IS in the forecast and I am misreading the table
+  - "NOT PLACED"      -> placement is broken and the date column tells me why
+  - "EXCLUDED ..."    -> it was filtered out, and the text says by what
+
+I have guessed four times on this. This is the instrument that stops the
+guessing - it reports on all 45 whether or not anything is wrong.
+
+Marker now reads pkg740.
