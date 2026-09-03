@@ -501,10 +501,15 @@ export default function CashFlow() {
     //
     // Everything that is not a card counts toward cash: bank accounts, and invoice finance
     // drawn (negative, already spent). Cards are held separately as debt.
-    const manualBankTotal = (data.manualBalances || [])
+    // LIVE STATE FIRST. The editor writes to manualBal and saves in the background; data
+    // is not refetched, so anything reading data.manualBalances sees the OLD values until
+    // the page is reloaded. Line 1608 already had this fix; these two did not - so
+    // changing an account kind appeared to do nothing at all.
+    const balancesNow = (manualBal && manualBal.length) ? manualBal : (data.manualBalances || [])
+    const manualBankTotal = balancesNow
       .filter(b => b && b.kind !== 'card')
       .reduce((t, b) => t + (Number(b.balance) || 0), 0)
-    const hasManualBank = (data.manualBalances || []).some(b => b && b.kind !== 'card')
+    const hasManualBank = balancesNow.some(b => b && b.kind !== 'card')
     const openBank = startCash !== ''
       ? Number(startCash)
       : (hasManualBank ? manualBankTotal : (data.cashAtBank || 0))
@@ -935,7 +940,7 @@ export default function CashFlow() {
     // better of the two: the liability is on screen, a new drawdown works naturally
     // (the balance goes further negative, the bank goes up), and it matches how cards
     // already work. Doing both would count it twice.
-    const ifAsAccount = (data.manualBalances || []).some(b => b && b.kind === 'if')
+    const ifAsAccount = balancesNow.some(b => b && b.kind === 'if')
     let ifDrawnLeft = (ifAsAccount || finance.repayIf === false)
       ? 0
       : Math.max(0, Number(data?.ifAvailability?.drawn) || 0)

@@ -1,51 +1,62 @@
-pkg740 - Placement map: every invoice, and where it landed
-===========================================================
+pkg741 - The 122,711: invoice finance counted twice
+====================================================
 
-DEPLOY OVER pkg739. Two files.
+DEPLOY OVER pkg740. Two files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-WHY
----
-Risk shift is 0 and the total did not move, so that theory was wrong.
-
-The real problem is that my last diagnostic only rendered when it found
-something. You got no red strip - which could mean "nothing is being dropped"
-OR "the check is not running". It cannot tell those apart, so it was useless
-exactly when it mattered.
-
-WHAT THIS DOES
+THE ARITHMETIC
 --------------
-A bar above the table that ALWAYS renders, green or red:
+  placed by the placement check    625,197
+  shown in Invoices in (13wk)      502,486   (512,779 less the 10,293 arrears)
+  difference                       122,711
 
-  "Placement check: 45 receivables, N placed (£X), M not placed (£Y),
-   total owed £Z. Click for every invoice and where it landed."
+122,711 is EXACTLY the invoice finance drawn figure on your net cash position.
 
-Open it and you get all 45, one row each:
+WHAT WAS HAPPENING
+------------------
+The model has a rule: if no manual balance is marked as invoice finance, it
+assumes the drawn balance is NOT in your cash figure, and repays it out of
+incoming invoices instead - diverting 122,711 away from Invoices in as the weeks
+pass.
 
-  Invoice | Customer | Date used | Offset | Amount | Landed in
+Bibby was entered as kind "Bank", so that rule fired. But the balance was ALSO
+reducing opening cash. Counted twice. The comment in the code says "doing both
+would count it twice" - the check just could not see the account.
 
-"Landed in" says the actual week - "w/c 2026-08-31", "arrears" - or one of:
+WHY CHANGING THE KIND DID NOT FIX IT
+-------------------------------------
+The dropdown does save 'if'. The problem is where the rule looks.
 
-  NOT PLACED                    matched no week and no arrears
-  EXCLUDED - unticked below     you removed it from the forecast
-  EXCLUDED - type (none)        wrong type on the row
+  the editor writes to      manualBal          (page state, saved in background)
+  the rule reads            data.manualBalances (API payload, NOT refetched)
 
-Not-placed rows are listed first and shaded.
+So the change was saved and invisible to the rule until a full reload. Line 1613
+already carried a comment about exactly this trap - it had been fixed in one
+place and left in three others.
 
-WHAT I NEED FROM YOU
---------------------
-Open it, find INV-1772 (Kilburn Material On-Site, 04/09, £77,207) and send me
-that row plus the summary line.
+Now fixed: manualBankTotal, hasManualBank and ifAsAccount all read live state,
+falling back to the payload only when local state is empty.
 
-That one row answers it:
-  - "w/c 2026-08-31"  -> it IS in the forecast and I am misreading the table
-  - "NOT PLACED"      -> placement is broken and the date column tells me why
-  - "EXCLUDED ..."    -> it was filtered out, and the text says by what
+WHAT TO CHECK
+-------------
+With Bibby set to "Invoice finance drawn":
 
-I have guessed four times on this. This is the instrument that stops the
-guessing - it reports on all 45 whether or not anything is wrong.
+  Invoices in (13-week total) should read about 625,197, not 512,779.
+  The placement check summary and the column should now agree.
+  Opening cash should NOT change - the balance still counts toward cash.
 
-Marker now reads pkg740.
+If Invoices in is still 512,779 after this, then ifAsAccount is still false and
+the kind did not save - tell me and I will show the stored value on the marker.
+
+STILL OUTSTANDING, in your order
+---------------------------------
+  1. This - get the balance right
+  2. Overdue brought forward: the 10,293 is NOT applied for. It is the forecast's
+     own sales schedule, inferred as "certified" purely because an application
+     date covers the period end. To be dropped, invoices in to come only from
+     the outstanding invoices list.
+  3. Resizable Bills to Pay / Invoices Owed tables
+  4. Commercial portal flag for dropped forecast value
