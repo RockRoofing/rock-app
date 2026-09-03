@@ -1082,6 +1082,22 @@ export default async function handler(req, res) {
       const dashByNo = {}
       // Latest application valuation date per job number, for the supersede rule below.
       const recByNo = {}
+      // A PERSISTENT INDEX, not the four-hour cache.
+      //
+      // These maps were built from dashboard:cache alone. When that key is cold every
+      // forecast comes back with a blank projectName and a blank customer - and on the
+      // Bibby page a blank customer matches no insured limit, so every application is
+      // disapproved and availability reads zero. The funding position depended on
+      // whether somebody had opened the Dashboard in the last four hours.
+      //
+      // Seed from the stored index first, then overlay the cache when it is warm, and
+      // write the result back. The names then survive the TTL.
+      const idxStored = await redis.get('config:project-index').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({}))
+      for (const [jn, rec] of Object.entries(idxStored)) {
+        if (!rec) continue
+        dashByNo[jn] = rec.name || ''
+        dashCustByNo[jn] = rec.customer || ''
+      }
       for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
         if (!p.jobNo) continue
         dashByNo[String(p.jobNo)] = p.name || ''
@@ -1091,6 +1107,16 @@ export default async function handler(req, res) {
         // So latestAppEnd was always empty and the supersede rule never fired once, which
         // is why the double count survived.
         recByNo[String(p.jobNo)] = p.latestAppEnd || ''
+      }
+      // Persist whatever we now know. Only when the cache was warm - writing a map built
+      // purely from the stored index back over itself achieves nothing and would freeze
+      // a stale name in place.
+      if (Array.isArray(dashCache) && dashCache.length) {
+        const idxNext = {}
+        for (const jn of Object.keys(dashByNo)) {
+          idxNext[jn] = { name: dashByNo[jn] || '', customer: dashCustByNo[jn] || '' }
+        }
+        redis.set('config:project-index', idxNext).catch(() => {})
       }
       for (const k of keys) {
         const pk = k.replace('cashflow:hyp-apps:', '')
@@ -1303,7 +1329,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg745',
+        build: 'pkg746',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,

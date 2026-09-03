@@ -1,55 +1,59 @@
-pkg745 - VAT was running a month early on BOTH cash flows
-==========================================================
+pkg746 - Bibby: customers were never resolved
+==============================================
 
-DEPLOY OVER pkg743. Three files. Contains pkg742, pkg743 and pkg744.
+DEPLOY OVER pkg745 (contains 742-745). Four files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/monthly.js
+  pages/business-financials/invoice-finance.js
 
-THE VAT FAULT
+WHAT WAS WRONG
+--------------
+Every row read "(no customer)" and the project showed as "L:J248" - the raw key,
+not the job number. With no customer name, limits[cust] finds nothing, insured
+resolves to 0, and the rule "no limit recorded means none of it is insurable"
+disapproves the lot. Hence 1,367,621 applied for, 1,367,621 over insured limit,
+£0 advance.
+
+The insured limit list was never the problem. The names never arrived.
+
+WHY
+---
+dashByNo and dashCustByNo were built from dashboard:cache alone. That key has a
+four-hour TTL, so when it is cold every forecast comes back with a blank
+projectName and a blank customer.
+
+The Forecast P&L shows "J248-Renshaw House" from the SAME payload, because it
+happened to load while the cache was warm. Your whole Bibby funding position
+depended on whether somebody had opened the Dashboard recently.
+
+Same class of fault as the receivables source flip - I fixed that one earlier
+today and left the project labels sitting on the same cache.
+
+THE FIX
+-------
+A persistent index, config:project-index. Seeded from the store, overlaid with
+the cache when warm, written back afterwards. Names now survive the TTL.
+
+AND, so this cannot hide again: a blank customer is no longer reported as an
+uninsured one. A red banner says how many applications and how much value have
+no customer attached, and states plainly that it is missing data rather than a
+credit decision.
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg745  VAT was settling a month early on BOTH cash flows. August's VAT now
+        moves at the end of September, not the end of August.
+pkg744  The marker prints the stored kind of every manual balance.
+pkg743  Overdue brought-forward row removed, reported in an amber bar instead.
+pkg742  "Invoice finance drawn" persists; resizable lists.
+
+WHAT TO CHECK
 -------------
-13-week. The settlement date was:
-
-    const monthEnd = isoDay(new Date(yy, mm, 0))
-
-JS months are zero-based, so for "2026-08" that is 31 AUGUST - the end of the
-VAT month itself. Every month's VAT was landing in the month it was earned, with
-no lag at all. Now `new Date(yy, mm + 1, 0)`: August settles 30 September.
-
-12-month. Same fault, different shape - it put month mk's VAT in month mk. The
-row now reads the PREVIOUS month's VAT, on both the filed figure and the
-estimate. What moves in September is August's VAT.
-
-Both checked across the December/January boundary.
-
-EFFECT: every VAT receipt and payment moves one month later on both pages. On
-the 13-week the 18,193 currently sitting in w/c 31 Aug should move out to the
-end of September, and the weeks after shift with it.
-
-I have NOT added the extra 7 days. HMRC's deadline is a month and 7 days after
-the period, so a PAYMENT is really due 7 October for August. You said end of
-September, so that is what this does. Say the word and I will add the 7 days -
-it is a one-line change, and it matters more for payments than refunds.
-
-ALSO IN THIS PACKAGE (pkg744)
-------------------------------
-The marker now shows the STORED kind for every manual balance, straight off
-Redis:
-
-  stored account kinds: Metrobank=bank, AMEX=card, Capital on T=card, Bibby=bank
-
-Bibby still reverting to Bank makes no sense against the code - I have checked
-the save handler, the store (one writer in the whole codebase) and the load
-path, and all three are clean in my copy. So read that line after deploying:
-
-  build pkg745 and Bibby=bank  -> the save is genuinely losing it; tell me and I
-                                  will instrument the request itself
-  build pkg745 and Bibby=if    -> it saved, and something downstream ignores it
-  build below pkg745           -> the deploy has not landed
-
-WORKAROUND MEANWHILE: Facilities has "repay invoice finance from collections".
-Turning that off achieves the same thing as the account kind - it stops the
-122,711 being taken out of Invoices in - and it saves through a different
-handler.
+  1. Deploy, open the DASHBOARD once (that seeds the index), then the Bibby page.
+  2. Customers and job numbers should appear on the drill-down rows.
+  3. "Over insured limit" should no longer equal "Applied for" on every month.
+  4. If the red banner is still showing afterwards, those projects genuinely have
+     no customer in their settings - tell me which and I will look there.

@@ -308,7 +308,11 @@ export default function InvoiceFinance() {
     const rate = (Number(settings.advanceRate) || 0) / 100
     const rows = []
     for (const fc of (cf?.projForecasts || [])) {
+      // A BLANK CUSTOMER IS NOT AN UNINSURED CUSTOMER. Where the name never resolved,
+      // no limit can match and the row is disapproved in full - which reads identically
+      // to a real customer with no cover. The two need telling apart.
       const cust = fc.customer || '(no customer)'
+      const unresolved = !fc.customer
       for (const x of (fc.salesSchedule || [])) {
         // The APPLICATION date - when the debt comes into existence and becomes fundable.
         const d = x.appDate || x.date
@@ -316,11 +320,12 @@ export default function InvoiceFinance() {
         // RELEASED a set number of days after the application goes in - Bibby do not pay
         // the same day. Defaults to 2; change it in the settings above.
         const rel = new Date(d); rel.setDate(rel.getDate() + (Number(settings.releaseDays) ?? 2))
-        rows.push({ date: d, release: rel.toISOString().slice(0, 10), customer: cust,
+        rows.push({ date: d, release: rel.toISOString().slice(0, 10), customer: cust, unresolved,
           project: fc.projectName || fc.projectKey || '', amount: Number(x.amount) || 0 })
       }
     }
     rows.sort((a, b) => a.date.localeCompare(b.date))
+    const unresolvedTotal = rows.filter(r => r.unresolved).reduce((t, r) => t + r.amount, 0)
     // Month by month: what is applied for, and what Bibby would advance on it.
     const byMonth = {}
     for (const r of rows) {
@@ -350,7 +355,7 @@ export default function InvoiceFinance() {
       }).sort((a, b) => a.release.localeCompare(b.release))
       return { ...m, advance, capped, lines }
     })
-    return { rows, months }
+    return { rows, months, unresolvedTotal, unresolvedCount: rows.filter(r => r.unresolved).length }
   }, [cf, limits, settings.advanceRate])
 
   const totals = useMemo(() => {
@@ -756,6 +761,16 @@ export default function InvoiceFinance() {
                   application date and what they would advance against it - at your {settings.advanceRate}% rate, with each customer&apos;s
                   insured limit applied to the debt and only the excess disapproved, exactly as the live table below does.
                 </div>
+                {projected.unresolvedCount ? (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 8, padding: '9px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', maxWidth: 900 }}>
+                    <strong>{projected.unresolvedCount} applications ({gbp(projected.unresolvedTotal)}) have no customer name attached</strong>, so
+                    no insured limit can match and every penny is being disapproved. That is not a credit decision - it is missing data.
+                    <div style={{ marginTop: 3, fontSize: 11.5 }}>
+                      The name comes from the project index. Open the Dashboard once to rebuild it, then reload this page. If they are still
+                      blank afterwards, those projects have no customer recorded in their settings.
+                    </div>
+                  </div>
+                ) : null}
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ padding: '7px 9px', textAlign: 'left', fontSize: 11, color: '#888' }}>Application month</th>
