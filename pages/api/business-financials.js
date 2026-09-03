@@ -1303,7 +1303,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg741',
+        build: 'pkg743',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,
@@ -1536,7 +1536,12 @@ export default async function handler(req, res) {
         .filter(b => b && String(b.name || '').trim())
         .map(b => ({
           name: String(b.name).trim().slice(0, 80),
-          kind: b.kind === 'card' ? 'card' : 'bank',
+          // THREE kinds, not two. This read `b.kind === 'card' ? 'card' : 'bank'`, so
+          // "Invoice finance drawn" was silently rewritten to Bank on every save - the
+          // dropdown offered an option the server would never store. That is why the
+          // Bibby account kept reverting, and why the drawn balance was being counted
+          // twice: netted off opening cash AND repaid out of incoming invoices.
+          kind: (b.kind === 'card' || b.kind === 'if') ? b.kind : 'bank',
           balance: Number(b.balance) || 0,
           asAt: String(b.asAt || '').slice(0, 10),
         }))

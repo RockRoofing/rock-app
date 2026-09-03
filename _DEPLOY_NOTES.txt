@@ -1,62 +1,48 @@
-pkg741 - The 122,711: invoice finance counted twice
-====================================================
+pkg743 - Overdue brought-forward row removed
+=============================================
 
-DEPLOY OVER pkg740. Two files.
+DEPLOY OVER pkg742 (or instead of it - this contains pkg742). Two files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-THE ARITHMETIC
---------------
-  placed by the placement check    625,197
-  shown in Invoices in (13wk)      502,486   (512,779 less the 10,293 arrears)
-  difference                       122,711
+CONTAINS pkg742 AS WELL:
+  - "Invoice finance drawn" now persists (the save handler only knew two kinds
+    and silently rewrote it to Bank). Deploy BEFORE reloading, or Bibby reverts
+    and the 122,711 comes off Invoices in again.
+  - The inferred 10,293 "certified, invoice not yet in Xero" is gone.
+  - Invoices owed / Bills to pay / placement check drag taller by the bottom edge.
 
-122,711 is EXACTLY the invoice finance drawn figure on your net cash position.
+NEW HERE: THE ARREARS ROW IS GONE
+----------------------------------
+"Overdue - brought forward" swept everything past its date into a row before
+week 1 - overdue invoices, overdue bills, retention, and the inferred awaiting
+figure. It is removed from the arithmetic entirely.
 
-WHAT WAS HAPPENING
-------------------
-The model has a rule: if no manual balance is marked as invoice finance, it
-assumes the drawn balance is NOT in your cash figure, and repays it out of
-incoming invoices instead - diverting 122,711 away from Invoices in as the weeks
-pass.
+Anything overdue is now simply NOT in the forecast until a date is set for it. A
+date nobody has committed to is not a forecast.
 
-Bibby was entered as kind "Bank", so that rule fired. But the balance was ALSO
-reducing opening cash. Counted twice. The comment in the code says "doing both
-would count it twice" - the check just could not see the account.
+IT IS REPORTED, NOT VANISHED
+-----------------------------
+An amber bar above the table lists what has been left out: invoices, bills,
+retention, awaiting - with the totals.
 
-WHY CHANGING THE KIND DID NOT FIX IT
--------------------------------------
-The dropdown does save 'if'. The problem is where the rule looks.
+This matters most on the BILLS side. Dropping overdue money OUT makes the cash
+line look BETTER than reality, and late money out is the most certain spend
+there is. The bar says so explicitly rather than letting it quietly improve the
+figures.
 
-  the editor writes to      manualBal          (page state, saved in background)
-  the rule reads            data.manualBalances (API payload, NOT refetched)
-
-So the change was saved and invisible to the rule until a full reload. Line 1613
-already carried a comment about exactly this trap - it had been fixed in one
-place and left in three others.
-
-Now fixed: manualBankTotal, hasManualBank and ifAsAccount all read live state,
-falling back to the payload only when local state is empty.
+To bring something back in: set an expected date on the invoice, or a planned
+payment date on the bill, and it lands in the week you actually expect.
 
 WHAT TO CHECK
 -------------
-With Bibby set to "Invoice finance drawn":
+  - No "Overdue - brought forward" row. Week 1 is now the first row.
+  - The amber bar names what was dropped, and the bills figure is not zero.
+  - Opening cash unchanged; closing moves by whatever the arrears row was
+    contributing.
+  - Bibby still reads "Invoice finance drawn" after a hard refresh.
 
-  Invoices in (13-week total) should read about 625,197, not 512,779.
-  The placement check summary and the column should now agree.
-  Opening cash should NOT change - the balance still counts toward cash.
-
-If Invoices in is still 512,779 after this, then ifAsAccount is still false and
-the kind did not save - tell me and I will show the stored value on the marker.
-
-STILL OUTSTANDING, in your order
----------------------------------
-  1. This - get the balance right
-  2. Overdue brought forward: the 10,293 is NOT applied for. It is the forecast's
-     own sales schedule, inferred as "certified" purely because an application
-     date covers the period end. To be dropped, invoices in to come only from
-     the outstanding invoices list.
-  3. Resizable Bills to Pay / Invoices Owed tables
-  4. Commercial portal flag for dropped forecast value
+NEXT: the commercial cash flow page - value not planned in a forecast. Notes on
+that in my message, one question to settle first.

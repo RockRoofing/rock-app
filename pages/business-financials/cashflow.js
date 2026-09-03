@@ -700,46 +700,21 @@ export default function CashFlow() {
     //
     // So sales are dropped only to the extent invoices have actually arrived, and the
     // shortfall lands in the current week rather than sitting in a month that has gone.
-    const awaitingCash = (() => {
-      // MATCH ON PROJECT NAME AS WELL AS NUMBER.
-      //
-      // Receivables do not reliably carry projectNo - the Xero sync attaches what it can,
-      // and where it cannot the lookup returned nothing. Then "certified less invoiced"
-      // was certified less ZERO, so the ENTIRE certified value of every applied-for period
-      // landed in week 1 as "not yet invoiced". That is the 434,338, and it had nothing to
-      // do with the expected dates being set.
-      const invByProject = {}
-      const invByName = {}
-      let anyMatchable = false
-      for (const i of (data.receivables || [])) {
-        if (excluded[invKey(i)]) continue
-        if (i.projectNo) { invByProject[String(i.projectNo)] = (invByProject[String(i.projectNo)] || 0) + (i.amountDue || 0); anyMatchable = true }
-        if (i.projectName) { const n = normName(i.projectName); invByName[n] = (invByName[n] || 0) + (i.amountDue || 0); anyMatchable = true }
-      }
-      const out = []
-      for (const fc of (data.projForecasts || [])) {
-        if (!isApplied(fc)) continue
-        // If NOTHING can be matched, the comparison is meaningless - claiming the whole
-        // certified value is uninvoiced would be far worse than saying nothing.
-        if (!anyMatchable) continue
-        const bound = fc.valDate || fc.to || ''
-        const certified = (fc.salesSchedule || [])
-          .filter(x => (x.appDate || x.date) && (x.appDate || x.date) <= bound)
-          .reduce((t, x) => t + (x.amount || 0), 0)
-        if (certified <= 0) continue
-        const k = String(fc.projectNo || '')
-        const nk = normName(fc.projectName || '')
-        const invoiced = (invByProject[k] || 0) || (invByName[nk] || 0)
-        // Nothing found for THIS project - cannot tell "fully invoiced" from "not matched",
-        // so say nothing rather than guess the worst.
-        if (invoiced <= 0) continue
-        const short = Math.max(0, certified - invoiced)
-        if (k) invByProject[k] = Math.max(0, (invByProject[k] || 0) - certified)
-        if (nk) invByName[nk] = Math.max(0, (invByName[nk] || 0) - certified)
-        if (short > 0.5) out.push({ name: projLabel(fc), amount: short, upTo: bound })
-      }
-      return out
-    })()
+    // REMOVED: "certified, invoice not yet in Xero".
+    //
+    // This inferred an uninvoiced balance by taking a forecast's OWN sales schedule,
+    // calling it "certified" because an application date happened to cover the period
+    // end, and reporting the gap against Xero as money in. Nothing in it came from an
+    // actual application - J247 Kilburn showed 10,293 that had never been applied for.
+    //
+    // Invoices in now comes from the outstanding invoices list and nothing else. A real
+    // invoice has a real date and a real amount; anything else is a guess dressed as a
+    // receipt, sitting in the first row of the forecast.
+    //
+    // Where a superseded forecast leaves value unbilled, that is a FORECASTING gap, not
+    // cash - it belongs on the project in the commercial portal, which is the next piece
+    // of work, not in the arrears row here.
+    const awaitingCash = []
     const awaitingCashTotal = awaitingCash.reduce((t, x) => t + x.amount, 0)
 
 
@@ -1337,31 +1312,27 @@ export default function CashFlow() {
       const moneyIn = (invoicesIn - ifRepaid) + retIn + vatInPos + fcSalesIn
       const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut
       const net = moneyIn - moneyOut
-      // ARREARS ROW, before week 1 only. Everything already past its date, swept forward
-      // - the money that is late rather than due. Shown separately so week 1 reads as the
-      // week it actually is, and so the size of the arrears is impossible to miss.
-      if (w === 0 && (arrInvoices || arrBills || arrRet || awaitingTotal || awaitingCashTotal)) {
-        const arrNet = arrInvoices + awaitingCashTotal + arrRet - arrBills - awaitingTotal
-        running += arrNet
-        rows.push({
-          wk: 'Overdue - brought forward', arrears: true, weekStart: s,
-          invoicesIn: Math.round(arrInvoices + awaitingCashTotal),
-          awaitingCash: Math.round(awaitingCashTotal), awaitingCashList: awaitingCash,
-          retIn: Math.round(arrRet), vatIn: 0,
-          // Shown alongside the real overdue invoices, marked so the two are not confused.
-          invDetail: [...arrInvDetail, ...awaitingCash.map(x => ({
-            name: x.name, ref: 'applied for, not yet invoiced', project: '',
-            amount: x.amount, due: x.upTo, expected: false, offset: 0, total: 0, pending: true,
-          }))].sort((a, b) => b.amount - a.amount),
-          vatEstimated: false, vatSrcs: [],
-          bills: Math.round(arrBills + awaitingTotal), awaiting: Math.round(awaitingTotal), awaitingList: awaitingInvoice,
-          arrBillList, arrInvList,
-          overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
-          projSalesIn: 0, projCostOut: 0, projNet: 0, projLabourOut: 0, projMatOut: 0, fcBreak: [],
-          moneyIn: Math.round(arrInvoices + awaitingCashTotal + arrRet), moneyOut: Math.round(arrBills + awaitingTotal),
-          net: Math.round(arrNet), closing: Math.round(running),
-        })
+      // ARREARS ROW REMOVED.
+      //
+      // It swept everything already past its date into a row before week 1: overdue
+      // invoices, overdue bills, retention, and the inferred "applied for, not yet
+      // invoiced". Money that is late is not money arriving this week, and the row made
+      // the opening position swing on figures nobody had actually scheduled.
+      //
+      // Anything overdue is now simply NOT in the forecast until a date is set for it.
+      // That is deliberate, and it is the honest position: a date nobody has committed to
+      // is not a forecast.
+      //
+      // The amounts are counted here so they can be reported rather than vanish -
+      // dropping money out in silence would flatter the cash line, and late money out is
+      // the most certain spend there is. The banner above the table lists them.
+      const droppedOverdue = {
+        invoices: Math.round(arrInvoices), invoiceList: arrInvDetail,
+        bills: Math.round(arrBills), billList: arrBillList,
+        retention: Math.round(arrRet),
+        awaiting: Math.round(awaitingTotal), awaitingList: awaitingInvoice,
       }
+      if (w === 0) rows.droppedOverdue = droppedOverdue
 
       running += net
       rows.push({
@@ -1735,6 +1706,26 @@ export default function CashFlow() {
                     </details>
                   )}
 
+                  {/* WHAT THE FORECAST IS NOT COUNTING. The arrears row used to sweep all
+                      of this into week 1. It is out of the arithmetic now, but it is not
+                      allowed to vanish - dropped money OUT flatters the cash line, and
+                      late money out is the most certain spend there is. */}
+                  {forecast.droppedOverdue && (forecast.droppedOverdue.invoices || forecast.droppedOverdue.bills || forecast.droppedOverdue.retention || forecast.droppedOverdue.awaiting) ? (
+                    <div style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
+                      <strong>Overdue items are NOT in the forecast.</strong>
+                      {forecast.droppedOverdue.invoices ? <> {gbp(forecast.droppedOverdue.invoices)} of invoices,</> : null}
+                      {forecast.droppedOverdue.bills ? <> {gbp(forecast.droppedOverdue.bills)} of bills,</> : null}
+                      {forecast.droppedOverdue.retention ? <> {gbp(forecast.droppedOverdue.retention)} of retention,</> : null}
+                      {forecast.droppedOverdue.awaiting ? <> {gbp(forecast.droppedOverdue.awaiting)} awaiting invoice,</> : null}
+                      {' '}all already past their date.
+                      <div style={{ marginTop: 3, fontSize: 11.5 }}>
+                        Set an expected date on an invoice, or a planned payment date on a bill, and it moves into the
+                        week you actually expect it. Until then it is not forecast - a date nobody has committed to is
+                        not a forecast. Note the bills side: leaving those out makes the cash line look BETTER than it is.
+                      </div>
+                    </div>
+                  ) : null}
+
                   {/* PLACEMENT MAP. Renders ALWAYS, even when everything is fine - a
                       strip that only appears on failure cannot tell "nothing is wrong"
                       from "not running", which is where the last one left us. */}
@@ -1752,7 +1743,7 @@ export default function CashFlow() {
                         {' '}{forecast.recon.missed.length} not placed ({gbp(forecast.recon.missedTotal)}),
                         {' '}total owed {gbp(forecast.recon.owedTotal)}. Click for every invoice and where it landed.
                       </summary>
-                      <div style={{ border: '1px solid #e6e3dc', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fff', padding: '10px 14px', maxHeight: 420, overflow: 'auto' }}>
+                      <div style={{ border: '1px solid #e6e3dc', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fff', padding: '10px 14px', height: 420, minHeight: 140, overflow: 'auto', resize: 'vertical' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead><tr style={{ borderBottom: '1px solid #eee' }}>
                             <th style={{ ...th, textAlign: 'left' }}>Invoice</th>
@@ -2930,9 +2921,13 @@ export default function CashFlow() {
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Invoices owed</div>
               <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
-                Expected payment dates are shared with the Invoices Owed page - change one and the other follows. Anything past its due date is paid into week 1 of the forecast until you set a date you actually expect.
+                Expected payment dates are shared with the Invoices Owed page - change one and the other follows. Anything past its due date is paid into week 1 of the forecast until you set a date you actually expect. Drag the bottom edge of the list to make it taller.
               </div>
-              <div style={{ maxHeight: 380, overflow: 'auto' }}>
+              {/* DRAG THE BOTTOM EDGE to make the list taller. CSS resize rather than a
+                  drag handler: no state, no listeners, and the browser remembers the
+                  size while the page is open. `height` not `maxHeight` - resize has
+                  nothing to act on without a set height. */}
+              <div style={{ height: 380, minHeight: 140, overflow: 'auto', resize: 'vertical', border: '1px solid #f0eee9', borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -3015,8 +3010,8 @@ export default function CashFlow() {
               return (
                 <div style={{ marginTop: 22 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Bills to pay</div>
-                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. CIS labour bills (account 321) auto-tick - untick any gross-status subcontractors. {bills.length} bills, {gbp(totalBills)} total.</div>
-                  <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, maxHeight: 340, overflow: 'auto' }}>
+                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. CIS labour bills (account 321) auto-tick - untick any gross-status subcontractors. {bills.length} bills, {gbp(totalBills)} total. Drag the bottom edge of the list to make it taller.</div>
+                  <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, height: 340, minHeight: 140, overflow: 'auto', resize: 'vertical' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
                         <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee', position: 'sticky', top: 0, zIndex: 1 }}>
