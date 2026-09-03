@@ -1,74 +1,60 @@
-pkg733 - Cash flow receivables: ONE source, typed, no cache flip
-=================================================================
+pkg734 - HOTFIX: pkg733 emptied both cash flows
+================================================
 
-SUPERSEDES pkg724-732. Contains every file from all of them.
+DEPLOY THIS OVER pkg733. Two files only. Everything else from pkg733 stays.
 
 REPLACE:
-  pages/api/business-financials.js                      (changed here)
-  pages/business-financials/cashflow.js                 (changed here)
-  everything else as pkg732
+  pages/api/business-financials.js
+  pages/business-financials/cashflow.js
 
-NEW FILE (from pkg731, create if not already done):
-  pages/business-financials/export.js
+WHAT I BROKE
+------------
+pkg733 filtered receivables with `type === 'ACCREC'`.
 
-WHAT THIS FIXES
----------------
-This is the fix we agreed at the START of this session and I never shipped. I
-described it, you approved it, then we moved to the P&L work and it was left.
-Everything built since has been sitting on top of the flip.
+lib/xero.js:1171 does stamp that field - but only on rows written SINCE it was
+added. A store last synced before then carries no type on anything, so the
+strict test discarded every receivable. Both cash flows read the same payload,
+which is why they went together: no invoices due on the 13-week, and the
+12-month with nothing coming in.
 
-The cash flow read receivables from dashboard:cache when that key existed, and
-from bank:outstanding-receivables when it did not. Two sources, one number, and
-which one you got depended on whether anyone had opened the Dashboard in the last
-four hours. That is why the opening balance moved on its own and moved back on
-its own.
+I made the guard fail-closed to stop bills getting through, and applied it to a
+field that may not be there. That is the same mistake in the opposite direction:
+pkg733's whole point was that `i.type && i.type !== 'ACCREC'` failed OPEN on a
+missing field. I replaced one dependency on an unreliable field with another.
 
-The cache rows were built WITHOUT a type field. The guard downstream read
-`i.type && i.type !== 'ACCREC'` - and an ABSENT type makes that test pass. So
-every row went through, supplier bills included, counted as money in and swept
-into "Overdue - brought forward".
+THE FIX
+-------
+Normalise, do not filter.
 
-NOW
----
-Receivables come from bank:outstanding-receivables. Always. That store is a
-direct Xero pull with Type=="ACCREC" inside the WHERE clause plus a defensive
-post-filter, so it cannot contain bills.
+Provenance is the guarantee, not the field. bank:outstanding-receivables is
+written ONLY by fetchOutstandingReceivables, which scopes to ACCREC in the WHERE
+clause and post-filters on inv.Type. Whatever is in that store is a receivable
+whether the row says so or not.
 
-dashboard:cache is still read, but ONLY to put a project name against a row.
-Labels may improve when it is warm. No figure changes either way.
+  - Explicit payables (ACCPAY, ACCPAYCREDIT) still excluded, in case the store
+    is ever fed from somewhere else.
+  - Sales credit notes (ACCRECCREDIT) KEPT - they belong there as negatives.
+    pkg733 would have dropped these too.
+  - Every row is then STAMPED with its type on the way out, so the strict guards
+    downstream have something real to read.
 
-Guards inverted throughout: `i.type !== 'ACCREC'` now EXCLUDES an untyped row.
-The old test let it through - it failed open, which is how this kept returning.
-arrInvList and overdueIn had no guard at all; both have one now.
+That last part is what makes the strict guards safe. Normalising at the source
+is the fix; filtering on a field that may not exist is what broke it.
 
-ABOUT MY EARLIER "STORE AUDIT"
--------------------------------
-It reported zero supplier bills and I treated that as settled. It was a weak
-test: 122 known bill IDs against 1,048 invoice rows. bank:outstanding-bills only
-holds CURRENTLY outstanding bills and costs:bills only holds tagged ones, so any
-paid or untagged supplier bill had nothing to match against. A negative from
-that test meant very little and I should not have reported it as a clean bill of
-health.
-
-EXPECT THE LEDGER TOTAL TO MOVE - THIS IS THE FIX WORKING
-----------------------------------------------------------
-The two sources had different SCOPE, not just different type-safety:
-
-  dashboard:cache            project-linked invoices only
-  bank:outstanding-receivables   EVERY outstanding ACCREC, tagged or not
-
-So the total should go UP by the value of outstanding sales invoices that carry
-no project tag in Xero, and DOWN by any supplier bills that were wrongly in
-there. It should now tie to Xero's Aged Receivables.
-
-If it moves DOWN overall, that is worth telling me about - it would mean genuine
-sales invoices are missing from the store, which is a different problem.
+Tested against all three shapes a stored row can take - legacy untyped, current
+typed, and a sales credit note - plus a supplier bill that must not appear.
+Legacy rows survive, the bill is excluded, the credit is kept, every row comes
+out typed, and nothing is dropped by the page guards.
 
 WHAT TO CHECK
 -------------
-  1. Open the Dashboard, then the Cash Flow. The opening balance must NOT change.
-     That single test is the whole point of this package.
-  2. Open the "Overdue - brought forward" drill-down. Supplier names should be
-     gone from the green "owed to us" rows.
-  3. Compare the invoices-owed total against Xero's Aged Receivables. They should
-     now agree.
+  1. 13-week: invoices in is populated again.
+  2. 12-month: money in is back.
+  3. Open the Dashboard, then the Cash Flow - the opening balance must still NOT
+     change. That was pkg733's purpose and it is preserved.
+  4. Overdue drill-down: no supplier names in the green rows.
+
+WORTH DOING ONCE
+----------------
+Press "Sync invoices from Xero". That rewrites the store with type on every row,
+after which none of this depends on the legacy fallback at all.

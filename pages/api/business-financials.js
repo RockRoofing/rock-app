@@ -945,12 +945,24 @@ export default async function handler(req, res) {
         if (p.jobNo) projByTracking[String(p.jobNo).trim().toLowerCase()] = rec
       }
     }
+    // NORMALISE, DO NOT FILTER.
+    //
+    // pkg733 required type === 'ACCREC' here. lib/xero.js:1171 does stamp that field, but
+    // only on rows written SINCE it was added - a store last synced before then carries
+    // no type on anything, so the strict test discarded every receivable and both cash
+    // flows showed no invoices due.
+    //
+    // Provenance is the real guarantee, not the field. This store is written ONLY by
+    // fetchOutstandingReceivables, which scopes to ACCREC in the WHERE clause AND
+    // post-filters on inv.Type. Whatever is in it is a receivable whether the row says so
+    // or not. An explicit payable is still excluded in case the store is ever fed from
+    // somewhere else, and sales credit notes are kept - they belong here, as negatives.
+    //
+    // The type is then STAMPED on every row below, so the strict guards downstream have
+    // something to read. Normalising at the source is what makes those guards safe;
+    // filtering on a field that may not exist is what broke it.
     const receivables = (recStore.items || [])
-      // Belt and braces. The store is typed at source, but this is the row that ends up
-      // in the arrears line as money in, and a bill there is the fault that keeps coming
-      // back. An absent type is treated as NOT a receivable here - the opposite of the
-      // old guard, which let anything untyped through.
-      .filter(i => i && i.type === 'ACCREC')
+      .filter(i => i && i.type !== 'ACCPAY' && i.type !== 'ACCPAYCREDIT')
       .map(i => {
         const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
         const key = String(i.trackingProject || '').trim().toLowerCase()
@@ -960,6 +972,9 @@ export default async function handler(req, res) {
         // it - so a confirmed date and a guess carried identical weight in the forecast.
         return {
           ...i,
+          // Stamped so the downstream guards can stay strict. They read
+          // `i.type !== 'ACCREC'` and exclude; that only works if every row has one.
+          type: i.type === 'ACCRECCREDIT' ? 'ACCRECCREDIT' : 'ACCREC',
           expectedDate: (meta && meta.expectedDate) || '',
           expectedConfirmed: !!(meta && meta.expectedConfirmed),
           projectName: proj ? proj.projectName : (i.trackingProject || ''),

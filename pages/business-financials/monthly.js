@@ -471,6 +471,14 @@ export default function MonthlyCashFlow() {
 
         {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
           <>
+            {data && data.receivablesUntyped ? (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#991b1b', maxWidth: 940 }}>
+                <strong>Re-sync invoices from Xero.</strong> The stored receivables were fetched before sales invoices and
+                supplier bills were tagged apart, so nothing here can be verified as a customer invoice. They are being
+                counted anyway, because dropping them would empty this forecast - but a supplier bill could be among them.
+                One sync fixes it permanently.
+              </div>
+            ) : null}
             <Card title="Projected cash balance" sub="Monthly closing balance across the next 12 months. Red line = zero.">
               <div style={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">

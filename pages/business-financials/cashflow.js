@@ -1012,7 +1012,7 @@ export default function CashFlow() {
         // still sitting in bank:outstanding-receivables - and a bill counted as money IN is
         // wrong twice over: it inflates the arrears row and it is already in Bills out.
         // Filtered here as well, so a stale store cannot poison the forecast.
-        if (i.type !== 'ACCREC') continue   // absent type is NOT a receivable - the old test let it through
+        if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue   // payables excluded; sales credit notes belong here as negatives
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) {
           arrInvoices += (i.amountDue || 0)
@@ -1035,7 +1035,7 @@ export default function CashFlow() {
         }
       }
       const overdueIn = w === 0
-        ? (data.receivables || []).filter(i => i.type === 'ACCREC' && (() => { const d = i.expectedDate || i.dueDate || ''; return d && d < s })()).reduce((a, i) => a + (i.amountDue || 0), 0)
+        ? (data.receivables || []).filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT') && (() => { const d = i.expectedDate || i.dueDate || ''; return d && d < s })()).reduce((a, i) => a + (i.amountDue || 0), 0)
         : 0
       // Overdue releases land in week 1, same rule as invoices.
       let retIn = 0, arrRet = 0
@@ -1068,7 +1068,7 @@ export default function CashFlow() {
         .sort((a, b) => b.amount - a.amount)
       const arrBills = arrBillList.reduce((a, i) => a + i.amount, 0)
       const arrInvList = (data.receivables || [])
-        .filter(i => i.type === 'ACCREC')
+        .filter(i => i.type === 'ACCREC' || i.type === 'ACCRECCREDIT')
         .filter(i => !excluded[invKey(i)] && isArrears(i.expectedDate || i.dueDate || ''))
         .map(i => ({ name: i.contact || '(no customer)', ref: i.invoiceNumber || i.number || '', project: i.projectName || '',
           amount: i.amountDue || 0, due: i.expectedDate || i.dueDate || '' }))
