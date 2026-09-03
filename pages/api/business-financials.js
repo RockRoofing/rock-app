@@ -1280,6 +1280,15 @@ export default async function handler(req, res) {
         name: p.name || '',
         afaGross: Number(p.afaGross) || 0,
         certifiedGross: Number(p.appliedForLatest) || 0,
+        // WHAT IS ACTUALLY LEFT TO CLAIM: max(0, afa - grossInvoiced - wip), anchored on
+        // what Xero says has been invoiced.
+        //
+        // The warning used afaGross MINUS appliedForLatest, and appliedForLatest is
+        // initialised to 0 and only filled when settings.applications has entries. Any
+        // project whose applications are not recorded there therefore had its ENTIRE
+        // contract value reported as unallocated - twelve projects and 1.96m of it.
+        remainingToClaim: Number(p.remainingToClaim) || 0,
+        hasApplications: (Number(p.appliedForLatest) || 0) > 0,
         // Stored as BOTH a fraction and a percentage depending on when it was saved.
         retentionPct: (() => {
           const rp = Number(p.retentionPct) || 0
@@ -1294,7 +1303,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg735',
+        build: 'pkg739',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,

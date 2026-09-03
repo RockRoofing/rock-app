@@ -1459,7 +1459,10 @@ export default function CashFlow() {
       const rp = Number(v.retentionPct) || 0
       const fcNet = fcByNo[v.projectNo] || 0
       const fcGross = rp > 0 && rp < 1 ? fcNet / (1 - rp) : fcNet
-      const gap = v.afaGross - v.certifiedGross - fcGross
+      // Against what is LEFT TO CLAIM, not the whole contract. remainingToClaim is
+      // afa less what Xero has invoiced less WIP, so it does not depend on anyone having
+      // typed the applications into project settings.
+      const gap = (v.remainingToClaim || 0) - fcGross
       // Threshold so rounding and small retention differences do not raise a banner.
       // A warning that is usually wrong is worse than no warning.
       if (gap <= Math.max(2500, v.afaGross * 0.01)) continue
@@ -1686,7 +1689,8 @@ export default function CashFlow() {
                           <thead><tr style={{ borderBottom: '1px solid #fde68a' }}>
                             <th style={{ ...th, textAlign: 'left' }}>Project</th>
                             <th style={th}>Value (AFA)</th>
-                            <th style={th}>Certified</th>
+                            <th style={th}>Invoiced/WIP taken off</th>
+                            <th style={th}>Left to claim</th>
                             <th style={th}>Still forecast</th>
                             <th style={th}>Not allocated</th>
                           </tr></thead>
@@ -1695,7 +1699,8 @@ export default function CashFlow() {
                               <tr key={r.projectNo} style={{ borderBottom: '1px solid #faf4e4' }}>
                                 <td style={{ ...td, textAlign: 'left' }}>{r.projectNo} {r.name}</td>
                                 <td style={td}>{gbp(r.afaGross)}</td>
-                                <td style={td}>{gbp(r.certifiedGross)}</td>
+                                <td style={{ ...td, color: '#999' }}>{gbp(r.afaGross - (r.remainingToClaim || 0))}</td>
+                                <td style={td}>{gbp(r.remainingToClaim || 0)}</td>
                                 <td style={{ ...td, color: r.forecastGross ? INK : '#dc2626' }}>
                                   {r.forecastGross ? gbp(r.forecastGross) : 'none'}
                                 </td>

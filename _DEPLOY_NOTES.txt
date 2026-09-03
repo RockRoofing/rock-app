@@ -1,14 +1,43 @@
-pkg738 - Project labels on receivables (small fix)
-===================================================
+pkg739 - The 1.96m was mine. Warning now uses remaining-to-claim
+=================================================================
 
-DEPLOY OVER pkg737. One file.
+DEPLOY OVER pkg738. Two files. Contains pkg737 and pkg738.
 
 REPLACE:
   pages/api/business-financials.js
+  pages/business-financials/cashflow.js
 
-The store writes the tracking option as `project`. pkg733 read
-`trackingProject`, which is not a field on those rows - so every project label
-on a receivable came out blank, silently. Both names now accepted.
+YOU WERE RIGHT
+--------------
+The warning compared afaGross (contract + instructed variations - the WHOLE job)
+against appliedForLatest.
 
-This is cosmetic. It does NOT explain the missing 127k or the invoice due
-tomorrow.
+appliedForLatest is initialised to 0 in dashboard.js and only filled when
+settings.applications has entries. Any project whose applications are not
+recorded there scored certified = 0, so the calculation became
+
+    whole contract - 0 - forecast
+
+and reported the entire job as unallocated. Twelve projects at roughly 164k
+average is exactly that. The project forecasts were never the problem.
+
+NOW
+---
+    remainingToClaim - still-forecast
+
+remainingToClaim is max(0, afa - grossInvoiced - wip), computed on the dashboard
+record and anchored on what XERO says has been invoiced. It does not depend on
+anyone having typed applications into project settings.
+
+The table now shows Value (AFA), what has been invoiced/WIP'd off it, what is
+left to claim, what is still forecast, and the gap - so the working is visible
+rather than asserted.
+
+Expect this figure to drop to something small, or vanish. If it does not, the
+remaining projects are worth looking at individually.
+
+BUILD MARKER BUMPED TO pkg739
+------------------------------
+The marker still read pkg735 through 736, 737 and 738 because I never bumped
+the string. That made it useless for the one job it had - telling us which code
+was live. It now reads pkg739. I will bump it every package from here.
