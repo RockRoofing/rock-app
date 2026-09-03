@@ -27,10 +27,16 @@ const TABS = [
   ['12-Month', '/business-financials/monthly'],
   ['Forecast P&L', '/business-financials/forecast-pl'],
   ['Forecast BS', '/business-financials/forecast-balance-sheet'],
+  ['Download PDF', '/business-financials/export'],
 ]
 
 export function BizNav() {
   const router = useRouter()
+  // The export page mounts the real page components so the PDF shows exactly what the
+  // page computes rather than a second implementation of it. Each of those renders its
+  // own BizNav, so seventeen nav bars would stack down the document. One check here is
+  // cheaper and safer than threading a prop through every page.
+  if (router.pathname === '/business-financials/export') return null
   return (
     <div style={{ background: INK, padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, flexWrap: 'wrap' }}>

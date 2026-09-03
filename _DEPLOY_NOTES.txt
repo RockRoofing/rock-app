@@ -1,57 +1,69 @@
-pkg730 - Year-end WIP: restore the straddle test, fix labour pro-rating
-========================================================================
+pkg731 - Download Business Financials as PDF
+=============================================
 
-SUPERSEDES pkg724-729. Contains every file from all of them.
+SUPERSEDES pkg724-730. Contains every file from all of them.
 
-REPLACE (no new files):
-  lib/forecastMonths.js                                 (changed here)
-  pages/business-financials/forecast-pl.js              (label only)
+NEW FILE - create this in GitHub:
+  pages/business-financials/export.js
+
+REPLACE:
+  pages/business-financials.js                          (adds the Download PDF button)
+  components/BizNav.js                                  (adds the tab, hides nav on export)
+  lib/forecastMonths.js                                 (as pkg730)
+  pages/business-financials/forecast-pl.js              (as pkg730)
   pages/business-financials/forecast-balance-sheet.js   (as pkg727)
   pages/business-financials/monthly.js                  (as pkg725)
   pages/api/business-financials.js                      (as pkg729)
 
-TWO FAULTS
-----------
+HOW IT WORKS
+------------
+"Download PDF" next to the month selector on Summary, and a tab in the nav.
 
-1. THE STRADDLE TEST WAS MISSING. It existed before pkg729 and I removed it when
-   rebuilding around application dates. A forecast had to still be running at
-   month end:
+Tick any of the 17 tabs, press Load, then Download PDF. Each tab starts on a new
+page. Select all / Clear for the whole set. Paper defaults to A3 landscape so the
+12-column tables fit; A4 landscape is there if you prefer.
 
-     fc.from <= 30 Nov AND fc.to >= 30 Nov
+Add ?tabs=forecast-pl,cashflow,budgets to the URL to pre-tick a set - bookmark it
+for a monthly pack.
 
-   Without it, a Renshaw period running 14-30 September was given a window from
-   its own start through to 30 November - two and a half months of cost in what
-   should be a few days. Renshaw House appeared three times, Winnersh from
-   9 September, Bradford Works from 21 November.
+WHY IT IS NOT SERVER-SIDE
+--------------------------
+The obvious build is pdf-lib on the server. That would mean a SECOND implementation
+of all seventeen models.
 
-   A period that finished in September has no unclaimed work at the year end. It
-   was claimed in September.
+Every time this codebase has held two implementations of one rule they have drifted -
+the Budgets page against the API, the P&L against the balance sheet, the cash flow
+against its own fallback, the WIP window against the applications. A PDF that quietly
+disagreed with the screen would be worse than no PDF, because there would be no way
+to tell which one was wrong.
 
-2. LABOUR ALREADY INSIDE THE WINDOW WAS BEING PRO-RATED. That is why the table
-   showed "already in Nov" LARGER than "accrued cost" - Bradford Works 5,255
-   against 3,311, Winnersh 11,002 against 3,000. Already-in cannot exceed
-   accrued; the two were measured on different bases.
+So the export mounts the REAL page components, fetching the REAL endpoints. What
+prints is what the page computes. Change a tab and the PDF changes with it - there is
+nothing to keep in step.
 
-   A labour line carries the END of its instalment window. A line dated on or
-   before the 30th is wholly inside the window and now counts at FACE VALUE.
-   Only the first line dated AFTER month end straddles the boundary, and only
-   that one is pro-rated - across its own instalment, from the previous line's
-   date, not across the whole forecast.
+The trade is that it uses the browser's print engine, so it is two steps: Download
+PDF opens the print dialog, and you choose "Save as PDF".
 
-   The cost top-up is therefore exactly the straddling share, and can never be
-   negative or exceed the accrual.
+TWO THINGS TO DO IN THE PRINT DIALOG
+-------------------------------------
+  1. Destination: Save as PDF
+  2. Turn ON "Background graphics" - without it the shading and the colour coding
+     print white and the ACTUAL / MANUAL / forecast badges lose their meaning
 
-WHAT YOU SHOULD SEE
--------------------
-Tested with periods matching your screenshot:
-  - Renshaw House (finished September)  -> gone
-  - Bradford Works (applies on the 30th) -> gone
-  - Winnersh (finished before month end) -> gone
-  - Waungron (runs to 18 December)       -> stays, window 28-30 Nov,
-                                            one working day of labour
+WHAT THE PRINT STYLESHEET HANDLES
+----------------------------------
+  - Nav, controls and buttons removed. INPUTS ARE KEPT deliberately - they carry
+    values you need to read (debtor days, retention %, manual month figures).
+  - Full-height tinted page frames flattened, so you do not get a blank sheet
+    before each tab.
+  - Horizontal scrollers unwrapped. On screen the wide tables scroll; printed
+    inside a scroller, every column past the edge silently vanishes.
+  - Rows kept whole across page breaks.
 
-Expect the list to be SHORT - only projects genuinely still running across
-30 November with an application before it. If a project you know finished in
-October is still listed, tell me.
-
-The working-day ratio now only shows on the line that is actually pro-rated.
+NOTES
+-----
+  - Loading all 17 fires a lot of requests at once. Give it time, and check nothing
+    still says "Loading..." before printing - it prints that way.
+  - Each tab is wrapped in its own error boundary, so one page failing costs you
+    that page rather than the whole export.
+  - Admin only, same as the rest of the section.

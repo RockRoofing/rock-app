@@ -114,6 +114,10 @@ export default function BusinessFinancials() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
             <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Summary</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <a href="/business-financials/export"
+                style={{ background: '#fff', border: '1px solid #ddd9d2', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#57534e', textDecoration: 'none', fontWeight: 600 }}>
+                Download PDF
+              </a>
               <select value={months} onChange={e => setMonths(Number(e.target.value))} style={sel}>
                 {[6, 12, 18, 24].map(m => <option key={m} value={m}>Last {m} months</option>)}
               </select>
