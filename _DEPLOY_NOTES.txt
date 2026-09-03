@@ -1,57 +1,14 @@
-pkg737 - Find the missing 127k
-===============================
+pkg738 - Project labels on receivables (small fix)
+===================================================
 
-DEPLOY OVER pkg736. One file.
+DEPLOY OVER pkg737. One file.
 
 REPLACE:
-  pages/business-financials/cashflow.js
+  pages/api/business-financials.js
 
-THE MECHANISM
--------------
-Invoice placement reads:
+The store writes the tracking option as `project`. pkg733 read
+`trackingProject`, which is not a field on those rows - so every project label
+on a receivable came out blank, silently. Both names now accepted.
 
-    if (isArrears(d))              { ... }
-    else if (inWkIn(d, offsetFor(i))) { ... }
-
-Two branches and NO else. An invoice matching neither is dropped in silence.
-Three ways that happens:
-
-  - no due date AND no expected date
-  - a date after the end of the 13-week window
-  - a date pushed past the window by the payment-performance offset
-
-Nothing counted them, nothing reported them, and Invoices in simply read lower
-than the ledger. That is the 127k, or most of it.
-
-WHAT THIS ADDS
---------------
-A red strip above the table whenever anything fails to land:
-
-  "X of invoices owed never landed in any week (N of M). Total owed Y, of which
-   Z you excluded. Click for the list and the reason for each."
-
-Per invoice: customer, invoice number, the date used, the offset applied, the
-amount, and WHY it is not in the forecast. Your invoice due tomorrow will be in
-that list with the reason next to it.
-
-TWO THINGS FIXED WHILE IN THERE
---------------------------------
-The offset rule was defined inside the week loop, so the reconciliation could
-not see it. Hoisted to ONE definition that both use - a second copy is how these
-pages have drifted before. Moved below `usePerf` rather than above it, so there
-is no temporal dead zone for whoever edits this next.
-
-The week rows carried weekStart but NOT weekEnd. My first cut of the "after the
-horizon" test read r.weekEnd, which did not exist - so it would have silently
-reported every such invoice as "no date" instead. weekEnd is now set on the row,
-and the horizon is taken as the latest week rather than by array position.
-
-ON PAYMENT PERFORMANCE
-----------------------
-You said that is not the cause. It may not be - but the strip names the offset
-per invoice, so if a 30-day median is pushing September invoices into December
-it will say so explicitly rather than either of us assuming. If the Offset
-column reads "-" throughout, you were right and it is the dates.
-
-NOTHING ABOUT THE FIGURES CHANGES. This only reports what was already being
-dropped.
+This is cosmetic. It does NOT explain the missing 127k or the invoice due
+tomorrow.

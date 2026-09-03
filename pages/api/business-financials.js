@@ -965,7 +965,10 @@ export default async function handler(req, res) {
       .filter(i => i && i.type !== 'ACCPAY' && i.type !== 'ACCPAYCREDIT')
       .map(i => {
         const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
-        const key = String(i.trackingProject || '').trim().toLowerCase()
+        // The store writes this as `project` (lib/xero.js). pkg733 read `trackingProject`,
+        // which does not exist on the row - so every project label came out blank and
+        // nothing said so. Both names accepted; the real one first.
+        const key = String(i.project || i.trackingProject || '').trim().toLowerCase()
         const proj = projByTracking[key] || null
         // expectedConfirmed comes through too. The Invoices Owed page records whether a
         // date was agreed with the customer or merely typed, and nothing downstream read
@@ -977,7 +980,7 @@ export default async function handler(req, res) {
           type: i.type === 'ACCRECCREDIT' ? 'ACCRECCREDIT' : 'ACCREC',
           expectedDate: (meta && meta.expectedDate) || '',
           expectedConfirmed: !!(meta && meta.expectedConfirmed),
-          projectName: proj ? proj.projectName : (i.trackingProject || ''),
+          projectName: proj ? proj.projectName : (i.project || i.trackingProject || ''),
           projectNo: proj ? proj.projectNo : '',
         }
       })
