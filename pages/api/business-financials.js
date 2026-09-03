@@ -1303,13 +1303,18 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg743',
+        build: 'pkg745',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,
         typedRows: (recStore.items || []).filter(i => i && i.type).length,
         updatedAt: recStore.updatedAt || null,
         dashCacheWarm: !!(dashCache && Array.isArray(dashCache) && dashCache.length),
+        // WHAT IS ACTUALLY STORED for each manual balance, straight off Redis. The Bibby
+        // kind keeps reverting to bank and I have now checked the save handler, the read
+        // and the load path - all clean. So the next question is what the store actually
+        // holds, and guessing at that has already cost a day.
+        balanceKinds: (manualBalances || []).map(b => `${b && b.name ? String(b.name).slice(0, 14) : '(no name)'}=${b && b.kind ? b.kind : '(none)'}`).join(', '),
       },
       projectValues,
       projectValuesFromCache: Array.isArray(dashCache) && dashCache.length > 0,

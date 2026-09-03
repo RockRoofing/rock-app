@@ -1,48 +1,55 @@
-pkg743 - Overdue brought-forward row removed
-=============================================
+pkg745 - VAT was running a month early on BOTH cash flows
+==========================================================
 
-DEPLOY OVER pkg742 (or instead of it - this contains pkg742). Two files.
+DEPLOY OVER pkg743. Three files. Contains pkg742, pkg743 and pkg744.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
+  pages/business-financials/monthly.js
 
-CONTAINS pkg742 AS WELL:
-  - "Invoice finance drawn" now persists (the save handler only knew two kinds
-    and silently rewrote it to Bank). Deploy BEFORE reloading, or Bibby reverts
-    and the 122,711 comes off Invoices in again.
-  - The inferred 10,293 "certified, invoice not yet in Xero" is gone.
-  - Invoices owed / Bills to pay / placement check drag taller by the bottom edge.
-
-NEW HERE: THE ARREARS ROW IS GONE
-----------------------------------
-"Overdue - brought forward" swept everything past its date into a row before
-week 1 - overdue invoices, overdue bills, retention, and the inferred awaiting
-figure. It is removed from the arithmetic entirely.
-
-Anything overdue is now simply NOT in the forecast until a date is set for it. A
-date nobody has committed to is not a forecast.
-
-IT IS REPORTED, NOT VANISHED
------------------------------
-An amber bar above the table lists what has been left out: invoices, bills,
-retention, awaiting - with the totals.
-
-This matters most on the BILLS side. Dropping overdue money OUT makes the cash
-line look BETTER than reality, and late money out is the most certain spend
-there is. The bar says so explicitly rather than letting it quietly improve the
-figures.
-
-To bring something back in: set an expected date on the invoice, or a planned
-payment date on the bill, and it lands in the week you actually expect.
-
-WHAT TO CHECK
+THE VAT FAULT
 -------------
-  - No "Overdue - brought forward" row. Week 1 is now the first row.
-  - The amber bar names what was dropped, and the bills figure is not zero.
-  - Opening cash unchanged; closing moves by whatever the arrears row was
-    contributing.
-  - Bibby still reads "Invoice finance drawn" after a hard refresh.
+13-week. The settlement date was:
 
-NEXT: the commercial cash flow page - value not planned in a forecast. Notes on
-that in my message, one question to settle first.
+    const monthEnd = isoDay(new Date(yy, mm, 0))
+
+JS months are zero-based, so for "2026-08" that is 31 AUGUST - the end of the
+VAT month itself. Every month's VAT was landing in the month it was earned, with
+no lag at all. Now `new Date(yy, mm + 1, 0)`: August settles 30 September.
+
+12-month. Same fault, different shape - it put month mk's VAT in month mk. The
+row now reads the PREVIOUS month's VAT, on both the filed figure and the
+estimate. What moves in September is August's VAT.
+
+Both checked across the December/January boundary.
+
+EFFECT: every VAT receipt and payment moves one month later on both pages. On
+the 13-week the 18,193 currently sitting in w/c 31 Aug should move out to the
+end of September, and the weeks after shift with it.
+
+I have NOT added the extra 7 days. HMRC's deadline is a month and 7 days after
+the period, so a PAYMENT is really due 7 October for August. You said end of
+September, so that is what this does. Say the word and I will add the 7 days -
+it is a one-line change, and it matters more for payments than refunds.
+
+ALSO IN THIS PACKAGE (pkg744)
+------------------------------
+The marker now shows the STORED kind for every manual balance, straight off
+Redis:
+
+  stored account kinds: Metrobank=bank, AMEX=card, Capital on T=card, Bibby=bank
+
+Bibby still reverting to Bank makes no sense against the code - I have checked
+the save handler, the store (one writer in the whole codebase) and the load
+path, and all three are clean in my copy. So read that line after deploying:
+
+  build pkg745 and Bibby=bank  -> the save is genuinely losing it; tell me and I
+                                  will instrument the request itself
+  build pkg745 and Bibby=if    -> it saved, and something downstream ignores it
+  build below pkg745           -> the deploy has not landed
+
+WORKAROUND MEANWHILE: Facilities has "repay invoice finance from collections".
+Turning that off achieves the same thing as the account kind - it stops the
+122,711 being taken out of Invoices in - and it saves through a different
+handler.

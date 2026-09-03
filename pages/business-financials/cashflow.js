@@ -1039,13 +1039,21 @@ export default function CashFlow() {
         if (isArrears(r.date)) arrRet += r.amount
         else if (inWkIn(r.date)) retIn += r.amount
       }
-      // VAT: any month whose month-end falls in this week.
+      // VAT SETTLES A MONTH AFTER THE PERIOD IT RELATES TO.
+      //
+      // This read `new Date(yy, mm, 0)`, which for 2026-08 is 31 AUGUST - the end of the
+      // VAT month itself. So every month's VAT was landing in the month it was earned,
+      // with no lag at all, and the whole VAT line sat a month early.
+      //
+      // JS months are zero-based, so `new Date(yy, mm, 0)` is the last day of month
+      // index mm-1. Adding one gets the last day of the FOLLOWING month: August's VAT
+      // settles 30 September, which is when it actually moves.
       let vatIn = 0
       const vatSrcs = []
       for (const mk of Object.keys(vatByMonth)) {
         const [yy, mm] = mk.split('-').map(Number)
-        const monthEnd = isoDay(new Date(yy, mm, 0))
-        if (inWk(monthEnd)) { vatIn += vatByMonth[mk]; vatSrcs.push({ mk, src: vatSrcByMonth[mk] || 'estimate', amount: vatByMonth[mk] }) }
+        const settles = isoDay(new Date(yy, mm + 1, 0))
+        if (inWk(settles)) { vatIn += vatByMonth[mk]; vatSrcs.push({ mk, src: vatSrcByMonth[mk] || 'estimate', amount: vatByMonth[mk], settles }) }
       }
       // Any contributor that is not a filed return makes the week's figure an estimate.
       const vatEstimated = vatSrcs.some(x => x.src !== 'filed')
@@ -1782,6 +1790,12 @@ export default function CashFlow() {
                         ({data.recDiag.typedRows} typed)
                         {' '}&middot; store synced {data.recDiag.updatedAt ? new Date(data.recDiag.updatedAt).toLocaleString('en-GB') : 'NEVER'}
                         {' '}&middot; dashboard cache {data.recDiag.dashCacheWarm ? 'warm' : 'cold'}
+                        {data.recDiag.balanceKinds ? (
+                          <div style={{ marginTop: 3 }}>
+                            stored account kinds: <strong>{data.recDiag.balanceKinds}</strong>
+                            {' '}&mdash; Bibby must read <strong>if</strong> for the invoice finance rule to fire
+                          </div>
+                        ) : null}
                         {data.recDiag.storeRows === 0 ? (
                           <div style={{ marginTop: 4, color: '#991b1b' }}>
                             <strong>The store is empty.</strong> Press &quot;Sync outstanding (cash flow)&quot; on Invoices Owed.

@@ -289,13 +289,23 @@ export default function MonthlyCashFlow() {
       // VAT while materials and overheads carry input VAT, so the position is a persistent
       // refund and showing nil understates cash in every month past the last return.
       const vatRate = Number((data.financeCfg || {}).vatRate ?? 20) / 100
+      // VAT SETTLES A MONTH AFTER THE PERIOD IT RELATES TO.
+      //
+      // This put month mk's VAT in month mk - no lag, so the whole VAT line sat a month
+      // early, the same fault the 13-week had. What moves in September is AUGUST's VAT,
+      // so the row reads the previous month on both the filed figure and the estimate.
+      const vatMk = (() => {
+        const [yy, mm] = mk.split('-').map(Number)
+        const d = new Date(yy, mm - 2, 1)   // mm-1 is this month zero-based; one before it
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      })()
       let vatEst = 0
-      if (vatByMonth[mk] == null && vatRate > 0) {
-        const spend = (data.bills || []).filter(b => inMonth(b.payDate || b.dueDate, mk)).reduce((a, b) => a + Math.abs(b.amountDue || 0), 0)
-          + (data.projForecasts || []).reduce((a, fc) => a + (fc.matItems || []).filter(x => inMonth(x.date, mk)).reduce((t, x) => t + Math.abs(x.amount || 0), 0), 0)
+      if (vatByMonth[vatMk] == null && vatRate > 0) {
+        const spend = (data.bills || []).filter(b => inMonth(b.payDate || b.dueDate, vatMk)).reduce((a, b) => a + Math.abs(b.amountDue || 0), 0)
+          + (data.projForecasts || []).reduce((a, fc) => a + (fc.matItems || []).filter(x => inMonth(x.date, vatMk)).reduce((t, x) => t + Math.abs(x.amount || 0), 0), 0)
         vatEst = (spend * vatRate) / (1 + vatRate)
       }
-      const vatRaw = vatByMonth[mk] != null ? vatByMonth[mk] : vatEst
+      const vatRaw = vatByMonth[vatMk] != null ? vatByMonth[vatMk] : vatEst
       const vatIn = vatRaw > 0 ? vatRaw : 0
       const vatOut = vatRaw < 0 ? -vatRaw : 0
       const billDetail = (data.bills || [])
