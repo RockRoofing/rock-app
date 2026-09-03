@@ -1,60 +1,61 @@
-pkg734 - HOTFIX: pkg733 emptied both cash flows
+pkg735 - Build marker: prove which code is live
 ================================================
 
-DEPLOY THIS OVER pkg733. Two files only. Everything else from pkg733 stays.
+DEPLOY OVER pkg734. Two files. Contains pkg734's fix as well, so it is safe
+whether or not 734 landed.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-WHAT I BROKE
-------------
-pkg733 filtered receivables with `type === 'ACCREC'`.
+WHY
+---
+Pressing "Sync invoices from Xero" changed the cash flow. That sync writes
+invoiced:lines: and deletes dashboard:cache. It does NOT touch
+bank:outstanding-receivables.
 
-lib/xero.js:1171 does stamp that field - but only on rows written SINCE it was
-added. A store last synced before then carries no type on anything, so the
-strict test discarded every receivable. Both cash flows read the same payload,
-which is why they went together: no invoices due on the 13-week, and the
-12-month with nothing coming in.
+pkg733/734 made the cash flow read ONLY bank:outstanding-receivables. If that
+code were live, that button could not have changed the forecast.
 
-I made the guard fail-closed to stop bills getting through, and applied it to a
-field that may not be there. That is the same mistake in the opposite direction:
-pkg733's whole point was that `i.type && i.type !== 'ACCREC'` failed OPEN on a
-missing field. I replaced one dependency on an unreliable field with another.
+It did. So the old dashboard:cache branch is still running. Either the packages
+did not reach main, or the deploy did not take. I am not going to keep guessing,
+so the page now says.
 
-THE FIX
--------
-Normalise, do not filter.
+WHAT YOU WILL SEE
+-----------------
+A blue bar at the top of the 13-week cash flow:
 
-Provenance is the guarantee, not the field. bank:outstanding-receivables is
-written ONLY by fetchOutstandingReceivables, which scopes to ACCREC in the WHERE
-clause and post-filters on inv.Type. Whatever is in that store is a receivable
-whether the row says so or not.
+  pkg735 - receivables from bank:outstanding-receivables - N rows in the
+  forecast, M in the store (T typed) - store synced <date> - dashboard cache
+  warm/cold
 
-  - Explicit payables (ACCPAY, ACCPAYCREDIT) still excluded, in case the store
-    is ever fed from somewhere else.
-  - Sales credit notes (ACCRECCREDIT) KEPT - they belong there as negatives.
-    pkg733 would have dropped these too.
-  - Every row is then STAMPED with its type on the way out, so the strict guards
-    downstream have something real to read.
+If instead you get a RED bar saying "Old build still live", the API is not
+pkg735 and the deploy has not landed. That is the thing to chase before any
+more code changes.
 
-That last part is what makes the strict guards safe. Normalising at the source
-is the fix; filtering on a field that may not exist is what broke it.
-
-Tested against all three shapes a stored row can take - legacy untyped, current
-typed, and a sales credit note - plus a supplier bill that must not appear.
-Legacy rows survive, the bill is excluded, the credit is kept, every row comes
-out typed, and nothing is dropped by the page guards.
-
-WHAT TO CHECK
--------------
-  1. 13-week: invoices in is populated again.
-  2. 12-month: money in is back.
-  3. Open the Dashboard, then the Cash Flow - the opening balance must still NOT
-     change. That was pkg733's purpose and it is preserved.
-  4. Overdue drill-down: no supplier names in the green rows.
-
-WORTH DOING ONCE
+READ THE NUMBERS
 ----------------
-Press "Sync invoices from Xero". That rewrites the store with type on every row,
-after which none of this depends on the legacy fallback at all.
+  "M in the store" = 0
+      bank:outstanding-receivables is EMPTY. This is what I now expect. Nothing
+      in the app fills it - the Bills page has a sync button, invoices never had
+      one. The dashboard:cache branch masked that completely.
+      -> pkg736 adds the missing sync.
+
+  "M in the store" > 0 but "N rows in the forecast" = 0
+      The store has data and the mapping is dropping it. Send me the typed
+      count and I will fix the mapping.
+
+  Both > 0 and the figures look right
+      pkg734 landed after all and we are done with this thread.
+
+NOTHING ELSE CHANGED. This is a diagnostic, not a fix. Delete the bar once this
+has settled.
+
+ABOUT THE SWING
+---------------
+-500k to +500k is the signature of the dashboard:cache path: 793 rows in
+__UNASSIGNED__ carrying about 10m of historic value, with frozen amountDue
+figures that were never refreshed because sync-invoices preserves any line dated
+before its window. Bills and paid invoices from years back all landing in
+"Overdue - brought forward". It is not a calculation fault; it is the wrong
+source.

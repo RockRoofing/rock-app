@@ -1654,6 +1654,34 @@ export default function CashFlow() {
                     </details>
                   )}
 
+                  {/* BUILD AND SOURCE MARKER. Delete once this has settled. */}
+                  <div style={{ fontSize: 11.5, marginBottom: 10, padding: '7px 12px', borderRadius: 8,
+                    background: data.recDiag ? '#eef6ff' : '#fef2f2',
+                    border: `1px solid ${data.recDiag ? '#bfdbfe' : '#fecaca'}`,
+                    color: data.recDiag ? '#1e40af' : '#991b1b' }}>
+                    {data.recDiag ? (
+                      <>
+                        <strong>{data.recDiag.build}</strong> &middot; receivables from <strong>{data.recDiag.source}</strong>
+                        {' '}&middot; {data.recDiag.rows} rows in the forecast, {data.recDiag.storeRows} in the store
+                        ({data.recDiag.typedRows} typed)
+                        {' '}&middot; store synced {data.recDiag.updatedAt ? new Date(data.recDiag.updatedAt).toLocaleString('en-GB') : 'NEVER'}
+                        {' '}&middot; dashboard cache {data.recDiag.dashCacheWarm ? 'warm' : 'cold'}
+                        {data.recDiag.storeRows === 0 ? (
+                          <div style={{ marginTop: 4, color: '#991b1b' }}>
+                            <strong>The store is empty.</strong> Nothing in the app fills it - the Bills page has a sync,
+                            invoices never had one. That is the next fix.
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <strong>Old build still live.</strong> This response has no recDiag, so the API is not pkg735.
+                        Receivables are coming from dashboard:cache, which is the source that counts supplier bills as
+                        customer invoices. Check pkg733/734 actually reached main and that Vercel finished deploying.
+                      </>
+                    )}
+                  </div>
+
                   {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
                   {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
 

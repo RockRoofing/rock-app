@@ -1286,6 +1286,19 @@ export default async function handler(req, res) {
       }))
 
     return res.json({
+      // WHICH CODE IS ACTUALLY RUNNING, and what it found. Pressing "Sync invoices from
+      // Xero" changed the forecast, and that sync does not touch
+      // bank:outstanding-receivables - so the old dashboard:cache branch must still be
+      // live. Rather than argue about whether a deploy landed, the page now says.
+      recDiag: {
+        build: 'pkg735',
+        source: 'bank:outstanding-receivables',
+        rows: receivables.length,
+        storeRows: (recStore.items || []).length,
+        typedRows: (recStore.items || []).filter(i => i && i.type).length,
+        updatedAt: recStore.updatedAt || null,
+        dashCacheWarm: !!(dashCache && Array.isArray(dashCache) && dashCache.length),
+      },
       projectValues,
       projectValuesFromCache: Array.isArray(dashCache) && dashCache.length > 0,
       cashAtBank: openingCash,
