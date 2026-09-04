@@ -814,7 +814,33 @@ export default function InvoiceFinance() {
                                 {m.lines.map((l, k) => (
                                   <tr key={k} style={{ borderTop: '1px solid #efefec' }}>
                                     <td style={{ padding: '3px 6px' }}>{l.project || '-'}</td>
-                                    <td style={{ padding: '3px 6px', color: '#777' }}>{l.customer}</td>
+                                    {/* SET A LIMIT FROM HERE. The Bibby list matches on the
+                                        exact name, so a variant - "Torsion Construction"
+                                        against "Torsion Projects Ltd", or a trailing full
+                                        stop - matches nothing and the whole application is
+                                        disapproved. Setting it against the name AS IT
+                                        APPEARS HERE is what makes it match, and it then
+                                        applies to every application under that name. */}
+                                    <td style={{ padding: '3px 6px', color: '#777' }}>
+                                      {l.customer}
+                                      {(() => {
+                                        const has = Number((limits[l.customer] || {}).insuredLimit) || 0
+                                        if (has > 0) return <span style={{ color: '#16a34a', marginLeft: 6, fontSize: 10.5 }}>limit {gbp(has)}</span>
+                                        if (l.unresolved) return null
+                                        return (
+                                          <button onClick={() => {
+                                            const v = window.prompt(`Insured limit for "${l.customer}"\n\nApplies to every application under this exact name.`, '')
+                                            if (v === null) return
+                                            const n = Math.abs(Number(String(v).replace(/[^0-9.-]/g, '')) || 0)
+                                            if (!n) return
+                                            setLimit(l.customer, n)
+                                          }}
+                                            style={{ marginLeft: 6, background: '#fff', border: '1px solid #ddd9d2', borderRadius: 5, padding: '1px 6px', fontSize: 10.5, cursor: 'pointer', color: '#b45309' }}>
+                                            add limit
+                                          </button>
+                                        )
+                                      })()}
+                                    </td>
                                     <td style={{ padding: '3px 6px', color: '#777' }}>{l.date}</td>
                                     {/* The date the money actually lands, which is what the
                                         cash flow needs - not the application date. */}
