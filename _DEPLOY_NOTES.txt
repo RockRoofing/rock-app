@@ -1,7 +1,7 @@
-pkg751 - Card headroom recovers, chart starts at today, key added
-==================================================================
+pkg752 - Bibby: collections repay the drawn balance
+====================================================
 
-DEPLOY OVER pkg750 (contains 742-750). Four files.
+DEPLOY OVER pkg751 (contains 742-751). Four files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -9,44 +9,52 @@ REPLACE:
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-1. CARD HEADROOM NOW RISES AS THE BALANCE IS CLEARED
------------------------------------------------------
-It was a constant taken from the opening balances. So scheduling a Capital on
-Tap payment pulled the CASH line down and left the AVAILABLE line flat - which
-reads as though paying a card costs you borrowing power. It restores it.
+THE ANSWER TO YOUR QUESTION: it did not, and now it does.
 
-The weekly figure is read off the SAME event list that feeds the Financing & tax
-column, so the two cannot report different payments.
+1. AVAILABILITY NO LONGER FALLS AS YOU COLLECT
+-----------------------------------------------
+Availability is totalAdvance MINUS drawn, so both sides move on a collection:
 
-  week 0                    82,844   (AMEX 60,000 nil owed + CoT 100,000 less 77,156)
-  after a 20,000 payment   102,844
-  after a further 30,000   132,844
+  the ledger shrinks    -> totalAdvance down by the advance rate   (was modelled)
+  the advance is repaid -> drawn down by the same amount           (was NOT)
 
-2. THE GRAPH NOW STARTS AT TODAY'S CASH
+Only the first was in the model, so availability drained away through the
+forecast. The two cancel, so it now stays broadly flat and moves only when
+billing outpaces collection.
+
+Once drawn reaches zero there is nothing left to repay, and a collection DOES
+then reduce availability. The arithmetic handles that by itself.
+
+Worked through at a 200,000 totalAdvance and 122,711 drawn:
+  availability 77,289 -> collect 50,000 -> 77,289 (repaid 30,000)
+                      -> collect 80,000 -> 77,289 (repaid 48,000, drawn 44,711)
+                      -> collect 120,000 -> 50,000 (drawn clears mid-week)
+
+2. BIBBY TAKE 60%, NOT THE WHOLE CHEQUE
 ----------------------------------------
-Every point plotted the CLOSING cash for its week, so the leftmost point was
-already a week into the forecast - the line began at a figure you had never
-held. There is now a "Now" point at the current balance, and the second point is
-the end of that same week, so the first segment shows that week's movement
-instead of hiding it.
+The repayment took 100% of every collection until drawn was clear. Bibby
+advanced 60% of the invoice; when the customer pays they keep that 60% and remit
+the rest. Taking the lot starved the early weeks and cleared the facility far
+faster than it really does. Now repaid at the advance rate.
 
-3. A KEY UNDER THE CHART
--------------------------
-Three entries with the actual line styles:
+3. THE REPAYMENT IS VISIBLE
+----------------------------
+It was netted off Invoices in, so the column disagreed with the ledger and
+nothing anywhere said the facility had been repaid. It is now a line in
+FINANCING & TAX - "Invoice finance repayment (Bibby)" - and the row adds up.
 
-  Projected cash balance (solid gold)  - bank only. Facilities NOT folded in, so
-                                         it can and should go negative.
-  Total available (dashed teal)        - cash PLUS card headroom, overdraft
-                                         headroom and still-drawable invoice
-                                         finance. Borrowable, not owned.
-  Zero (dashed red)                    - crossing it means you are into the
-                                         overdraft.
+4. THE TOOLTIP FOLLOWS THE WEEK
+--------------------------------
+"less drawn" and "Card headroom" were both today's figures shown against a
+future week. Both now move with the week.
 
-The old prose footnote is replaced, and it now says the card figure RISES as
-payments clear rather than describing it as flat.
+STILL YOUR DECISION, NOT DONE HERE
+-----------------------------------
+The double count remains: Bibby sits in your balances at -122,711, so the drawn
+is deducted from cash AND from availability. The lender model - which you agreed
+to - means REMOVING the Bibby account from the balances panel entirely. Bank
+then reads 2,501, which is what is actually in Metrobank, and the liability
+lives on the balance sheet.
 
-WHAT TO CHECK
--------------
-  - The line starts at your current balance, not week 1's close.
-  - Schedule a card payment: cash drops that week and the dashed line does NOT.
-  - Card headroom in the tooltip rises after a payment week.
+I have not deleted it for you. Delete that row when you are ready and the model
+is coherent; leave it and cash reads 122,711 low.

@@ -1382,12 +1382,27 @@ export default function CashFlow() {
 
       // Bibby take their repayment out of what the customer pays, so it never reaches
       // your account. Capped at what was collected - it cannot repay more than came in.
-      if (ifDrawnLeft > 0 && invoicesIn > 0) {
-        ifRepaid = Math.min(ifDrawnLeft, invoicesIn)
+      // BIBBY TAKE THEIR ADVANCE, NOT THE WHOLE CHEQUE.
+      //
+      // This took 100% of every collection until the drawn balance was clear. Bibby
+      // advanced 60% of the invoice; when the customer pays, they keep that 60% and remit
+      // the rest. Taking the lot starved the early weeks of cash and repaid the facility
+      // far faster than it really clears.
+      const collectedThisWk = invoicesIn + fcSalesIn
+      if (ifDrawnLeft > 0 && collectedThisWk > 0) {
+        const share = facilityHeadroom.rate > 0 ? facilityHeadroom.rate : 1
+        ifRepaid = Math.min(ifDrawnLeft, collectedThisWk * share)
         ifDrawnLeft -= ifRepaid
       }
-      const moneyIn = (invoicesIn - ifRepaid) + retIn + vatInPos + fcSalesIn
-      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut
+      // THE REPAYMENT IS AN OUTFLOW, NOT A SMALLER RECEIPT.
+      //
+      // It used to be netted off Invoices in, so the column disagreed with the ledger and
+      // there was no line anywhere saying the facility had been repaid. It sits in
+      // Financing & tax now - which is what it is - and the row adds up again.
+      if (ifRepaid > 0) commDetail.push({ name: 'Invoice finance repayment (Bibby)', amount: ifRepaid, kind: 'if', date: s })
+      const finOut = commOut + ifRepaid
+      const moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
+      const moneyOut = billsOut + ohOut + finOut + vatOut + cisOut + fcCostOut
       const net = moneyIn - moneyOut
       // ARREARS ROW REMOVED.
       //
@@ -1418,12 +1433,12 @@ export default function CashFlow() {
         // The window's last day. The reconciliation needs it to tell "after the horizon"
         // from "no date at all", and it was not on the row - so that test never fired.
         weekEnd: e,
-        invoicesIn: Math.round(invoicesIn - ifRepaid), ifRepaid: Math.round(ifRepaid),
+        invoicesIn: Math.round(invoicesIn), ifRepaid: Math.round(ifRepaid),
         invDetail: invDetail.sort((a, b) => b.amount - a.amount),
         retIn: Math.round(retIn), vatIn: Math.round(vatInPos), vatAssumedPaid: Math.round(vatAssumedPaid),
         vatEstimated, vatSrcs, cisEstimated,
         cisDetail: inWkCis,
-        bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), commDetail, vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), billDetail, overheads: Math.round(ohOut), ohDetail, commitments: Math.round(finOut), commDetail, vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
@@ -1624,7 +1639,7 @@ export default function CashFlow() {
       closing: Math.round(startCash),
       available: Math.round(startCash) + cardHeadroom + facilityHeadroom.ifAvail
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -startCash)),
-      ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom,
+      ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom, drawn: facilityHeadroom.ifDrawn,
       moneyIn: 0, moneyOut: 0,
     })
     let ifRunning = facilityHeadroom.ifAvail
@@ -1638,6 +1653,9 @@ export default function CashFlow() {
     // pulled the cash line down and left the availability line flat. Paying a card does
     // not reduce what you can borrow - it restores it.
     let cardRunning = cardHeadroom
+    // Drawn falls as collections repay it, so the tooltip stops showing today's figure
+    // against a future week's availability.
+    let drawnRunning = facilityHeadroom.ifDrawn
     for (const r of forecast) {
       // INVOICE FINANCE AVAILABILITY MOVES. Holding it constant made the available line
       // run parallel to cash, which is the opposite of how the facility behaves.
@@ -1649,8 +1667,20 @@ export default function CashFlow() {
       //
       //   + invoices RAISED this week   x advance rate
       //   - invoices COLLECTED this week x advance rate
+      // AVAILABILITY IS totalAdvance MINUS drawn, SO BOTH SIDES MOVE.
+      //
+      // Collecting an invoice shrinks the ledger, which cuts totalAdvance by the advance
+      // rate - that part was already here. But the same collection REPAYS the drawn
+      // balance by the same amount, and that was not. So availability fell away all
+      // through the forecast as you collected, when in reality the two cancel and it
+      // should stay broadly flat, moving only when billing outpaces collection.
+      //
+      // Once drawn reaches zero there is nothing left to repay, and from that point a
+      // collection genuinely does reduce availability - which the arithmetic handles by
+      // itself, because ifRepaid is zero.
       const move = (r.raised || 0) * facilityHeadroom.rate
         - ((r.invoicesIn || 0) + (r.projSalesIn || 0)) * facilityHeadroom.rate
+        + (r.ifRepaid || 0)
       ifRunning = Math.max(0, ifRunning + move)
       ifGrossRunning = Math.max(0, ifGrossRunning + move)
       const ifNow = ifRunning
@@ -1660,12 +1690,14 @@ export default function CashFlow() {
       const cardPaidWk = (r.commDetail || []).filter(x => x && x.kind === 'card').reduce((t, x) => t + (x.amount || 0), 0)
       cardRunning += cardPaidWk
       const cardNow = cardRunning
+      drawnRunning = Math.max(0, drawnRunning - (r.ifRepaid || 0))
+      const drawnNow = drawnRunning
       const avail = (c) => c + cardNow + ifNow
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
-      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
       if (prev && prev._arr && !prev.opening) {
-        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
         continue
       }
       out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
@@ -2223,7 +2255,7 @@ export default function CashFlow() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                   <XAxis dataKey="wk" tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={64} />
                   <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={54} />
-                  <Tooltip content={<CashTip drawn={facilityHeadroom.ifDrawn} cards={facilityHeadroom.cards} odLimit={facilityHeadroom.odLimit} />} />
+                  <Tooltip content={<CashTip odLimit={facilityHeadroom.odLimit} />} />
                   <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="3 3" />
                   {/* Dashed, and drawn UNDER the cash line so cash stays the headline.
                       Available is what you could pay out if you drew everything - useful,
@@ -3379,11 +3411,14 @@ function NetPositionBox({ bankCash, cardDebt, odDrawn, ifDrawn }) {
 // the facility supports in total, before deducting what is already drawn. Net is shown
 // underneath because that is what the dashed available line actually uses: money already
 // drawn is in the bank and cannot be drawn again.
-function CashTip({ active, payload, label, drawn, cards, odLimit }) {
+function CashTip({ active, payload, label, odLimit }) {
   if (!active || !payload || !payload.length) return null
   const p = payload[0] && payload[0].payload
   if (!p) return null
   const od = Math.max(0, (Number(odLimit) || 0) - Math.max(0, -(p.closing || 0)))
+  // Off the datum, so both move with the week instead of showing today's figure.
+  const drawn = Number(p.drawn) || 0
+  const cards = Number(p.cards) || 0
   const row = (k, v, colour, bold) => (
     <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, fontSize: 12, marginTop: 2 }}>
       <span style={{ color: '#6b6b68' }}>{k}</span>
