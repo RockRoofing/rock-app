@@ -144,7 +144,9 @@ export default function ExportFinancials() {
           </button>
           {rendered ? (
             <span style={{ fontSize: 11.5, color: '#8a857c' }}>
-              Wait for every page below to finish loading first - anything still saying &quot;Loading...&quot; prints that way.
+              <strong>Wait for every section to finish loading before you press it</strong> - anything still saying
+              &quot;Loading...&quot; prints exactly that. The Forecast P&amp;L and Forecast Balance Sheet are the slowest,
+              because they each compose three endpoints.
               In the print dialog choose <strong>Save as PDF</strong>, and turn on background graphics to keep the shading.
             </span>
           ) : null}
@@ -161,37 +163,98 @@ export default function ExportFinancials() {
              rather than by editing seventeen files. */
           .rr-pg > div { min-height: 0 !important; background: #fff !important; }
           /* Wide financial tables live in horizontal scrollers on screen. Printed, the
-             scroller clips them - the columns past the edge simply vanish. */
+             scroller clips them - the columns past the edge simply vanish.
+             THE HEIGHT MUST GO WITH IT. The resizable lists carry a fixed height, and a
+             fixed-height box with visible overflow spills its rows straight out of the
+             box and onto whatever section follows - which is why Bills to pay was
+             printing on top of the Forecast P&L. */
           .rr-pg div { overflow: visible !important; }
+          .rr-pg div { height: auto !important; max-height: none !important; resize: none !important; }
           .rr-pg table { page-break-inside: auto; }
           .rr-pg tr { page-break-inside: avoid; }
           /* Controls are meaningless on paper. Inputs and selects are KEPT because they
              carry values you need to read - debtor days, retention %, manual figures. */
           .rr-pg button { display: none !important; }
           .rr-brk { page-break-before: always; }
+          /* The cover is the first sheet, so nothing before it may force a break. */
+          .rr-cover { page-break-before: avoid; }
           .rr-brk:first-child { page-break-before: avoid; }
+          /* Divider sheets are vertically centred blocks; without this they collapse to
+             the top of the page and the effect is lost. */
+          .rr-pg img { max-width: 60mm; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       ` }} />
 
-      {rendered ? chosen.map((t, i) => {
-        const Comp = t[2]
-        return (
-          <div key={t[0]} className={`rr-pg ${i > 0 ? 'rr-brk' : ''}`}>
-            <div style={{ padding: '10px 24px 0', fontSize: 15, fontWeight: 700, color: INK, background: '#fff' }}>
-              {t[1]}
-              <span style={{ fontWeight: 400, fontSize: 11.5, color: '#a8a49c', marginLeft: 10 }}>
-                {new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </span>
+      {rendered ? (
+        <>
+          {/* COVER. Its own sheet - page-break-after on the section below it. */}
+          <div className="rr-pg rr-cover">
+            <div style={{ minHeight: '150mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 30mm' }}>
+              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 74, width: 'auto', objectFit: 'contain', marginBottom: 34 }} />
+              <div style={{ fontSize: 34, fontWeight: 800, color: INK, letterSpacing: -0.5 }}>Business Financials</div>
+              <div style={{ fontSize: 17, color: '#8a857c', marginTop: 6 }}>Rock Roofing Limited</div>
+              <div style={{ height: 3, width: 90, background: INK, margin: '22px 0' }} />
+              <div style={{ fontSize: 13, color: '#57534e', lineHeight: 1.7 }}>
+                <div><strong>Prepared</strong> {new Date().toLocaleString('en-GB', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                <div><strong>Sections</strong> {chosen.length} of {TABS.length}</div>
+                <div><strong>Financial year</strong> 1 December to 30 November</div>
+              </div>
+              <div style={{ fontSize: 10.5, color: '#a8a49c', marginTop: 30, maxWidth: '120mm', lineHeight: 1.5 }}>
+                Figures are as at the moment this was produced and include forecasts, which are estimates rather than
+                commitments. Each section states its own basis and the date its data was last synced from Xero.
+              </div>
             </div>
+          </div>
+
+          {/* CONTENTS. Numbered to match the section dividers. */}
+          <div className="rr-pg rr-brk">
+            <div style={{ padding: '0 30mm' }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: INK, marginBottom: 4 }}>Contents</div>
+              <div style={{ height: 3, width: 60, background: INK, margin: '10px 0 22px' }} />
+              {chosen.map((t, i) => (
+                <div key={t[0]} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0eee9' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#a8a49c', width: 26 }}>{String(i + 1).padStart(2, '0')}</span>
+                  <span style={{ fontSize: 14, color: INK }}>{t[1]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {chosen.map((t, i) => {
+            const Comp = t[2]
+            return (
+              <div key={t[0]}>
+                {/* SECTION DIVIDER, its own sheet. Makes a 16-page pack navigable and
+                    stops one section's last table running into the next one's heading. */}
+                <div className="rr-pg rr-brk">
+                  <div style={{ minHeight: '120mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 30mm' }}>
+                    <div style={{ fontSize: 60, fontWeight: 800, color: '#eceae5', lineHeight: 1 }}>{String(i + 1).padStart(2, '0')}</div>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: INK, marginTop: 6 }}>{t[1]}</div>
+                    <div style={{ height: 3, width: 70, background: INK, marginTop: 16 }} />
+                    <div style={{ fontSize: 11.5, color: '#a8a49c', marginTop: 14 }}>
+                      Rock Roofing Limited &middot; Business Financials &middot; section {i + 1} of {chosen.length}
+                    </div>
+                  </div>
+                </div>
+                <div className="rr-pg rr-brk">
+                  <div style={{ padding: '10px 24px 0', fontSize: 15, fontWeight: 700, color: INK, background: '#fff' }}>
+                    {t[1]}
+                    <span style={{ fontWeight: 400, fontSize: 11.5, color: '#a8a49c', marginLeft: 10 }}>
+                      {new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
             {/* One boundary per tab. A single page throwing should cost you that page,
                 not the whole export. */}
-            <PageErrorBoundary>
-              <Comp />
-            </PageErrorBoundary>
-          </div>
-        )
-      }) : (
+                  <PageErrorBoundary>
+                    <Comp />
+                  </PageErrorBoundary>
+                </div>
+              </div>
+            )
+          })}
+        </>
+      ) : (
         <div className="rr-noprint" style={{ padding: 40, color: '#a8a49c', fontSize: 13 }}>
           Nothing loaded yet. Tick the tabs you want and press Load.
         </div>

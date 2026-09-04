@@ -1,50 +1,55 @@
-pkg753 - Per-card balances in the graph pop-out
-================================================
+pkg754 - PDF: overlap fixed, cover, contents, section dividers
+===============================================================
 
-DEPLOY OVER pkg752 (contains 742-752). Four files.
+DEPLOY OVER pkg753 (contains 742-753). Five files.
 
 REPLACE:
+  pages/business-financials/export.js
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-WHAT WAS MISSING
-----------------
-The pop-out only ever showed one pooled "Card headroom" figure. Even with that
-rising correctly after a payment, it could not show that a particular card had
-been paid down or cleared - there was no per-card balance anywhere on the chart.
+1. THE OVERLAP - MY FAULT FROM pkg742
+--------------------------------------
+Making Bills to pay and Invoices owed drag-resizable meant changing them from
+maxHeight to a FIXED height. The print stylesheet already forced
+overflow: visible, so wide tables would not be clipped.
 
-NOW
----
-The Cards block in the pop-out lists every card and what it still owes AT THAT
-WEEK, after any scheduled payments:
+A fixed-height box with visible overflow does not grow - it spills its rows out
+of the box and straight onto whatever comes next. That is why Bills to pay is
+printing on top of the Forecast P&L and the Forecast Balance Sheet on your PDF.
 
-  AMEX                    £0
-  Capital on Tap    £-77,156
-  paid this week    £-40,000
-  Card headroom      £82,844
-  Overdraft headroom      £0
+Print now also forces height: auto, max-height: none and resize: none, so the
+lists expand to their full length on paper instead of overflowing a fixed box.
 
-Green where a card is clear, red where it still owes. The card name travels with
-the payment event, so the balance and the Financing & tax line are the same
-figure - they cannot disagree.
+2. COVER SHEET
+--------------
+Its own page: the Rock Roofing logo, "Business Financials", the company name,
+the date and time prepared, how many sections are included, and the financial
+year. A short note that the figures include forecasts and that each section
+states its own basis and sync date.
 
-Checked against your cards:
-  week 0            CoT owes 77,156   headroom  82,844
-  after 40,000      CoT owes 37,156   headroom 122,844
-  cleared           CoT owes      0   headroom 160,000
+3. CONTENTS
+-----------
+Second page. Numbered list of the sections included, matching the numbers on the
+dividers.
 
-Balances fall and headroom rises by the same amount, which is the relationship
-that was impossible to see before.
+4. SECTION DIVIDERS
+-------------------
+Each section is preceded by its own sheet: a large section number, the section
+title, and "section N of M". A 16-page pack is navigable now, and one section's
+last table can no longer run into the next one's heading.
 
-ALSO: the "Now" point at the left of the chart carries the opening balances, so
-hovering it shows today's real card position rather than blanks.
+5. A CLEARER WARNING
+--------------------
+Your PDF has "Loading..." where the Forecast P&L and Forecast Balance Sheet
+should be - they had not finished when the print dialog opened. Those two are
+the slowest because they each compose three endpoints. The note by the Download
+button now says so explicitly.
 
-A NOTE ON MY WORKING COPY
---------------------------
-My copy of cashflow.js had drifted from what I shipped again - it contained a
-half-finished version of this change that was never in a package. I diffed
-against the pkg752 zip and reset before building, so this is on top of what you
-actually have. Fourth time today. If anything behaves unlike these notes say,
-re-uploading the repo would let me diff properly rather than trust my copy.
+WHAT TO CHECK
+-------------
+  - Bills to pay runs to its full length and nothing prints on top of it.
+  - Cover, then contents, then each section behind its own divider.
+  - Wait for every section to load - especially the last two - before printing.
