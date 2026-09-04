@@ -191,7 +191,7 @@ export default function ForecastBalanceSheet() {
       ledgerByMonth[k] = (ledgerByMonth[k] || 0) + (Number(inv.amountDue) || 0)
     }
 
-    let wipApplied = false, wipDeduct = 0, wipAccrual = 0
+    let wipDeduct = 0, wipAccrual = 0
     let bank = openBank, cards = openCards, debtors = openDebtors, creditors = openCreditors
     let financing = openFinancing, retention = 0, reserves = openEquityish
     const rows = []
@@ -243,9 +243,16 @@ export default function ForecastBalanceSheet() {
       // Both still hit the financing catch-all as well, so assets and liabilities move
       // with reserves and "Out by" keeps tying. What changes is that the figures are
       // named instead of buried.
-      const wipOff = (pl.wip.available && !pl.wip.include && pl.wip.lastActual
-        && mo > pl.wip.lastActual && !wipApplied) ? pl.wip.amount : 0
-      if (wipOff) { wipApplied = true; wipDeduct = wipOff; financing -= wipOff }
+      // YEAR END ONLY. This applied at the FIRST forecast month and carried forward, so
+      // every month from August on showed the deduction and August's net assets read
+      // -3,216 in a month that made 62,250.
+      //
+      // Each month's balance sheet now stands as it is. The WIP comes off once, at the
+      // last month of the financial year, which is the only date the adjustment is
+      // actually made.
+      const wipOff = (pl.wip.available && !pl.wip.include && mo === `${fyEnd}-11`)
+        ? pl.wip.amount : 0
+      if (wipOff) { wipDeduct = wipOff; financing -= wipOff }
 
       // The November accrual - work done after the valuation date, not yet invoiced.
       // Without this the balance sheet would end the year short of the P&L by exactly
@@ -489,14 +496,13 @@ export default function ForecastBalanceSheet() {
 
             {model.wip && model.wip.available && !model.wip.include ? (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
-                <strong>{gbp(model.wip.amount)} of WIP taken out, and the November accrual added back, as their own rows under Reserves.</strong>
+                <strong>{gbp(model.wip.amount)} of WIP taken out at the YEAR END only, with the November accrual added back, as their own rows under Reserves.</strong>
                 <div style={{ marginTop: 3 }}>
-                  Reserves roll forward CLEAN - each month&apos;s own profit, unadjusted - and the two WIP movements sit
-                  on named lines beneath. Taking the deduction straight off reserves made the first forecast month look
-                  like it lost money when it had not; the fall was the adjustment, with nothing saying so.
-                  Actual months are untouched: the asset really was there on those dates, and the journal reverses on
-                  the 1st, so only the forecast months should stop carrying it. Change either with the ticks on the
-                  Forecast P&amp;L.
+                  Every month&apos;s balance sheet stands as it is. Reserves roll forward CLEAN - each month&apos;s own
+                  profit, unadjusted - and the adjustment lands ONCE, in the last month of the financial year, which is
+                  the only date it is actually made. It used to apply from the first forecast month and carry forward,
+                  which made August read a fall in net assets in a month that made a profit. Actual months are
+                  untouched. Change either with the ticks on the Forecast P&amp;L.
                 </div>
               </div>
             ) : null}
@@ -524,7 +530,7 @@ export default function ForecastBalanceSheet() {
                   <Row label="Net assets" rows={model.rows} pick={r => r.netAssets} bold band />
                   <Row label="Reserves (opening + profit)" rows={model.rows} pick={r => r.reserves} />
                   {model.rows.some(r => r.wipDeduct) ? (
-                    <Row label="less last completed WIP" rows={model.rows} pick={r => r.wipDeduct ? -r.wipDeduct : null} colour="#b45309" />
+                    <Row label={`less last completed WIP (${monthShort(model.wip.month)}, at year end)`} rows={model.rows} pick={r => r.wipDeduct ? -r.wipDeduct : null} colour="#b45309" />
                   ) : null}
                   {model.rows.some(r => r.wipAccrual) ? (
                     <Row label="plus estimated WIP at 30 Nov" rows={model.rows} pick={r => r.wipAccrual ? r.wipAccrual : null} colour="#0f766e" />

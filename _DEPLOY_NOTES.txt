@@ -1,55 +1,45 @@
-pkg754 - PDF: overlap fixed, cover, contents, section dividers
-===============================================================
+pkg755 - WIP comes off at the year end only
+============================================
 
-DEPLOY OVER pkg753 (contains 742-753). Five files.
+DEPLOY OVER pkg754 (contains 742-754). Six files.
 
 REPLACE:
-  pages/business-financials/export.js
+  pages/business-financials/forecast-balance-sheet.js   (changed here)
+  pages/business-financials/export.js                   (as pkg754)
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-1. THE OVERLAP - MY FAULT FROM pkg742
---------------------------------------
-Making Bills to pay and Invoices owed drag-resizable meant changing them from
-maxHeight to a FIXED height. The print stylesheet already forced
-overflow: visible, so wide tables would not be clipped.
-
-A fixed-height box with visible overflow does not grow - it spills its rows out
-of the box and straight onto whatever comes next. That is why Bills to pay is
-printing on top of the Forecast P&L and the Forecast Balance Sheet on your PDF.
-
-Print now also forces height: auto, max-height: none and resize: none, so the
-lists expand to their full length on paper instead of overflowing a fixed box.
-
-2. COVER SHEET
+WHAT WAS WRONG
 --------------
-Its own page: the Rock Roofing logo, "Business Financials", the company name,
-the date and time prepared, how many sections are included, and the financial
-year. A short note that the figures include forecasts and that each section
-states its own basis and sync date.
+The deduction was applied at the FIRST forecast month and then carried forward,
+so it showed on August, September, October and November alike - and August's net
+assets read -3,216 in a month that made 62,250 of profit.
 
-3. CONTENTS
------------
-Second page. Numbered list of the sections included, matching the numbers on the
-dividers.
+NOW
+---
+Every month's balance sheet stands as it is. The WIP comes off ONCE, in the last
+month of the financial year, which is the only date the adjustment is actually
+made.
 
-4. SECTION DIVIDERS
--------------------
-Each section is preceded by its own sheet: a large section number, the section
-title, and "section N of M". A 16-page pack is navigable now, and one section's
-last table can no longer run into the next one's heading.
+On your figures:
 
-5. A CLEARER WARNING
---------------------
-Your PDF has "Loading..." where the Forecast P&L and Forecast Balance Sheet
-should be - they had not finished when the print dialog opened. Those two are
-the slowest because they each compose three endpoints. The note by the Download
-button now says so explicitly.
+  Jul 26   reserves  56,460   after WIP  56,460
+  Aug 26   reserves 118,710   after WIP 118,710
+  Sept 26  reserves 289,113   after WIP 289,113
+  Oct 26   reserves 363,511   after WIP 363,511
+  Nov 26   reserves 401,391   after WIP 283,782   (-121,926 +4,317)
 
-WHAT TO CHECK
--------------
-  - Bills to pay runs to its full length and nothing prints on top of it.
-  - Cover, then contents, then each section behind its own divider.
-  - Wait for every section to load - especially the last two - before printing.
+August returns to 118,710 and the -3,216 is gone. November still lands on the
+283,782 you have now, so the year end is unchanged - only the months in between
+stop carrying it.
+
+The row is relabelled "less last completed WIP (Jul 26, at year end)" so it is
+clear both which month's figure it is and when it is applied.
+
+ALSO IN THIS PACKAGE (pkg754)
+------------------------------
+  - PDF overlap fixed. Fixed-height resizable lists were spilling their rows onto
+    the following section in print.
+  - Branded cover sheet, contents page, and a divider sheet before each section.
