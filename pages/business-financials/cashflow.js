@@ -569,7 +569,9 @@ export default function CashFlow() {
       const amt = Math.min(Math.abs(Number(p.amount) || 0), cardLeft[nm])
       if (amt <= 0) continue
       cardLeft[nm] -= amt
-      cardEvents.push({ date: when, name: `${nm} - card payment`, amount: amt, kind: 'card' })
+      // The raw card name travels with the event so the tooltip can show a balance PER
+      // CARD rather than one pooled headroom figure.
+      cardEvents.push({ date: when, name: `${nm} - card payment`, amount: amt, kind: 'card', card: nm })
     }
 
     const commEvents = [
@@ -1491,6 +1493,7 @@ export default function CashFlow() {
       .filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT') && excluded[invKey(i)])
       .reduce((t, i) => t + (i.amountDue || 0), 0)
     placements.sort((x, y) => (x.ok === y.ok) ? Math.abs(y.amount) - Math.abs(x.amount) : (x.ok ? 1 : -1))
+    rows.cardOpening = cardAccounts.reduce((m, c) => { m[c.name] = c.opening; return m }, {})
     rows.recon = {
       placements,
       placedTotal: placements.filter(x => x.ok).reduce((t, x) => t + x.amount, 0),
@@ -1639,7 +1642,7 @@ export default function CashFlow() {
       closing: Math.round(startCash),
       available: Math.round(startCash) + cardHeadroom + facilityHeadroom.ifAvail
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -startCash)),
-      ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom, drawn: facilityHeadroom.ifDrawn,
+      ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom, drawn: facilityHeadroom.ifDrawn, cardBalances: { ...(forecast.cardOpening || {}) }, cardPaid: 0,
       moneyIn: 0, moneyOut: 0,
     })
     let ifRunning = facilityHeadroom.ifAvail
@@ -1656,6 +1659,8 @@ export default function CashFlow() {
     // Drawn falls as collections repay it, so the tooltip stops showing today's figure
     // against a future week's availability.
     let drawnRunning = facilityHeadroom.ifDrawn
+    // A running balance PER CARD, so the pop-out can show what each still owes.
+    const cardBal = { ...(forecast.cardOpening || {}) }
     for (const r of forecast) {
       // INVOICE FINANCE AVAILABILITY MOVES. Holding it constant made the available line
       // run parallel to cash, which is the opposite of how the facility behaves.
@@ -1687,17 +1692,23 @@ export default function CashFlow() {
       const ifGrossNow = ifGrossRunning
       // Read off the SAME event list the Financing & tax column is built from, so the
       // two cannot report different payments.
-      const cardPaidWk = (r.commDetail || []).filter(x => x && x.kind === 'card').reduce((t, x) => t + (x.amount || 0), 0)
+      const cardPayRows = (r.commDetail || []).filter(x => x && x.kind === 'card')
+      for (const x of cardPayRows) {
+        if (!x.card) continue
+        cardBal[x.card] = Math.max(0, (cardBal[x.card] || 0) - (x.amount || 0))
+      }
+      const cardPaidWk = cardPayRows.reduce((t, x) => t + (x.amount || 0), 0)
       cardRunning += cardPaidWk
       const cardNow = cardRunning
+      const cardBalNow = { ...cardBal }
       drawnRunning = Math.max(0, drawnRunning - (r.ifRepaid || 0))
       const drawnNow = drawnRunning
       const avail = (c) => c + cardNow + ifNow
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
-      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, cardBalances: cardBalNow, cardPaid: cardPaidWk, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
       if (prev && prev._arr && !prev.opening) {
-        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, drawn: drawnNow, cardBalances: cardBalNow, cardPaid: cardPaidWk, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
         continue
       }
       out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
@@ -3437,7 +3448,14 @@ function CashTip({ active, payload, label, odLimit }) {
         {row('Still drawable', gbp(p.ifNet || 0))}
       </div>
       <div style={{ borderTop: '1px solid #f0eee9', marginTop: 6, paddingTop: 5 }}>
-        {row('Card headroom', gbp(cards || 0))}
+        <div style={{ fontSize: 10.5, color: '#9a958c', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>Cards</div>
+        {/* WHAT EACH CARD STILL OWES at this week, after any scheduled payments. A single
+            pooled headroom figure could not show that a card had been cleared. */}
+        {Object.keys(p.cardBalances || {}).sort().map(n => (
+          row(n, gbp(-(p.cardBalances[n] || 0)), (p.cardBalances[n] || 0) > 0 ? '#dc2626' : '#16a34a')
+        ))}
+        {p.cardPaid ? row('paid this week', gbp(-(p.cardPaid || 0)), '#b45309') : null}
+        {row('Card headroom', gbp(cards || 0), '#0f766e', true)}
         {row('Overdraft headroom', gbp(od))}
       </div>
       <div style={{ fontSize: 10, color: '#a8a49c', marginTop: 6, lineHeight: 1.35 }}>

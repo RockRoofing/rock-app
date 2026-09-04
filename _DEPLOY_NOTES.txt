@@ -1,7 +1,7 @@
-pkg752 - Bibby: collections repay the drawn balance
-====================================================
+pkg753 - Per-card balances in the graph pop-out
+================================================
 
-DEPLOY OVER pkg751 (contains 742-751). Four files.
+DEPLOY OVER pkg752 (contains 742-752). Four files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -9,52 +9,42 @@ REPLACE:
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-THE ANSWER TO YOUR QUESTION: it did not, and now it does.
+WHAT WAS MISSING
+----------------
+The pop-out only ever showed one pooled "Card headroom" figure. Even with that
+rising correctly after a payment, it could not show that a particular card had
+been paid down or cleared - there was no per-card balance anywhere on the chart.
 
-1. AVAILABILITY NO LONGER FALLS AS YOU COLLECT
------------------------------------------------
-Availability is totalAdvance MINUS drawn, so both sides move on a collection:
+NOW
+---
+The Cards block in the pop-out lists every card and what it still owes AT THAT
+WEEK, after any scheduled payments:
 
-  the ledger shrinks    -> totalAdvance down by the advance rate   (was modelled)
-  the advance is repaid -> drawn down by the same amount           (was NOT)
+  AMEX                    £0
+  Capital on Tap    £-77,156
+  paid this week    £-40,000
+  Card headroom      £82,844
+  Overdraft headroom      £0
 
-Only the first was in the model, so availability drained away through the
-forecast. The two cancel, so it now stays broadly flat and moves only when
-billing outpaces collection.
+Green where a card is clear, red where it still owes. The card name travels with
+the payment event, so the balance and the Financing & tax line are the same
+figure - they cannot disagree.
 
-Once drawn reaches zero there is nothing left to repay, and a collection DOES
-then reduce availability. The arithmetic handles that by itself.
+Checked against your cards:
+  week 0            CoT owes 77,156   headroom  82,844
+  after 40,000      CoT owes 37,156   headroom 122,844
+  cleared           CoT owes      0   headroom 160,000
 
-Worked through at a 200,000 totalAdvance and 122,711 drawn:
-  availability 77,289 -> collect 50,000 -> 77,289 (repaid 30,000)
-                      -> collect 80,000 -> 77,289 (repaid 48,000, drawn 44,711)
-                      -> collect 120,000 -> 50,000 (drawn clears mid-week)
+Balances fall and headroom rises by the same amount, which is the relationship
+that was impossible to see before.
 
-2. BIBBY TAKE 60%, NOT THE WHOLE CHEQUE
-----------------------------------------
-The repayment took 100% of every collection until drawn was clear. Bibby
-advanced 60% of the invoice; when the customer pays they keep that 60% and remit
-the rest. Taking the lot starved the early weeks and cleared the facility far
-faster than it really does. Now repaid at the advance rate.
+ALSO: the "Now" point at the left of the chart carries the opening balances, so
+hovering it shows today's real card position rather than blanks.
 
-3. THE REPAYMENT IS VISIBLE
-----------------------------
-It was netted off Invoices in, so the column disagreed with the ledger and
-nothing anywhere said the facility had been repaid. It is now a line in
-FINANCING & TAX - "Invoice finance repayment (Bibby)" - and the row adds up.
-
-4. THE TOOLTIP FOLLOWS THE WEEK
---------------------------------
-"less drawn" and "Card headroom" were both today's figures shown against a
-future week. Both now move with the week.
-
-STILL YOUR DECISION, NOT DONE HERE
------------------------------------
-The double count remains: Bibby sits in your balances at -122,711, so the drawn
-is deducted from cash AND from availability. The lender model - which you agreed
-to - means REMOVING the Bibby account from the balances panel entirely. Bank
-then reads 2,501, which is what is actually in Metrobank, and the liability
-lives on the balance sheet.
-
-I have not deleted it for you. Delete that row when you are ready and the model
-is coherent; leave it and cash reads 122,711 low.
+A NOTE ON MY WORKING COPY
+--------------------------
+My copy of cashflow.js had drifted from what I shipped again - it contained a
+half-finished version of this change that was never in a package. I diffed
+against the pkg752 zip and reset before building, so this is on top of what you
+actually have. Fourth time today. If anything behaves unlike these notes say,
+re-uploading the repo would let me diff properly rather than trust my copy.
