@@ -1558,15 +1558,31 @@ export default function CashFlow() {
   // figure, so headroom is the limit less what is already used. Card and invoice finance
   // headroom are taken as they stand - the drawn amounts do not change week to week within
   // the forecast, and pretending otherwise would be false precision.
-  const facilityHeadroom = (() => {
+  // CARD HEADROOM, ONCE.
+  //
+  // The "Max cash available" box built its card list from the MANUAL balances; the dashed
+  // line on the chart built its own from data.balances.accounts, which is XERO's list.
+  // Your cards are entered by hand, so Xero's list did not flag them, anyPerCard came out
+  // false, and the line fell back to the pooled ccLimit - which is 0. The box showed
+  // 82,844 of headroom and the graph showed none, from the same two numbers.
+  //
+  // Manual first, Xero as the fallback: the same precedence the rest of the page uses.
+  const cardHeadroom = (() => {
     const cardLimits = finance.cardLimits || {}
-    const anyPerCard = (data?.balances?.accounts || []).some(a => a.isCard && (Number(cardLimits[a.name]) || 0) > 0)
-    const cards = anyPerCard
-      ? (data?.balances?.accounts || []).filter(a => a.isCard).reduce((t, a) => {
-          const lim = Number(cardLimits[a.name]) || 0
-          return t + Math.max(0, lim - Math.abs(Math.min(0, a.balance || 0)))
-        }, 0)
-      : Math.max(0, (Number(finance.ccLimit) || 0) - Math.abs(Math.min(0, (data?.balances?.cardTotal) || 0)))
+    const manualCards = (manualBal || []).filter(b => b && b.kind === 'card' && String(b.name || '').trim())
+    const list = manualCards.length
+      ? manualCards.map(b => ({ name: String(b.name).trim(), balance: Number(b.balance) || 0 }))
+      : (data?.balances?.accounts || []).filter(a => a.isCard).map(a => ({ name: a.name, balance: Number(a.balance) || 0 }))
+    const anyPerCard = list.some(a => (Number(cardLimits[a.name]) || 0) > 0)
+    if (anyPerCard) {
+      return list.reduce((t, a) => t + Math.max(0, (Number(cardLimits[a.name]) || 0) - Math.abs(Math.min(0, a.balance))), 0)
+    }
+    const owed = list.reduce((t, a) => t + Math.abs(Math.min(0, a.balance)), 0)
+    return Math.max(0, (Number(finance.ccLimit) || 0) - owed)
+  })()
+
+  const facilityHeadroom = (() => {
+    const cards = cardHeadroom
     const pos = data?.ifAvailability || null
     // AVAILABILITY IS totalAdvance LESS drawn. There is no `availability` field on the
     // published position - I assumed one, so this read zero from the day it was written,
@@ -1701,13 +1717,10 @@ export default function CashFlow() {
               // with room net out under a pooled figure, and the full one is invisible.
               const cardLimits = finance.cardLimits || {}
               const anyPerCard = cardAccts.some(a => (Number(cardLimits[a.name]) || 0) > 0)
-              const ccHeadroom = anyPerCard
-                ? cardAccts.reduce((t, a) => {
-                    const lim = Number(cardLimits[a.name]) || 0
-                    const owed = Math.abs(Math.min(0, a.balance || 0))
-                    return t + Math.max(0, lim - owed)
-                  }, 0)
-                : Math.max(0, (Number(finance.ccLimit) || 0) - cardDebt)
+              // THE SAME FIGURE THE DASHED LINE USES. Computed once at component scope -
+              // this block and the chart each had their own copy reading different
+              // sources, and they disagreed by the whole 82,844.
+              const ccHeadroom = cardHeadroom
 
               // OVERDRAFT. Anything already drawn shows as a NEGATIVE bank balance and is
               // therefore already inside bankTotal - so the headroom is the limit less

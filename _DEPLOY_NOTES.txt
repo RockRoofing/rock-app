@@ -1,7 +1,7 @@
-pkg749 - Set an insured limit straight from the projection
-===========================================================
+pkg750 - Card headroom missing from the availability line
+==========================================================
 
-DEPLOY OVER pkg748 (contains 742-748). Four files.
+DEPLOY OVER pkg749 (contains 742-749). Four files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -9,34 +9,37 @@ REPLACE:
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-WHAT
-----
-In the projected availability drill-down, every customer without a limit now has
-an "add limit" button beside the name. Type the figure, it saves against that
-EXACT name, and every application under that name is funded from then on.
+WHAT WAS WRONG
+--------------
+Cards WERE in the dashed line - avail = closing + cards + IF - but the card
+figure was computed twice, from two different sources:
 
-Where a limit already exists the row shows "limit £X" in green instead, so you
-can see at a glance which names are covered and which are not.
+  "Max cash available" box   built its card list from your MANUAL balances
+  the dashed line            built its own from data.balances.accounts (XERO'S)
 
-It writes to the same store as the limits table below and the Bibby CSV import -
-one place, so nothing drifts.
+Your cards are entered by hand, so Xero's list did not flag them as cards,
+anyPerCard came out false, and the line fell back to the pooled "Card limit"
+box - which is 0.
 
-WHY NOT JUST FUZZY-MATCH THE NAMES
------------------------------------
-I looked at doing that and it would be wrong on your data. Hollis Croft is
-Torsion CONSTRUCTION; Market Drayton is Torsion PROJECTS. Two different entities
-with two different limits. Normalising the names would merge them and fund one
-against the other's cover.
+So the box showed 82,844 of card headroom and the graph showed none, off the
+same two numbers. That is why the line looked like it excluded them.
 
-Same for "Barnfield Construction Limited" and "Barnfield Construction Ltd." -
-those probably ARE the same company, but the code cannot tell that apart from
-the Torsion case without guessing. So the match stays exact and you set the
-variant by hand, which takes one click and is always right.
+THE FIX
+-------
+One calculation, at component scope, read by both. Manual balances first, Xero
+as the fallback - the same precedence the rest of the page uses.
+
+Checked against your actual figures: AMEX 60,000 limit with nil owed, plus
+Capital on Tap 100,000 limit with 77,156.42 owed = 82,843.58. That is the
+82,844 the box has been showing, and it is now in the line too.
 
 WHAT TO CHECK
 -------------
-  - Open 2026-11. Torsion Construction, Selsdon, Bespoke, Barnfield and Pedrano
-    should each have an "add limit" button.
-  - Set one and the month's "Over insured limit" should drop and "Advance
-    created" rise.
-  - The same limit should appear in the limits table lower down the page.
+  - The dashed total-available line should jump by about 82,844 across the
+    whole window.
+  - Hover any week: "Card headroom" in the tooltip should read 82,844, and
+    total available should equal closing cash + that + still-drawable IF.
+  - It should match the "Max cash available" box at week 0.
+
+If you set a per-card limit and the two ever disagree again, tell me - they read
+one figure now, so they cannot.
