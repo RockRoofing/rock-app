@@ -1,7 +1,7 @@
-pkg750 - Card headroom missing from the availability line
-==========================================================
+pkg751 - Card headroom recovers, chart starts at today, key added
+==================================================================
 
-DEPLOY OVER pkg749 (contains 742-749). Four files.
+DEPLOY OVER pkg750 (contains 742-750). Four files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -9,37 +9,44 @@ REPLACE:
   pages/business-financials/monthly.js
   pages/business-financials/invoice-finance.js
 
-WHAT WAS WRONG
---------------
-Cards WERE in the dashed line - avail = closing + cards + IF - but the card
-figure was computed twice, from two different sources:
+1. CARD HEADROOM NOW RISES AS THE BALANCE IS CLEARED
+-----------------------------------------------------
+It was a constant taken from the opening balances. So scheduling a Capital on
+Tap payment pulled the CASH line down and left the AVAILABLE line flat - which
+reads as though paying a card costs you borrowing power. It restores it.
 
-  "Max cash available" box   built its card list from your MANUAL balances
-  the dashed line            built its own from data.balances.accounts (XERO'S)
+The weekly figure is read off the SAME event list that feeds the Financing & tax
+column, so the two cannot report different payments.
 
-Your cards are entered by hand, so Xero's list did not flag them as cards,
-anyPerCard came out false, and the line fell back to the pooled "Card limit"
-box - which is 0.
+  week 0                    82,844   (AMEX 60,000 nil owed + CoT 100,000 less 77,156)
+  after a 20,000 payment   102,844
+  after a further 30,000   132,844
 
-So the box showed 82,844 of card headroom and the graph showed none, off the
-same two numbers. That is why the line looked like it excluded them.
+2. THE GRAPH NOW STARTS AT TODAY'S CASH
+----------------------------------------
+Every point plotted the CLOSING cash for its week, so the leftmost point was
+already a week into the forecast - the line began at a figure you had never
+held. There is now a "Now" point at the current balance, and the second point is
+the end of that same week, so the first segment shows that week's movement
+instead of hiding it.
 
-THE FIX
--------
-One calculation, at component scope, read by both. Manual balances first, Xero
-as the fallback - the same precedence the rest of the page uses.
+3. A KEY UNDER THE CHART
+-------------------------
+Three entries with the actual line styles:
 
-Checked against your actual figures: AMEX 60,000 limit with nil owed, plus
-Capital on Tap 100,000 limit with 77,156.42 owed = 82,843.58. That is the
-82,844 the box has been showing, and it is now in the line too.
+  Projected cash balance (solid gold)  - bank only. Facilities NOT folded in, so
+                                         it can and should go negative.
+  Total available (dashed teal)        - cash PLUS card headroom, overdraft
+                                         headroom and still-drawable invoice
+                                         finance. Borrowable, not owned.
+  Zero (dashed red)                    - crossing it means you are into the
+                                         overdraft.
+
+The old prose footnote is replaced, and it now says the card figure RISES as
+payments clear rather than describing it as flat.
 
 WHAT TO CHECK
 -------------
-  - The dashed total-available line should jump by about 82,844 across the
-    whole window.
-  - Hover any week: "Card headroom" in the tooltip should read 82,844, and
-    total available should equal closing cash + that + still-drawable IF.
-  - It should match the "Max cash available" box at week 0.
-
-If you set a per-card limit and the two ever disagree again, tell me - they read
-one figure now, so they cannot.
+  - The line starts at your current balance, not week 1's close.
+  - Schedule a card payment: cash drops that week and the dashed line does NOT.
+  - Card headroom in the tooltip rises after a payment week.

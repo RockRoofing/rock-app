@@ -1612,11 +1612,32 @@ export default function CashFlow() {
 
   const chartData = (() => {
     const out = []
+    // START AT THE OPENING BALANCE, not the first week's CLOSE.
+    //
+    // Every point plotted the closing cash for that week, so the leftmost point was
+    // already a week into the forecast - the line appeared to begin at a figure you had
+    // never held. The first point is now cash as it stands today, and the second is the
+    // end of that same week, so the first segment shows the week's movement instead of
+    // hiding it.
+    out.push({
+      wk: 'Now', opening: true,
+      closing: Math.round(startCash),
+      available: Math.round(startCash) + cardHeadroom + facilityHeadroom.ifAvail
+        + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -startCash)),
+      ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom,
+      moneyIn: 0, moneyOut: 0,
+    })
     let ifRunning = facilityHeadroom.ifAvail
     // The SAME movement applied to the gross advance. Tracked separately rather than
     // added back at the end: both are clamped at zero, so net + drawn stops equalling
     // gross once either floors, and deriving one from the other would then be wrong.
     let ifGrossRunning = facilityHeadroom.ifGross
+    // CARD HEADROOM GROWS AS THE BALANCE IS CLEARED.
+    //
+    // It was a constant taken from the opening balances, so scheduling a card payment
+    // pulled the cash line down and left the availability line flat. Paying a card does
+    // not reduce what you can borrow - it restores it.
+    let cardRunning = cardHeadroom
     for (const r of forecast) {
       // INVOICE FINANCE AVAILABILITY MOVES. Holding it constant made the available line
       // run parallel to cash, which is the opposite of how the facility behaves.
@@ -1634,15 +1655,20 @@ export default function CashFlow() {
       ifGrossRunning = Math.max(0, ifGrossRunning + move)
       const ifNow = ifRunning
       const ifGrossNow = ifGrossRunning
-      const avail = (c) => c + facilityHeadroom.cards + ifNow
+      // Read off the SAME event list the Financing & tax column is built from, so the
+      // two cannot report different payments.
+      const cardPaidWk = (r.commDetail || []).filter(x => x && x.kind === 'card').reduce((t, x) => t + (x.amount || 0), 0)
+      cardRunning += cardPaidWk
+      const cardNow = cardRunning
+      const avail = (c) => c + cardNow + ifNow
         + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -c))
-      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
       const prev = out[out.length - 1]
-      if (prev && prev._arr) {
-        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+      if (prev && prev._arr && !prev.opening) {
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
         continue
       }
-      out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
+      out.push({ wk: r.wk, closing: r.closing, available: avail(r.closing), ifGross: ifGrossNow, ifNet: ifNow, cards: cardNow, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
     }
     return out
   })()
@@ -2210,8 +2236,42 @@ export default function CashFlow() {
               {/* WHAT THE DASHED LINE IS MADE OF. Two of these are constant, so if the gap
                   never changes the invoice finance part is contributing nothing - which is
                   what happened when availability read zero for weeks without saying so. */}
+              {/* A KEY, not a sentence. What each line counts is the first thing anybody
+                  asks of this chart, and it was buried in prose underneath. */}
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 8, padding: '9px 12px', background: '#faf9f7', border: '1px solid #eceae5', borderRadius: 8 }}>
+                <div style={{ minWidth: 260 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: INK }}>
+                    <span style={{ display: 'inline-block', width: 22, height: 3, background: GOLD, borderRadius: 2 }} />
+                    Projected cash balance
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8a857c', marginTop: 2, lineHeight: 1.45 }}>
+                    Money in the bank at the end of each week. Cash only - facilities are not folded in, so this line
+                    can and should go negative. Starts at today&apos;s balance, {gbp(startCash)}.
+                  </div>
+                </div>
+                <div style={{ minWidth: 300 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: '#0f766e' }}>
+                    <span style={{ display: 'inline-block', width: 22, height: 0, borderTop: '3px dashed #0f766e' }} />
+                    Total available
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8a857c', marginTop: 2, lineHeight: 1.45 }}>
+                    Cash <strong>plus everything borrowable</strong>: card headroom, overdraft headroom and still-drawable
+                    invoice finance. Borrowable, not owned.
+                  </div>
+                </div>
+                <div style={{ minWidth: 240 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: '#dc2626' }}>
+                    <span style={{ display: 'inline-block', width: 22, height: 0, borderTop: '2px dashed #dc2626' }} />
+                    Zero
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8a857c', marginTop: 2, lineHeight: 1.45 }}>
+                    Where the cash line crosses this you are into the overdraft. Hover any point for the full breakdown.
+                  </div>
+                </div>
+              </div>
               <div style={{ fontSize: 11, color: '#8a857c', marginTop: 6 }}>
-                Facilities in the dashed line: cards {gbp(facilityHeadroom.cards)} + overdraft {gbp(facilityHeadroom.odLimit)} (both flat)
+                In the dashed line: cards {gbp(cardHeadroom)} (rises as card payments clear the balance)
+                {' '}+ overdraft {gbp(facilityHeadroom.odLimit)} (flat)
                 {' '}+ invoice finance, which starts at {gbp(facilityHeadroom.ifAvail)} and moves as applications are raised and collected
                 {facilityHeadroom.rate > 0 ? ` at ${(facilityHeadroom.rate * 100).toFixed(0)}%` : ''}.
                 {facilityHeadroom.ifAvail === 0 && facilityHeadroom.rate === 0 && (
