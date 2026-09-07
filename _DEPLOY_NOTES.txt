@@ -1,55 +1,47 @@
-pkg760 - The drawn figure you typed is now used everywhere
-===========================================================
+pkg761 - No warning banners in the PDF
+=======================================
 
-DEPLOY OVER pkg759. Three files.
+DEPLOY OVER pkg760 (contains pkg760). Five files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
+  pages/business-financials/forecast-balance-sheet.js
+  pages/business-financials/export.js
 
-YOU WERE RIGHT, AND THE ARITHMETIC CONFIRMS IT
-------------------------------------------------
-  Bibby portal   165,570 approved - 138,581 in use = 26,989 available
-  App was        161,679 advance  - 122,711 drawn  = 38,968
-  App now        161,679 advance  - 138,581 drawn  = 23,098
+WHAT CHANGED
+------------
+Every page-level warning, notice and diagnostic now carries a class the print
+stylesheet hides. On screen they behave exactly as before; in the PDF they are
+gone.
 
-The remaining 3,891 is the app calculating the advance against the ledger versus
-Bibby's approved figure. Different things, and small. The drawn figure was the
-whole discrepancy.
+Twelve tagged in total:
 
-WHAT I MISSED IN pkg757
-------------------------
-That package made ONE place use your typed figure. Two others still read
-pos.drawn from the Invoice Finance page snapshot:
+  13-week (9)   Invoice Finance behind your balances
+                Overdue items are NOT in the forecast
+                Placement check
+                The build marker (pkg761 ... store synced ...)
+                Could not read balances from Xero
+                and four further amber notices further down the page
 
-  the "Invoice finance available" box printed ifCalc.availability straight out,
-  ignoring the corrected figure entirely
+  Forecast BS (2)  Press "Read balance sheet from Xero"
+                   Card accounts are not being matched
 
-  facilityHeadroom - which drives the DASHED LINE and the tooltip's "less drawn"
-  - read pos.drawn, so the whole availability line was 15,870 too generous
+  Invoice Finance (1)  Applications with no customer name
 
-Both now use the balances panel. Availability is recomputed against it rather
-than taking the snapshot's own subtraction, and the box says "(your figure)"
-when the two differ.
+ALSO: COLLAPSED DRILL-DOWNS
+----------------------------
+A closed <details> prints as its one-line summary and nothing else - "Click for
+every invoice and where it landed", with no list under it. Those are hidden too.
+Anything you leave OPEN still prints in full, so the drill-downs you actually
+want in the pack are unaffected.
 
-A BUG I ALMOST SHIPPED
------------------------
-My first cut read balancesNow inside facilityHeadroom. That constant lives
-INSIDE the forecast memo (lines 511-1537); facilityHeadroom sits at 1600,
-outside it. esbuild compiled it without complaint and it would have thrown a
-ReferenceError the moment the page rendered.
+WHY THIS MATTERS BEYOND TIDINESS
+---------------------------------
+These messages exist to prompt an action while you are looking at the page.
+Printed into a document that goes to a bank, an accountant or a prospective
+client they read as faults in the figures - and by the time anyone reads the PDF
+they may already have been dealt with.
 
-The balance resolution is now hoisted to component scope and read from all three
-places, which is where it should have been when three separate blocks needed it.
-
-WHAT TO CHECK
--------------
-  - "Invoice finance available" should read about 23,098, subtitled
-    "£161,679 advance - £138,581 drawn (your figure)".
-  - The tooltip's "less drawn" should show 138,581, not 122,711.
-  - The dashed line drops by about 15,870 across the window. That is the
-    correction, not a new problem.
-  - The amber "Invoice Finance page is behind your balances" bar stays until you
-    re-sync that page. It is now telling you about a 15,870 difference that no
-    longer affects the numbers, only the two pages agreeing.
+The underlying figures are unchanged. Only what is displayed on paper.

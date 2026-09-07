@@ -810,7 +810,7 @@ export default function InvoiceFinance() {
                   insured limit applied to the debt and only the excess disapproved, exactly as the live table below does.
                 </div>
                 {projected.unresolvedCount ? (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 8, padding: '9px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', maxWidth: 900 }}>
+                  <div className="rr-warn" style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 8, padding: '9px 14px', marginBottom: 10, fontSize: 12.5, color: '#991b1b', maxWidth: 900 }}>
                     <strong>{projected.unresolvedCount} applications ({gbp(projected.unresolvedTotal)}) have no customer name attached</strong>, so
                     no insured limit can match and every penny is being disapproved. That is not a credit decision - it is missing data.
                     <div style={{ marginTop: 3, fontSize: 11.5 }}>

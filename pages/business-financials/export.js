@@ -172,6 +172,15 @@ export default function ExportFinancials() {
           .rr-pg div { height: auto !important; max-height: none !important; resize: none !important; }
           .rr-pg table { page-break-inside: auto; }
           .rr-pg tr { page-break-inside: avoid; }
+          /* WARNINGS AND DIAGNOSTICS DO NOT BELONG IN A PDF.
+             They exist to prompt an action while you are on the page. Printed into a
+             document that gets sent to a bank or an accountant they read as faults, and
+             by the time anyone reads it they may already have been dealt with.
+             Collapsed drill-downs go too: closed, they print as a one-line summary that
+             says nothing useful. */
+          .rr-pg .rr-warn { display: none !important; }
+          .rr-pg details:not([open]) { display: none !important; }
+
           /* Controls are meaningless on paper. Inputs and selects are KEPT because they
              carry values you need to read - debtor days, retention %, manual figures. */
           .rr-pg button { display: none !important; }

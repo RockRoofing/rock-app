@@ -1862,7 +1862,7 @@ export default function CashFlow() {
                     <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={manualIfDrawn || (ifCalc ? (ifCalc.drawn || 0) : 0)} />
                   </div>
                   {ifStale ? (
-                    <div style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
+                    <div className="rr-warn" style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
                       <strong>The Invoice Finance page is behind your balances.</strong> It holds {gbp(ifCalc ? ifCalc.drawn : 0)} drawn;
                       you have typed {gbp(manualIfDrawn)}. The typed figure is being used for availability. Re-sync the Invoice Finance
                       page so both agree.
@@ -1874,7 +1874,7 @@ export default function CashFlow() {
                       allowed to vanish - dropped money OUT flatters the cash line, and
                       late money out is the most certain spend there is. */}
                   {forecast.droppedOverdue && (forecast.droppedOverdue.invoices || forecast.droppedOverdue.bills || forecast.droppedOverdue.retention || forecast.droppedOverdue.awaiting) ? (
-                    <div style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
+                    <div className="rr-warn" style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
                       <strong>Overdue items are NOT in the forecast.</strong>
                       {forecast.droppedOverdue.invoices ? <> {gbp(forecast.droppedOverdue.invoices)} of invoices,</> : null}
                       {forecast.droppedOverdue.bills ? <> {gbp(forecast.droppedOverdue.bills)} of bills,</> : null}
@@ -1893,7 +1893,7 @@ export default function CashFlow() {
                       strip that only appears on failure cannot tell "nothing is wrong"
                       from "not running", which is where the last one left us. */}
                   {forecast.recon && (
-                    <details style={{ marginBottom: 10 }}>
+                    <details className="rr-warn" style={{ marginBottom: 10 }}>
                       <summary style={{
                         background: forecast.recon.missed.length ? '#fef2f2' : '#f0fdf4',
                         border: `1px solid ${forecast.recon.missed.length ? '#fecaca' : '#bbf7d0'}`,
@@ -1934,7 +1934,7 @@ export default function CashFlow() {
                   )}
 
                   {/* BUILD AND SOURCE MARKER. Delete once this has settled. */}
-                  <div style={{ fontSize: 11.5, marginBottom: 10, padding: '7px 12px', borderRadius: 8,
+                  <div className="rr-warn" style={{ fontSize: 11.5, marginBottom: 10, padding: '7px 12px', borderRadius: 8,
                     background: data.recDiag ? '#eef6ff' : '#fef2f2',
                     border: `1px solid ${data.recDiag ? '#bfdbfe' : '#fecaca'}`,
                     color: data.recDiag ? '#1e40af' : '#991b1b' }}>
@@ -1978,7 +1978,7 @@ export default function CashFlow() {
                     )}
                   </div>
 
-                  {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
+                  {bal && !bal.ok && <div className="rr-warn" style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
                   {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
 
                   {/* WHAT COULD NOT BE SCHEDULED. Money with no date cannot go in a week,
@@ -2004,7 +2004,7 @@ export default function CashFlow() {
                     const mSum = matBad.reduce((a, x) => a + x.amount, 0)
                     if (rSum < 1 && iSum < 1 && mSum < 1 && !matBad.length) return null
                     return (
-                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 14px', marginBottom: 14, fontSize: 12, color: '#92400e' }}>
+                      <div className="rr-warn" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 14px', marginBottom: 14, fontSize: 12, color: '#92400e' }}>
                         <strong>Not in the forecast - no date to schedule it against.</strong>{' '}
                         {rSum >= 1 && <>{gbp(rSum)} of retention across {undatedRet.length} release{undatedRet.length === 1 ? '' : 's'} - set the release dates on the Retention Tracker. </>}
                         {iSum >= 1 && <>{gbp(iSum)} of invoices across {undatedInv.length} - no due date in Xero. </>}
@@ -2883,7 +2883,7 @@ export default function CashFlow() {
                 !(fc.salesSchedule || []).some(x => x.appDate))
               if (!noVal.length) return null
               return (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#b91c1c' }}>
+                <div className="rr-warn" style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#b91c1c' }}>
                   <strong>{noVal.length} forecast{noVal.length === 1 ? '' : 's'} have no valuation date - open each one and press Save.</strong>
                   <div style={{ marginTop: 4, color: '#7f1d1d' }}>
                     {[...new Set(noVal.map(f => projLabel(f)))].slice(0, 8).join(', ')}
@@ -2931,7 +2931,7 @@ export default function CashFlow() {
               }
               if (!hidden.length) return null
               return (
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
+                <div className="rr-warn" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
                   <strong>{hidden.length} forecast{hidden.length === 1 ? '' : 's'} cannot contribute anything - this needs fixing.</strong>
                   <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                     {hidden.slice(0, 8).map((h, i) => <li key={i} style={{ marginBottom: 2 }}>{h.nm} - {h.why}</li>)}
@@ -3077,7 +3077,7 @@ export default function CashFlow() {
                     </tbody>
                   </table>
                   {/* The test that matters. */}
-                  <div style={{ marginTop: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#92400e', maxWidth: 760 }}>
+                  <div className="rr-warn" style={{ marginTop: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#92400e', maxWidth: 760 }}>
                     <strong>{gbp(collected + retColl)} of the closing balance is collection of debt that existed on day one.</strong>{' '}
                     {arrRow && arrRow.invoicesIn > 0 && <>{gbp(arrRow.invoicesIn)} of it is already overdue and is being collected in week 1. </>}
                     If that money arrives later than assumed, the closing balance falls by the same amount - it does not disappear, it moves.

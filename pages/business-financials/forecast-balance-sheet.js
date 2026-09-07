@@ -453,7 +453,7 @@ export default function ForecastBalanceSheet() {
                 brand - lands in Financing and the Credit cards row stays empty while net
                 assets still tie, because Financing is the catch-all that balances. */}
             {model.classify && model.classify.some(x => x.looksLikeCard && x.bucket !== 'Credit cards') ? (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#991b1b', maxWidth: 940 }}>
+              <div className="rr-warn" style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#991b1b', maxWidth: 940 }}>
                 <strong>Card accounts are not being matched, which is why the Credit cards row reads nil.</strong>
                 <div style={{ marginTop: 4 }}>
                   {model.classify.filter(x => x.looksLikeCard && x.bucket !== 'Credit cards')
@@ -495,7 +495,7 @@ export default function ForecastBalanceSheet() {
             ) : null}
 
             {model.wip && model.wip.available && !model.wip.include ? (
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
+              <div className="rr-warn" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 10, padding: '10px 15px', marginBottom: 14, fontSize: 12.5, color: '#92400e', maxWidth: 940 }}>
                 <strong>{gbp(model.wip.amount)} of WIP taken out at the YEAR END only, with the November accrual added back, as their own rows under Reserves.</strong>
                 <div style={{ marginTop: 3 }}>
                   Every month&apos;s balance sheet stands as it is. Reserves roll forward CLEAN - each month&apos;s own
