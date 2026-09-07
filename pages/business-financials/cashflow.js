@@ -524,10 +524,27 @@ export default function CashFlow() {
     // the page is reloaded. Line 1608 already had this fix; these two did not - so
     // changing an account kind appeared to do nothing at all.
     const balancesNow = (manualBal && manualBal.length) ? manualBal : (data.manualBalances || [])
+    // OPENING CASH IS MONEY IN BANK ACCOUNTS. Nothing else.
+    //
+    // Invoice finance drawn used to count toward it, so a -180,000 Bibby balance made
+    // opening cash -172,611 when Metrobank held +7,389. That was the same money three
+    // times over: inside the cash line, again as "overdraft drawn" (because the rule
+    // reads a negative bank total as overdraft), and again as "invoice finance drawn"
+    // in the net position box.
+    //
+    // The advance was drawn and SPENT - the spending is already in the Metrobank
+    // balance. What is left is a liability, and a liability reduces what you can still
+    // BORROW, not what you hold. Cards were always treated that way; invoice finance
+    // now matches.
+    const isCashAccount = (b) => b && b.kind !== 'card' && b.kind !== 'if'
     const manualBankTotal = balancesNow
-      .filter(b => b && b.kind !== 'card')
+      .filter(isCashAccount)
       .reduce((t, b) => t + (Number(b.balance) || 0), 0)
-    const hasManualBank = balancesNow.some(b => b && b.kind !== 'card')
+    const hasManualBank = balancesNow.some(isCashAccount)
+    // Drawn on the facility, from the balances panel. Used for headroom, never as cash.
+    const ifDrawnFromBalances = balancesNow
+      .filter(b => b && b.kind === 'if')
+      .reduce((t, b) => t + Math.abs(Math.min(0, Number(b.balance) || 0)), 0)
     const openBank = startCash !== ''
       ? Number(startCash)
       : (hasManualBank ? manualBankTotal : (data.cashAtBank || 0))
@@ -1786,11 +1803,23 @@ export default function CashFlow() {
                     updatedAt: manual.map(m => m.asAt).filter(Boolean).sort().pop() || null,
                     manual: true }
                 : xbal
+              // SAME RULE AS THE FORECAST. The manual balances are the primary source and
+              // an invoice-finance account is NOT a bank account - it was making bankTotal
+              // negative, which made odDrawn think the whole thing was overdraft.
+              const manualCash = (manualBal || []).filter(b => b && b.kind !== 'card' && b.kind !== 'if')
+              const manualIfDrawn = (manualBal || [])
+                .filter(b => b && b.kind === 'if')
+                .reduce((t, b) => t + Math.abs(Math.min(0, Number(b.balance) || 0)), 0)
               const bankAccts = (bal?.accounts || []).filter(a => !a.isCard)
               const cardAccts = (bal?.accounts || []).filter(a => a.isCard)
-              const bankTotal = bal?.ok ? (bal.bankTotal || 0) : (data.cashAtBank || 0)
+              const bankTotal = manualCash.length
+                ? manualCash.reduce((t, b) => t + (Number(b.balance) || 0), 0)
+                : (bal?.ok ? (bal.bankTotal || 0) : (data.cashAtBank || 0))
               const cardTotal = bal?.ok ? (bal.cardTotal || 0) : 0   // negative = owed
-              const cardDebt = Math.abs(Math.min(0, cardTotal))
+              const manualCards = (manualBal || []).filter(b => b && b.kind === 'card')
+              const cardDebt = manualCards.length
+                ? manualCards.reduce((t, b) => t + Math.abs(Math.min(0, Number(b.balance) || 0)), 0)
+                : Math.abs(Math.min(0, cardTotal))
               // CARD HEADROOM, per card where a limit is set for it.
               //
               // Falls back to the single pooled ccLimit so nothing already entered is
@@ -1812,8 +1841,20 @@ export default function CashFlow() {
               const odHeadroom = Math.max(0, odLimit - odDrawn)
               // Invoice-finance headroom: prefer the calculated availability from the
               // Invoice Finance page; fall back to the manual limit-minus-drawn entry.
+              // The balances panel is typed today; the Invoice Finance page is a snapshot
+              // and can be weeks behind. Where both exist, the more recent figure wins and
+              // the page says which was used.
               const ifCalc = data.ifAvailability
-              const ifHeadroom = ifCalc ? Math.max(0, ifCalc.availability) : Math.max(0, (Number(finance.ifLimit) || 0) - (Number(finance.ifDrawn) || 0))
+              // AVAILABILITY AGAINST WHAT IS ACTUALLY DRAWN.
+              //
+              // ifCalc.availability is totalAdvance less the drawn figure held on the
+              // Invoice Finance page, which is a snapshot. With 180,000 typed in the
+              // balances against 122,711 on that page, availability was reading 59,557
+              // when the real headroom is nearer 2,000. The typed figure is today's.
+              const ifTotalAdvance = ifCalc ? (Number(ifCalc.totalAdvance) || 0) : (Number(finance.ifLimit) || 0)
+              const ifDrawnNow = manualIfDrawn || (ifCalc ? (Number(ifCalc.drawn) || 0) : (Number(finance.ifDrawn) || 0))
+              const ifHeadroom = Math.max(0, ifTotalAdvance - ifDrawnNow)
+              const ifStale = !!(manualIfDrawn && ifCalc && Math.abs(manualIfDrawn - (Number(ifCalc.drawn) || 0)) > 1)
               const maxCash = bankTotal + ifHeadroom + ccHeadroom + odHeadroom
               return (
                 <>
@@ -1824,13 +1865,13 @@ export default function CashFlow() {
                     {bankAccts.map((a, i) => <BalBox key={'b' + i} label={a.name} value={gbp(a.balance)} color={a.balance < 0 ? '#dc2626' : INK}
                       sub={bal?.updatedAt ? `as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : undefined} />)}
                     {cardAccts.map((a, i) => <BalBox key={'c' + i} label={a.name} value={gbp(a.balance)} sub={bal?.updatedAt ? `credit card - as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : 'credit card'} color={a.balance < 0 ? '#dc2626' : '#16a34a'} />)}
-                    <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong
+                    <BalBox label="Cash in the bank" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong
                       sub={bal?.updatedAt ? `as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : 'no balance date - press Refresh balances'} />
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
                     {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
                     {odLimit > 0 && <BalBox label="Overdraft available" value={gbp(odHeadroom)} sub={odDrawn > 0 ? `${gbp(odDrawn)} of ${gbp(odLimit)} used` : `${gbp(odLimit)} limit`} color={odHeadroom > 0 ? INK : '#dc2626'} />}
                     <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft - all borrowable, not owned" color="#0f766e" strong />
-                    <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={ifCalc ? (ifCalc.drawn || 0) : 0} />
+                    <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={manualIfDrawn || (ifCalc ? (ifCalc.drawn || 0) : 0)} />
                   </div>
                   {/* WORK WITH NO HOME. Sits above the table because it changes what the
                       closing balance means - the forecast is short by this much. */}
@@ -1876,6 +1917,14 @@ export default function CashFlow() {
                       </div>
                     </details>
                   )}
+
+                  {ifStale ? (
+                    <div style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
+                      <strong>The Invoice Finance page is behind your balances.</strong> It holds {gbp(ifCalc ? ifCalc.drawn : 0)} drawn;
+                      you have typed {gbp(manualIfDrawn)}. The typed figure is being used for availability. Re-sync the Invoice Finance
+                      page so both agree.
+                    </div>
+                  ) : null}
 
                   {/* WHAT THE FORECAST IS NOT COUNTING. The arrears row used to sweep all
                       of this into week 1. It is out of the arithmetic now, but it is not

@@ -1,56 +1,70 @@
-pkg756 - Chart origin, and overdue invoices reported honestly
-==============================================================
+pkg757 - Cash is cash. Debt is headroom.
+=========================================
 
-DEPLOY OVER pkg755. Two files.
+DEPLOY OVER pkg756. Two files. Contains pkg756.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-1. THE GRAPH STARTED AT ZERO
------------------------------
-The "Now" point I added in pkg751 read `startCash` - the OVERRIDE BOX - rather
-than the resolved opening balance. With nothing typed in that box the value is
-an empty string, and Math.round('') is 0.
+WHAT WAS WRONG
+--------------
+Invoice finance drawn counted toward opening cash. Cards did not. Two
+liabilities, two different treatments - and the invoice finance one was counted
+THREE times:
 
-So whenever you were NOT overriding, the line began at zero instead of your
-actual cash, and the key underneath read "Starts at today's balance, £0" - which
-is exactly what your latest export shows with -172,611 in the bank.
+  1. inside the cash line          -180,000 sat in "opening cash"
+  2. as overdraft drawn            odDrawn = max(0, -bankTotal), and bankTotal
+                                   was negative BECAUSE of Bibby - so the model
+                                   thought you had drawn 172,611 of overdraft
+                                   while Metrobank held +7,389
+  3. as invoice finance drawn      subtracted again in the net position box
 
-Now reads the resolved figure: the override when one is typed, otherwise the
-balances.
+Net of all facilities read -545,710. It is nearer -250,388.
 
-2. "0 NOT PLACED" WHILE 34,315 WAS MISSING
--------------------------------------------
-The placement check said everything landed while the amber bar said 34,315 of
-invoices were overdue and excluded. Both could not be true.
+NOW
+---
+OPENING CASH IS MONEY IN BANK ACCOUNTS. Nothing else. The advance was drawn and
+SPENT - the spending is already in the Metrobank balance. What remains is a
+liability, and a liability reduces what you can still BORROW, not what you hold.
+Cards were always treated that way; invoice finance now matches.
 
-When the arrears row came out in pkg743, the arrears BRANCH stayed - it still
-counts the total for the amber bar, but it feeds nothing into any week. It was
-still marking those invoices as placed, so the check reported them as landed
-when they had been dropped.
+On your figures:
 
-Overdue invoices now show as NOT PLACED with the reason "expected date has
-passed - set a new one and it comes back in", and the summary counts them.
+  Cash in the bank              7,389   (was -172,611)
+  Overdraft drawn                   0   (was 172,611)
+  Overdraft headroom           60,000   (was 0)
+  Invoice finance available     2,268   (was 59,557)
+  Card headroom                82,223
+  Max cash available          151,880   (was -30,831)
 
-On your figures the check should now read something like 42 placed, 1 not placed
-(£34,315) - that being INV-1732, Wates, Waungron App 1, still dated 04/09.
+  Net cash position:
+    Bank cash                   7,389
+    less card debt            -77,777
+    less overdraft drawn            0
+    = Net cash                -70,388
+    less invoice finance     -180,000
+    = Net of all facilities  -250,388   (was -545,710)
 
-NOT CODE - THREE THINGS FOR YOU
---------------------------------
-  - INV-1732 Wates £34,315 is still expected 04/09 and therefore still out of
-    the forecast. Give it a new date.
-  - The Invoice Finance page still says drawn £122,711 as at 30/08/26, but your
-    Bibby balance now reads -£180,000. That £57,289 gap means "max cash
-    available" of -£30,831 is understating it. Re-sync that page.
-  - Capital on Tap now owes £77,777 but the scheduled clearance is still
-    £77,156, so £621 would be left on it.
+Each debt appears ONCE, on the borrowing side, which is where it constrains you.
 
-A NOTE ON PROVENANCE
---------------------
-Both fixes were already present in my working copy before I wrote them, which I
-cannot account for - the fifth time today my copy has differed from what I
-shipped. I diffed against the pkg755 zip, read the changes line by line, checked
-the declaration order and the temporal dead zones, and tested the placement
-logic against your real invoice numbers before packaging. They are correct. But
-you should know they were not typed in front of you.
+TWO MORE THINGS FIXED
+---------------------
+The summary boxes read Xero's bank total; they now use your typed balances
+first, same precedence as everything else on the page. Card debt likewise.
+
+Availability was measured against the drawn figure held on the Invoice Finance
+page - a snapshot. With 180,000 typed against 122,711 on that page it read
+59,557 when real headroom is about 2,268. It now uses the typed figure, and an
+amber bar appears when the two disagree, naming both, so a stale Invoice Finance
+page cannot quietly overstate your headroom again.
+
+"Opening cash (all bank combined)" is relabelled "Cash in the bank".
+
+WHAT TO WATCH FROM HERE
+-----------------------
+Two lines, and the gap between them. Cash below zero means you cannot pay people
+that week. The dashed line closing on the cash line means you are running out of
+things to draw on. Cash comfortably positive with the gap nearly shut is a worse
+position than cash slightly negative with plenty of headroom - and only the two
+together tell you that.
