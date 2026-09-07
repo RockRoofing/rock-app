@@ -175,7 +175,19 @@ export default function InvoiceFinance() {
   async function load() {
     setLoading(true)
     try {
-      const d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
+      // WARM THE DASHBOARD CACHE FIRST.
+      //
+      // Every project on this page comes from dashboard:cache, which has a four-hour
+      // life. When it had expired the page showed nothing and told you to go and open
+      // the Commercial dashboard - a workaround, not a fix. Calling /api/dashboard is
+      // what rebuilds that key, and Invoices Owed has always done exactly this.
+      let d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
+      if (!d?.projects?.length) {
+        try {
+          await fetch('/api/dashboard').then(r => r.json())
+          d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
+        } catch {}
+      }
       // The project forecasts, so this page can project availability forward. Fetched
       // separately because the invoice-finance view does not carry them.
       try { setCf(await fetch('/api/business-financials?view=cashflow').then(r => r.json())) } catch {}
@@ -304,6 +316,42 @@ export default function InvoiceFinance() {
   // Uses the SAME rules as the live position above - advance rate, insured limit applied
   // to the DEBT with only the excess disapproved - so the projection cannot say something
   // the current position would not.
+  // INSURED LIMIT AGAINST WHAT THE CUSTOMER ACTUALLY OWES.
+  //
+  // The main table below measures the limit against FUNDABLE debt from applications.
+  // This measures it against the real sales ledger - every outstanding invoice, whether
+  // or not it is fundable. That is the question a limit is really answering: if this
+  // customer stopped paying tomorrow, how much of the exposure is covered?
+  //
+  // Over the limit is not necessarily wrong. It means the excess cannot be funded and is
+  // uninsured, which is a decision to take knowingly rather than discover.
+  const exposure = useMemo(() => {
+    const byCust = {}
+    for (const i of ((cf && cf.receivables) || [])) {
+      if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue
+      const name = String(i.contact || '').trim()
+      if (!name) continue
+      if (!byCust[name]) byCust[name] = { customer: name, owed: 0, count: 0, oldest: '' }
+      byCust[name].owed += Number(i.amountDue) || 0
+      byCust[name].count += 1
+      const d = i.dueDate || i.date || ''
+      if (d && (!byCust[name].oldest || d < byCust[name].oldest)) byCust[name].oldest = d
+    }
+    const rows = Object.values(byCust)
+      .filter(r => Math.abs(r.owed) > 0.5)
+      .map(r => {
+        const limit = Number((limits[r.customer] || {}).insuredLimit) || 0
+        return { ...r, limit, uncovered: Math.max(0, r.owed - limit), headroom: Math.max(0, limit - r.owed), hasLimit: limit > 0 }
+      })
+      .sort((a, b) => b.uncovered - a.uncovered || b.owed - a.owed)
+    return {
+      rows,
+      owed: rows.reduce((t, r) => t + r.owed, 0),
+      uncovered: rows.reduce((t, r) => t + r.uncovered, 0),
+      noLimit: rows.filter(r => !r.hasLimit).length,
+    }
+  }, [cf, limits])
+
   const projected = useMemo(() => {
     const rate = (Number(settings.advanceRate) || 0) / 100
     const rows = []
@@ -869,6 +917,60 @@ export default function InvoiceFinance() {
               </div>
             )}
 
+            {/* LIMIT vs REAL LEDGER. Sits above the funding table because it answers a
+                different and blunter question: how much of what you are owed is covered. */}
+            {exposure.rows.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Insured limit against what is actually owed</div>
+                  <span style={{ fontSize: 12, color: '#8a857c' }}>
+                    {gbp(exposure.owed)} outstanding &middot; <strong style={{ color: exposure.uncovered ? '#dc2626' : '#16a34a' }}>{gbp(exposure.uncovered)} uncovered</strong>
+                    {exposure.noLimit ? ` · ${exposure.noLimit} customer${exposure.noLimit === 1 ? '' : 's'} with no limit set` : ''}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#8a857c', margin: '4px 0 10px', maxWidth: 900, lineHeight: 1.45 }}>
+                  Every outstanding sales invoice against the customer&apos;s insured limit - not just the fundable part.
+                  Over the limit is not automatically wrong: it means the excess cannot be funded and is uninsured. Worth
+                  knowing deliberately rather than finding out when somebody stops paying.
+                </div>
+                <div style={{ overflowX: 'auto', maxHeight: 340 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Customer</th>
+                      <th style={th}>Invoices</th>
+                      <th style={th}>Owed</th>
+                      <th style={th}>Insured limit</th>
+                      <th style={th}>Headroom</th>
+                      <th style={th}>Uncovered</th>
+                    </tr></thead>
+                    <tbody>
+                      {exposure.rows.map(r => (
+                        <tr key={r.customer} style={{ borderBottom: '1px solid #f5f4f1' }}>
+                          <td style={{ ...td, textAlign: 'left' }}>{r.customer}</td>
+                          <td style={td}>{r.count}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>{gbp(r.owed)}</td>
+                          <td style={td}>
+                            {r.hasLimit ? gbp(r.limit) : (
+                              <button onClick={() => {
+                                const v = window.prompt(`Insured limit for "${r.customer}"`, '')
+                                if (v === null) return
+                                const n = Math.abs(Number(String(v).replace(/[^0-9.-]/g, '')) || 0)
+                                if (n) setLimit(r.customer, n)
+                              }} style={{ background: '#fff', border: '1px solid #ddd9d2', borderRadius: 5, padding: '1px 7px', fontSize: 11, cursor: 'pointer', color: '#b45309' }}>
+                                add limit
+                              </button>
+                            )}
+                          </td>
+                          <td style={{ ...td, color: r.headroom ? '#16a34a' : '#ccc' }}>{r.headroom ? gbp(r.headroom) : '-'}</td>
+                          <td style={{ ...td, fontWeight: 700, color: r.uncovered ? '#dc2626' : '#ccc' }}>{r.uncovered ? gbp(r.uncovered) : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Customer -> projects -> applications */}
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 900 }}>
@@ -891,7 +993,7 @@ export default function InvoiceFinance() {
                       {apiVersion !== EXPECTED_API
                         ? `Nothing to show because the API file has not been deployed - it is reporting "${apiVersion || 'nothing'}", this page expects ${EXPECTED_API}. Deploy pages/api/business-financials.js.`
                         : dashEmpty
-                        ? 'The dashboard cache is EMPTY, and every project on this page comes from it. Open the Commercial dashboard once to rebuild it, then come back. Nothing is lost - the cache has a 4-hour life and is cleared whenever the dashboard changes.'
+                        ? 'No projects came back even after rebuilding the dashboard. That means there are genuinely no projects with applications, rather than a stale cache - check the projects are synced.'
                         : (data?.projects?.length
                             ? 'Projects found, but none has an unpaid sales invoice. Press "Sync invoices from Xero".'
                             : 'No projects with applications found. Check the projects are synced.')}

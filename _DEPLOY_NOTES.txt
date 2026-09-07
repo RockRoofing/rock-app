@@ -1,50 +1,45 @@
-pkg758 - Two wrong warnings removed
-====================================
+pkg759 - Invoice Finance: cache fixed, exposure table added
+============================================================
 
-DEPLOY OVER pkg757. Two files.
+DEPLOY OVER pkg758 (contains pkg758). Three files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
 
-1. "£1,654,925 OF PROJECT VALUE IS NEITHER CLAIMED NOR FORECAST" - GONE
-------------------------------------------------------------------------
-It measured contract value plus instructed variations against what has been
-claimed and what is still forecast. Applications raised before this system
-existed are not in it, so the gap it reported was mostly historic claiming
-rather than work with no home. It read 1.65m and was never going to read
-anything else.
+1. THE EMPTY-CACHE MESSAGE SHOULD NEVER HAVE BEEN THERE
+--------------------------------------------------------
+Every project on that page comes from dashboard:cache, which has a four-hour
+life. When it had expired the page showed nothing and told you to go and open
+the Commercial dashboard - a workaround dressed as an instruction.
 
-The banner, the client-side calculation and the projectValues payload behind it
-are all removed.
+The page now rebuilds the cache itself: if no projects come back, it calls
+/api/dashboard (which is what rebuilds that key) and reloads. Invoices Owed has
+always done exactly this.
 
-2. THE COST % NOTE WAS A PROFITABILITY TEST ON A CASH PAGE
------------------------------------------------------------
-It said "a roofing period should run 75-85%, and anything far below that has
-cost missing from its forecast", which sent me chasing 148k of cost that was
-never missing.
+The message only appears now if there are GENUINELY no projects with
+applications after a rebuild, and says so.
 
-Comparing cost to sales inside a window is a margin measure. This page shows
-CASH. Materials already delivered and paid for in an earlier period do not
-appear, so a low figure usually means the spend has already happened.
+2. NEW: INSURED LIMIT AGAINST WHAT IS ACTUALLY OWED
+-----------------------------------------------------
+You asked whether this was already built. Partly - the main table measures the
+limit against FUNDABLE debt from applications. The new table measures it against
+the real sales ledger: every outstanding invoice, whether fundable or not.
 
-Now reads: "Cost % is cash out over cash in for these weeks. It is NOT a margin:
-materials already delivered and paid for in an earlier period do not appear
-here, so a low figure usually means the spend has already happened rather than
-that cost is missing."
+  Customer | Invoices | Owed | Insured limit | Headroom | Uncovered
 
-NOT CHANGED, AND CORRECT AS THEY STAND
----------------------------------------
-Overheads. My check divided the annual figure by twelve; your Sept-Nov forecast
-is 54,870 + 55,861 + 46,134 = 156,865, and the later months are genuinely lower
-than the actuals earlier in the year. No gap.
+Sorted with the largest uncovered exposure first, with an "add limit" button on
+any customer that has none, writing to the same store as the CSV import.
 
-Bills left out. They are in the overheads line, so counting them again as bills
-would double them.
+That is a different and blunter question from funding: if this customer stopped
+paying tomorrow, how much of it is covered? Over the limit is not automatically
+wrong - it means the excess cannot be funded and is uninsured. Worth knowing
+deliberately.
 
-ONE THING WORTH DOING
----------------------
-INV-1732 Wates 34,315 is paid, but the receivables store was last synced on
-03/09 and still holds it as outstanding - which is why it shows in the amber
-overdue bar. Press "Sync outstanding (cash flow)" on Invoices Owed and it drops
-out properly instead of sitting there as excluded.
+BE READY FOR AN UNCOMFORTABLE NUMBER. On the export you sent, the five largest
+debtors alone - Wates 148,130, Epiphany 80,417, Baraa 77,207, Torsion Projects
+73,904, Alheembouw 54,503 - carry 434,161 of exposure with no insured limit
+recorded against any of them. Either those limits exist and have not been
+imported, or that exposure is genuinely uninsured. The table will not tell you
+which; it will tell you where to look.
