@@ -1,45 +1,56 @@
-pkg755 - WIP comes off at the year end only
-============================================
+pkg756 - Chart origin, and overdue invoices reported honestly
+==============================================================
 
-DEPLOY OVER pkg754 (contains 742-754). Six files.
+DEPLOY OVER pkg755. Two files.
 
 REPLACE:
-  pages/business-financials/forecast-balance-sheet.js   (changed here)
-  pages/business-financials/export.js                   (as pkg754)
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
-  pages/business-financials/monthly.js
-  pages/business-financials/invoice-finance.js
 
-WHAT WAS WRONG
---------------
-The deduction was applied at the FIRST forecast month and then carried forward,
-so it showed on August, September, October and November alike - and August's net
-assets read -3,216 in a month that made 62,250 of profit.
+1. THE GRAPH STARTED AT ZERO
+-----------------------------
+The "Now" point I added in pkg751 read `startCash` - the OVERRIDE BOX - rather
+than the resolved opening balance. With nothing typed in that box the value is
+an empty string, and Math.round('') is 0.
 
-NOW
----
-Every month's balance sheet stands as it is. The WIP comes off ONCE, in the last
-month of the financial year, which is the only date the adjustment is actually
-made.
+So whenever you were NOT overriding, the line began at zero instead of your
+actual cash, and the key underneath read "Starts at today's balance, £0" - which
+is exactly what your latest export shows with -172,611 in the bank.
 
-On your figures:
+Now reads the resolved figure: the override when one is typed, otherwise the
+balances.
 
-  Jul 26   reserves  56,460   after WIP  56,460
-  Aug 26   reserves 118,710   after WIP 118,710
-  Sept 26  reserves 289,113   after WIP 289,113
-  Oct 26   reserves 363,511   after WIP 363,511
-  Nov 26   reserves 401,391   after WIP 283,782   (-121,926 +4,317)
+2. "0 NOT PLACED" WHILE 34,315 WAS MISSING
+-------------------------------------------
+The placement check said everything landed while the amber bar said 34,315 of
+invoices were overdue and excluded. Both could not be true.
 
-August returns to 118,710 and the -3,216 is gone. November still lands on the
-283,782 you have now, so the year end is unchanged - only the months in between
-stop carrying it.
+When the arrears row came out in pkg743, the arrears BRANCH stayed - it still
+counts the total for the amber bar, but it feeds nothing into any week. It was
+still marking those invoices as placed, so the check reported them as landed
+when they had been dropped.
 
-The row is relabelled "less last completed WIP (Jul 26, at year end)" so it is
-clear both which month's figure it is and when it is applied.
+Overdue invoices now show as NOT PLACED with the reason "expected date has
+passed - set a new one and it comes back in", and the summary counts them.
 
-ALSO IN THIS PACKAGE (pkg754)
-------------------------------
-  - PDF overlap fixed. Fixed-height resizable lists were spilling their rows onto
-    the following section in print.
-  - Branded cover sheet, contents page, and a divider sheet before each section.
+On your figures the check should now read something like 42 placed, 1 not placed
+(£34,315) - that being INV-1732, Wates, Waungron App 1, still dated 04/09.
+
+NOT CODE - THREE THINGS FOR YOU
+--------------------------------
+  - INV-1732 Wates £34,315 is still expected 04/09 and therefore still out of
+    the forecast. Give it a new date.
+  - The Invoice Finance page still says drawn £122,711 as at 30/08/26, but your
+    Bibby balance now reads -£180,000. That £57,289 gap means "max cash
+    available" of -£30,831 is understating it. Re-sync that page.
+  - Capital on Tap now owes £77,777 but the scheduled clearance is still
+    £77,156, so £621 would be left on it.
+
+A NOTE ON PROVENANCE
+--------------------
+Both fixes were already present in my working copy before I wrote them, which I
+cannot account for - the fifth time today my copy has differed from what I
+shipped. I diffed against the pkg755 zip, read the changes line by line, checked
+the declaration order and the temporal dead zones, and tested the placement
+logic against your real invoice numbers before packaging. They are correct. But
+you should know they were not typed in front of you.

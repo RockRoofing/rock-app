@@ -1063,7 +1063,10 @@ export default function CashFlow() {
         if (i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT') continue   // payables excluded; sales credit notes belong here as negatives
         const d = i.expectedDate || i.dueDate || ''
         if (isArrears(d)) {
-          placedInv.set(invKey(i), 'arrears')
+          // NOT a placement. The arrears row was taken out of the arithmetic, so anything
+          // reaching this branch contributes to no week at all. Marking it placed is why
+          // the check reported "0 not placed" while 35,485 was missing from the columns.
+          placedInv.set(invKey(i), '__overdue__')
           arrInvoices += (i.amountDue || 0)
           // Recorded in the SAME shape as a normal week, so the arrears row's drill-down
           // works like every other. It was showing "Total (0)" against 434,338 - the
@@ -1460,7 +1463,9 @@ export default function CashFlow() {
       const off = offsetRule(i)
       const isExcl = !!excluded[key]
       const wrongType = i.type !== 'ACCREC' && i.type !== 'ACCRECCREDIT'
-      const landed = placedInv.get(key) || null
+      const raw = placedInv.get(key) || null
+      const overdue = raw === '__overdue__'
+      const landed = overdue ? null : raw
       // EVERY receivable, whatever happened to it. A diagnostic that only renders when
       // it finds something cannot tell "nothing is wrong" from "not running" - which is
       // exactly the position the last one left us in.
@@ -1469,6 +1474,7 @@ export default function CashFlow() {
         amount: i.amountDue || 0, date: d, offset: off,
         landed: wrongType ? `EXCLUDED - type ${i.type || '(none)'}`
           : isExcl ? 'EXCLUDED - unticked below'
+          : overdue ? 'PAST ITS DATE - dropped'
           : landed || 'NOT PLACED',
         ok: !wrongType && !isExcl && !!landed,
       })
@@ -1479,7 +1485,8 @@ export default function CashFlow() {
         amount: i.amountDue || 0,
         date: d,
         offset: off,
-        reason: !d ? 'no due date and no expected date'
+        reason: overdue ? 'expected date has passed - set a new one and it comes back in'
+          : !d ? 'no due date and no expected date'
           : (lastWeekEnd && d > lastWeekEnd) ? 'falls after the 13-week window'
           : off ? `pushed past the window by a ${off}-day payment-performance offset`
           : 'date outside every week - check the format',
@@ -1493,6 +1500,10 @@ export default function CashFlow() {
       .filter(i => (i.type === 'ACCREC' || i.type === 'ACCRECCREDIT') && excluded[invKey(i)])
       .reduce((t, i) => t + (i.amountDue || 0), 0)
     placements.sort((x, y) => (x.ok === y.ok) ? Math.abs(y.amount) - Math.abs(x.amount) : (x.ok ? 1 : -1))
+    // The resolved opening balance. The chart read the raw override STRING, which is ''
+    // when nothing is overridden - so Math.round('') gave 0 and the first point plotted at
+    // zero whenever the box was empty, which is the normal case.
+    rows.openBank = openBank
     rows.cardOpening = cardAccounts.reduce((m, c) => { m[c.name] = c.opening; return m }, {})
     rows.recon = {
       placements,
@@ -1630,6 +1641,7 @@ export default function CashFlow() {
 
   const chartData = (() => {
     const out = []
+    const openNow = Number(forecast.openBank) || 0
     // START AT THE OPENING BALANCE, not the first week's CLOSE.
     //
     // Every point plotted the closing cash for that week, so the leftmost point was
@@ -1639,9 +1651,9 @@ export default function CashFlow() {
     // hiding it.
     out.push({
       wk: 'Now', opening: true,
-      closing: Math.round(startCash),
-      available: Math.round(startCash) + cardHeadroom + facilityHeadroom.ifAvail
-        + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -startCash)),
+      closing: Math.round(openNow),
+      available: Math.round(openNow) + cardHeadroom + facilityHeadroom.ifAvail
+        + Math.max(0, facilityHeadroom.odLimit - Math.max(0, -openNow)),
       ifGross: facilityHeadroom.ifGross, ifNet: facilityHeadroom.ifAvail, cards: cardHeadroom, drawn: facilityHeadroom.ifDrawn, cardBalances: { ...(forecast.cardOpening || {}) }, cardPaid: 0,
       moneyIn: 0, moneyOut: 0,
     })
@@ -2289,7 +2301,7 @@ export default function CashFlow() {
                   </div>
                   <div style={{ fontSize: 11, color: '#8a857c', marginTop: 2, lineHeight: 1.45 }}>
                     Money in the bank at the end of each week. Cash only - facilities are not folded in, so this line
-                    can and should go negative. Starts at today&apos;s balance, {gbp(startCash)}.
+                    can and should go negative. Starts at today&apos;s balance, {gbp(Number(forecast.openBank) || 0)}.
                   </div>
                 </div>
                 <div style={{ minWidth: 300 }}>
