@@ -1583,6 +1583,16 @@ export default function CashFlow() {
   // 82,844 of headroom and the graph showed none, from the same two numbers.
   //
   // Manual first, Xero as the fallback: the same precedence the rest of the page uses.
+  // ONE RESOLUTION OF THE BALANCES, at component scope.
+  //
+  // This lived inside the forecast memo, so anything outside it - facilityHeadroom, the
+  // summary boxes - could not see it. Referencing it from there compiles cleanly and
+  // throws on render, which is how this file has broken before.
+  const balancesLive = (manualBal && manualBal.length) ? manualBal : ((data && data.manualBalances) || [])
+  const typedIfDrawn = balancesLive
+    .filter(b => b && b.kind === 'if')
+    .reduce((t, b) => t + Math.abs(Math.min(0, Number(b.balance) || 0)), 0)
+
   const cardHeadroom = (() => {
     const cardLimits = finance.cardLimits || {}
     const manualCards = (manualBal || []).filter(b => b && b.kind === 'card' && String(b.name || '').trim())
@@ -1621,9 +1631,17 @@ export default function CashFlow() {
     // dashed line uses, because drawn money is already in the bank and cannot be drawn
     // twice. The gross is what Bibby would fund in total, which is the question the
     // tooltip answers.
+    // DRAWN COMES FROM THE BALANCES PANEL WHERE YOU HAVE TYPED IT.
+    //
+    // pos.drawn is the Invoice Finance page's snapshot and can be weeks behind. With
+    // 138,581 typed here and 122,711 held there, the dashed line, the tooltip's "less
+    // drawn" and the availability box were all 15,870 too generous.
+    const typedDrawn = typedIfDrawn
     const ifGross = pos ? Math.max(0, Number(pos.totalAdvance) || 0) : 0
-    const ifDrawn = pos ? Math.max(0, Number(pos.drawn) || 0) : 0
-    return { cards, ifAvail, ifGross, ifDrawn, rate, odLimit: Number(finance.overdraftLimit) || 0 }
+    const ifDrawn = typedDrawn || (pos ? Math.max(0, Number(pos.drawn) || 0) : 0)
+    // Availability recomputed against the typed drawn, not the snapshot's own subtraction.
+    const ifAvailNow = ifGross > 0 ? Math.max(0, ifGross - ifDrawn) : ifAvail
+    return { cards, ifAvail: ifAvailNow, ifGross, ifDrawn, rate, odLimit: Number(finance.overdraftLimit) || 0 }
   })()
 
   const chartData = (() => {
@@ -1777,9 +1795,7 @@ export default function CashFlow() {
               // an invoice-finance account is NOT a bank account - it was making bankTotal
               // negative, which made odDrawn think the whole thing was overdraft.
               const manualCash = (manualBal || []).filter(b => b && b.kind !== 'card' && b.kind !== 'if')
-              const manualIfDrawn = (manualBal || [])
-                .filter(b => b && b.kind === 'if')
-                .reduce((t, b) => t + Math.abs(Math.min(0, Number(b.balance) || 0)), 0)
+              const manualIfDrawn = typedIfDrawn
               const bankAccts = (bal?.accounts || []).filter(a => !a.isCard)
               const cardAccts = (bal?.accounts || []).filter(a => a.isCard)
               const bankTotal = manualCash.length
@@ -1838,7 +1854,9 @@ export default function CashFlow() {
                     <BalBox label="Cash in the bank" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong
                       sub={bal?.updatedAt ? `as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : 'no balance date - press Refresh balances'} />
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
-                    {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
+                    {ifCalc && <BalBox label="Invoice finance available" value={gbp(ifHeadroom)}
+                      sub={`${gbp(ifTotalAdvance)} advance - ${gbp(ifDrawnNow)} drawn${ifStale ? ' (your figure)' : ''}`}
+                      color="#0f766e" />}
                     {odLimit > 0 && <BalBox label="Overdraft available" value={gbp(odHeadroom)} sub={odDrawn > 0 ? `${gbp(odDrawn)} of ${gbp(odLimit)} used` : `${gbp(odLimit)} limit`} color={odHeadroom > 0 ? INK : '#dc2626'} />}
                     <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft - all borrowable, not owned" color="#0f766e" strong />
                     <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={manualIfDrawn || (ifCalc ? (ifCalc.drawn || 0) : 0)} />

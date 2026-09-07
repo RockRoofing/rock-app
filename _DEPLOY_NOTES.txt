@@ -1,45 +1,55 @@
-pkg759 - Invoice Finance: cache fixed, exposure table added
-============================================================
+pkg760 - The drawn figure you typed is now used everywhere
+===========================================================
 
-DEPLOY OVER pkg758 (contains pkg758). Three files.
+DEPLOY OVER pkg759. Three files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
 
-1. THE EMPTY-CACHE MESSAGE SHOULD NEVER HAVE BEEN THERE
---------------------------------------------------------
-Every project on that page comes from dashboard:cache, which has a four-hour
-life. When it had expired the page showed nothing and told you to go and open
-the Commercial dashboard - a workaround dressed as an instruction.
+YOU WERE RIGHT, AND THE ARITHMETIC CONFIRMS IT
+------------------------------------------------
+  Bibby portal   165,570 approved - 138,581 in use = 26,989 available
+  App was        161,679 advance  - 122,711 drawn  = 38,968
+  App now        161,679 advance  - 138,581 drawn  = 23,098
 
-The page now rebuilds the cache itself: if no projects come back, it calls
-/api/dashboard (which is what rebuilds that key) and reloads. Invoices Owed has
-always done exactly this.
+The remaining 3,891 is the app calculating the advance against the ledger versus
+Bibby's approved figure. Different things, and small. The drawn figure was the
+whole discrepancy.
 
-The message only appears now if there are GENUINELY no projects with
-applications after a rebuild, and says so.
+WHAT I MISSED IN pkg757
+------------------------
+That package made ONE place use your typed figure. Two others still read
+pos.drawn from the Invoice Finance page snapshot:
 
-2. NEW: INSURED LIMIT AGAINST WHAT IS ACTUALLY OWED
------------------------------------------------------
-You asked whether this was already built. Partly - the main table measures the
-limit against FUNDABLE debt from applications. The new table measures it against
-the real sales ledger: every outstanding invoice, whether fundable or not.
+  the "Invoice finance available" box printed ifCalc.availability straight out,
+  ignoring the corrected figure entirely
 
-  Customer | Invoices | Owed | Insured limit | Headroom | Uncovered
+  facilityHeadroom - which drives the DASHED LINE and the tooltip's "less drawn"
+  - read pos.drawn, so the whole availability line was 15,870 too generous
 
-Sorted with the largest uncovered exposure first, with an "add limit" button on
-any customer that has none, writing to the same store as the CSV import.
+Both now use the balances panel. Availability is recomputed against it rather
+than taking the snapshot's own subtraction, and the box says "(your figure)"
+when the two differ.
 
-That is a different and blunter question from funding: if this customer stopped
-paying tomorrow, how much of it is covered? Over the limit is not automatically
-wrong - it means the excess cannot be funded and is uninsured. Worth knowing
-deliberately.
+A BUG I ALMOST SHIPPED
+-----------------------
+My first cut read balancesNow inside facilityHeadroom. That constant lives
+INSIDE the forecast memo (lines 511-1537); facilityHeadroom sits at 1600,
+outside it. esbuild compiled it without complaint and it would have thrown a
+ReferenceError the moment the page rendered.
 
-BE READY FOR AN UNCOMFORTABLE NUMBER. On the export you sent, the five largest
-debtors alone - Wates 148,130, Epiphany 80,417, Baraa 77,207, Torsion Projects
-73,904, Alheembouw 54,503 - carry 434,161 of exposure with no insured limit
-recorded against any of them. Either those limits exist and have not been
-imported, or that exposure is genuinely uninsured. The table will not tell you
-which; it will tell you where to look.
+The balance resolution is now hoisted to component scope and read from all three
+places, which is where it should have been when three separate blocks needed it.
+
+WHAT TO CHECK
+-------------
+  - "Invoice finance available" should read about 23,098, subtitled
+    "£161,679 advance - £138,581 drawn (your figure)".
+  - The tooltip's "less drawn" should show 138,581, not 122,711.
+  - The dashed line drops by about 15,870 across the window. That is the
+    correction, not a new problem.
+  - The amber "Invoice Finance page is behind your balances" bar stays until you
+    re-sync that page. It is now telling you about a 15,870 difference that no
+    longer affects the numbers, only the two pages agreeing.
