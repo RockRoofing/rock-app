@@ -1550,43 +1550,13 @@ export default function CashFlow() {
   // that is neither claimed nor forecast? It also catches a project with no forecast
   // beyond the current application, and variations instructed but never forecast. And
   // it clears itself the moment the forecast is extended.
-  const unallocated = useMemo(() => {
-    const vals = (data && data.projectValues) || []
-    if (!vals.length) return { rows: [], total: 0, noData: true }
-    // Its own copy of the supersede test. isApplied is scoped to the forecast memo and is
-    // NOT visible here - referencing it compiles cleanly and throws at runtime.
-    const applied = (fc) => !!(fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd)
-
-    // LIVE forecast revenue per project - superseded ones excluded, same test.
-    // GROSSED BACK UP for retention: afaGross and certifiedGross are gross figures, and
-    // the sales schedule is net of it. Comparing the two directly would report the
-    // retention on every project as unallocated work.
-    const fcByNo = {}
-    for (const fc of (data.projForecasts || [])) {
-      if (!fc.projectNo || applied(fc)) continue
-      const net = (fc.salesSchedule || []).reduce((t, x) => t + (Number(x.amount) || 0), 0)
-      fcByNo[String(fc.projectNo)] = (fcByNo[String(fc.projectNo)] || 0) + net
-    }
-
-    const rows = []
-    for (const v of vals) {
-      if (!v.afaGross) continue
-      if (/complete|closed/i.test(v.status || '')) continue
-      const rp = Number(v.retentionPct) || 0
-      const fcNet = fcByNo[v.projectNo] || 0
-      const fcGross = rp > 0 && rp < 1 ? fcNet / (1 - rp) : fcNet
-      // Against what is LEFT TO CLAIM, not the whole contract. remainingToClaim is
-      // afa less what Xero has invoiced less WIP, so it does not depend on anyone having
-      // typed the applications into project settings.
-      const gap = (v.remainingToClaim || 0) - fcGross
-      // Threshold so rounding and small retention differences do not raise a banner.
-      // A warning that is usually wrong is worse than no warning.
-      if (gap <= Math.max(2500, v.afaGross * 0.01)) continue
-      rows.push({ ...v, forecastGross: fcGross, gap })
-    }
-    rows.sort((x, y) => y.gap - x.gap)
-    return { rows, total: rows.reduce((t, r) => t + r.gap, 0), noData: false }
-  }, [data])
+  // REMOVED: the "project value neither claimed nor forecast" warning.
+  //
+  // It measured contract value plus instructed variations against what has been claimed
+  // and what is still forecast. On a business that was applying for work long before this
+  // system existed, the earlier applications are not in it - so the gap it reported was
+  // mostly historic claiming, not work with no home. It read 1.65m and was never going to
+  // read anything else.
 
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
@@ -1873,51 +1843,6 @@ export default function CashFlow() {
                     <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft - all borrowable, not owned" color="#0f766e" strong />
                     <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={manualIfDrawn || (ifCalc ? (ifCalc.drawn || 0) : 0)} />
                   </div>
-                  {/* WORK WITH NO HOME. Sits above the table because it changes what the
-                      closing balance means - the forecast is short by this much. */}
-                  {unallocated.rows.length > 0 && (
-                    <details style={{ marginBottom: 12 }}>
-                      <summary style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, color: '#92400e', cursor: 'pointer', listStyle: 'none' }}>
-                        <strong>{gbp(unallocated.total)} of project value is neither claimed nor forecast</strong>
-                        {' '}across {unallocated.rows.length} {unallocated.rows.length === 1 ? 'project' : 'projects'}.
-                        {' '}The cash flow is short by this much until it is added to a forecast. Click for the list.
-                      </summary>
-                      <div style={{ border: '1px solid #fde68a', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fffdf5', padding: '10px 14px', overflowX: 'auto' }}>
-                        <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 8, maxWidth: 900, lineHeight: 1.45 }}>
-                          Once an application is raised, its forecast is dropped whole - the money is a real invoice
-                          now and counting both would double it. If the application came in UNDER the forecast, that
-                          shortfall does not roll anywhere. This is the value left over: contract plus instructed
-                          variations, less everything certified, less everything still sitting in a live forecast.
-                          Extend the forecast to cover it and the row clears itself.
-                        </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead><tr style={{ borderBottom: '1px solid #fde68a' }}>
-                            <th style={{ ...th, textAlign: 'left' }}>Project</th>
-                            <th style={th}>Value (AFA)</th>
-                            <th style={th}>Invoiced/WIP taken off</th>
-                            <th style={th}>Left to claim</th>
-                            <th style={th}>Still forecast</th>
-                            <th style={th}>Not allocated</th>
-                          </tr></thead>
-                          <tbody>
-                            {unallocated.rows.map(r => (
-                              <tr key={r.projectNo} style={{ borderBottom: '1px solid #faf4e4' }}>
-                                <td style={{ ...td, textAlign: 'left' }}>{r.projectNo} {r.name}</td>
-                                <td style={td}>{gbp(r.afaGross)}</td>
-                                <td style={{ ...td, color: '#999' }}>{gbp(r.afaGross - (r.remainingToClaim || 0))}</td>
-                                <td style={td}>{gbp(r.remainingToClaim || 0)}</td>
-                                <td style={{ ...td, color: r.forecastGross ? INK : '#dc2626' }}>
-                                  {r.forecastGross ? gbp(r.forecastGross) : 'none'}
-                                </td>
-                                <td style={{ ...td, fontWeight: 700, color: '#b45309' }}>{gbp(r.gap)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </details>
-                  )}
-
                   {ifStale ? (
                     <div style={{ marginBottom: 10, padding: '9px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', fontSize: 12.5, color: '#92400e' }}>
                       <strong>The Invoice Finance page is behind your balances.</strong> It holds {gbp(ifCalc ? ifCalc.drawn : 0)} drawn;
@@ -3027,7 +2952,7 @@ export default function CashFlow() {
                   <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
                     Months here are when the CASH lands, not the application period - a project applying on the 9th has its August
                     application paid in September, so it appears under September. The application dates themselves are on the project forecast.{' '}
-                    From the Commercial project forecasts, net of any real invoice or bill. Cost % is materials plus labour over sales - a roofing period should run 75-85%, and anything far below that has cost missing from its forecast.
+                    From the Commercial project forecasts, net of any real invoice or bill. Cost % is cash out over cash in for these weeks. It is NOT a margin: materials already delivered and paid for in an earlier period do not appear here, so a low figure usually means the spend has already happened rather than that cost is missing.
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                     <thead><tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>

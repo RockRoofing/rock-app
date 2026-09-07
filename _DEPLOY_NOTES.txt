@@ -1,70 +1,50 @@
-pkg757 - Cash is cash. Debt is headroom.
-=========================================
+pkg758 - Two wrong warnings removed
+====================================
 
-DEPLOY OVER pkg756. Two files. Contains pkg756.
+DEPLOY OVER pkg757. Two files.
 
 REPLACE:
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
 
-WHAT WAS WRONG
---------------
-Invoice finance drawn counted toward opening cash. Cards did not. Two
-liabilities, two different treatments - and the invoice finance one was counted
-THREE times:
+1. "£1,654,925 OF PROJECT VALUE IS NEITHER CLAIMED NOR FORECAST" - GONE
+------------------------------------------------------------------------
+It measured contract value plus instructed variations against what has been
+claimed and what is still forecast. Applications raised before this system
+existed are not in it, so the gap it reported was mostly historic claiming
+rather than work with no home. It read 1.65m and was never going to read
+anything else.
 
-  1. inside the cash line          -180,000 sat in "opening cash"
-  2. as overdraft drawn            odDrawn = max(0, -bankTotal), and bankTotal
-                                   was negative BECAUSE of Bibby - so the model
-                                   thought you had drawn 172,611 of overdraft
-                                   while Metrobank held +7,389
-  3. as invoice finance drawn      subtracted again in the net position box
+The banner, the client-side calculation and the projectValues payload behind it
+are all removed.
 
-Net of all facilities read -545,710. It is nearer -250,388.
+2. THE COST % NOTE WAS A PROFITABILITY TEST ON A CASH PAGE
+-----------------------------------------------------------
+It said "a roofing period should run 75-85%, and anything far below that has
+cost missing from its forecast", which sent me chasing 148k of cost that was
+never missing.
 
-NOW
----
-OPENING CASH IS MONEY IN BANK ACCOUNTS. Nothing else. The advance was drawn and
-SPENT - the spending is already in the Metrobank balance. What remains is a
-liability, and a liability reduces what you can still BORROW, not what you hold.
-Cards were always treated that way; invoice finance now matches.
+Comparing cost to sales inside a window is a margin measure. This page shows
+CASH. Materials already delivered and paid for in an earlier period do not
+appear, so a low figure usually means the spend has already happened.
 
-On your figures:
+Now reads: "Cost % is cash out over cash in for these weeks. It is NOT a margin:
+materials already delivered and paid for in an earlier period do not appear
+here, so a low figure usually means the spend has already happened rather than
+that cost is missing."
 
-  Cash in the bank              7,389   (was -172,611)
-  Overdraft drawn                   0   (was 172,611)
-  Overdraft headroom           60,000   (was 0)
-  Invoice finance available     2,268   (was 59,557)
-  Card headroom                82,223
-  Max cash available          151,880   (was -30,831)
+NOT CHANGED, AND CORRECT AS THEY STAND
+---------------------------------------
+Overheads. My check divided the annual figure by twelve; your Sept-Nov forecast
+is 54,870 + 55,861 + 46,134 = 156,865, and the later months are genuinely lower
+than the actuals earlier in the year. No gap.
 
-  Net cash position:
-    Bank cash                   7,389
-    less card debt            -77,777
-    less overdraft drawn            0
-    = Net cash                -70,388
-    less invoice finance     -180,000
-    = Net of all facilities  -250,388   (was -545,710)
+Bills left out. They are in the overheads line, so counting them again as bills
+would double them.
 
-Each debt appears ONCE, on the borrowing side, which is where it constrains you.
-
-TWO MORE THINGS FIXED
+ONE THING WORTH DOING
 ---------------------
-The summary boxes read Xero's bank total; they now use your typed balances
-first, same precedence as everything else on the page. Card debt likewise.
-
-Availability was measured against the drawn figure held on the Invoice Finance
-page - a snapshot. With 180,000 typed against 122,711 on that page it read
-59,557 when real headroom is about 2,268. It now uses the typed figure, and an
-amber bar appears when the two disagree, naming both, so a stale Invoice Finance
-page cannot quietly overstate your headroom again.
-
-"Opening cash (all bank combined)" is relabelled "Cash in the bank".
-
-WHAT TO WATCH FROM HERE
------------------------
-Two lines, and the gap between them. Cash below zero means you cannot pay people
-that week. The dashed line closing on the cash line means you are running out of
-things to draw on. Cash comfortably positive with the gap nearly shut is a worse
-position than cash slightly negative with plenty of headroom - and only the two
-together tell you that.
+INV-1732 Wates 34,315 is paid, but the receivables store was last synced on
+03/09 and still holds it as outstanding - which is why it shows in the amber
+overdue bar. Press "Sync outstanding (cash flow)" on Invoices Owed and it drops
+out properly instead of sitting there as excluded.
