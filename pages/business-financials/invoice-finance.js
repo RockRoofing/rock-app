@@ -462,13 +462,32 @@ export default function InvoiceFinance() {
     // The most recent DATED reading wins. Falls back to the old single `drawn` setting so
     // anything entered before this existed is not lost.
     const latest = drawnHistory.length ? drawnHistory[drawnHistory.length - 1] : null
-    const drawn = latest ? (Number(latest.amount) || 0) : (Number(settings.drawn) || 0)
-    const drawnAsAt = latest ? latest.date : null
+    const logDrawn = latest ? (Number(latest.amount) || 0) : (Number(settings.drawn) || 0)
+    const logAsAt = latest ? latest.date : null
+
+    // THE BALANCES PANEL IS THE SAME FACT, TYPED MORE RECENTLY.
+    //
+    // This page kept its own statement log while the 13-week cash flow reads the Bibby
+    // account on the balances panel. Two places holding one number, and they drifted:
+    // the log said 122,711 as at 30/08 while the balances said 138,581 today, so this
+    // page reported 38,968 of availability against a real 23,098.
+    //
+    // Whichever is more recent wins, and the page says which it used. Nothing is
+    // deleted - the log is still there and still editable.
+    const balDrawnRow = ((cf && cf.manualBalances) || []).filter(b => b && b.kind === 'if')
+      .sort((x, y) => String(y.asAt || '').localeCompare(String(x.asAt || '')))[0] || null
+    const balDrawn = balDrawnRow ? Math.abs(Math.min(0, Number(balDrawnRow.balance) || 0)) : 0
+    const balAsAt = balDrawnRow ? (balDrawnRow.asAt || '') : ''
+    const useBal = balDrawn > 0 && (!logAsAt || String(balAsAt) >= String(logAsAt))
+    const drawn = useBal ? balDrawn : logDrawn
+    const drawnAsAt = useBal ? balAsAt : logAsAt
+    const drawnFrom = useBal ? 'balances' : 'log'
+    const drawnDiffers = balDrawn > 0 && Math.abs(balDrawn - logDrawn) > 1
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden, approvedLedger,
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, drawnFrom, drawnDiffers, logDrawn, balDrawn, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden, approvedLedger,
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
-  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.highInvolvementPct, settings.advanceRate, drawnHistory])
+  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.highInvolvementPct, settings.advanceRate, drawnHistory, cf])
 
   // RECONCILIATION EXPORT, laid out in BIBBY'S OWN ORDER so the two can be read side by
   // side rather than eyeballed. Their Finance Agreement Summary goes:
@@ -705,7 +724,10 @@ export default function InvoiceFinance() {
               <Box label="Fundable (unpaid this-cert)" value={gbp(totals.fundable)} sub="net of retention, incl. materials" />
               <Box label={`Advance @ ${settings.advanceRate}%`} value={gbp(totals.grossAdvance)} color="#0f766e" sub="capped at insured limits" />
               <Box label="Facility cap" value={gbp(totals.cap)} sub={totals.cappedByFacility ? 'reached - funding capped' : 'headroom available'} color={totals.cappedByFacility ? '#dc2626' : '#888'} />
-              <Box label="Currently drawn" value={gbp(totals.drawn)} color="#b45309" />
+              <Box label="Currently drawn" value={gbp(totals.drawn)} color="#b45309"
+                sub={totals.drawnFrom === 'balances'
+                  ? `from the cash flow balances${totals.drawnAsAt ? `, as at ${totals.drawnAsAt}` : ''}`
+                  : (totals.drawnAsAt ? `statement log, as at ${totals.drawnAsAt}` : 'statement log')} />
               <Box label="Availability now" value={gbp(totals.availability)} color={totals.availability < 0 ? '#dc2626' : '#0f766e'} strong sub="funded (capped) minus drawn" />
             </div>
 
@@ -914,6 +936,15 @@ export default function InvoiceFinance() {
                     <td style={{ padding: '7px 9px', textAlign: 'right', color: '#0f766e' }}>{gbp(projected.months.reduce((a, m) => a + m.advance, 0))}</td>
                   </tr></tfoot>
                 </table>
+              </div>
+            )}
+
+            {totals.drawnDiffers && (
+              <div className="rr-warn" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderLeft: '4px solid #b45309', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
+                <strong>Two drawn figures.</strong> The statement log here holds {gbp(totals.logDrawn)}; the Bibby account
+                on the 13-week balances panel holds {gbp(totals.balDrawn)}. The more recent is being used
+                ({totals.drawnFrom === 'balances' ? 'the balances panel' : 'the log'}), so both pages now agree - but
+                update whichever is behind so there is only one figure to trust.
               </div>
             )}
 

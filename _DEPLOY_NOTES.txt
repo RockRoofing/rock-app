@@ -1,7 +1,7 @@
-pkg761 - No warning banners in the PDF
-=======================================
+pkg762 - Invoice Finance reads the drawn figure you typed
+==========================================================
 
-DEPLOY OVER pkg760 (contains pkg760). Five files.
+DEPLOY OVER pkg761 (contains pkg761). Five files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -10,38 +10,44 @@ REPLACE:
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-WHAT CHANGED
-------------
-Every page-level warning, notice and diagnostic now carries a class the print
-stylesheet hides. On screen they behave exactly as before; in the PDF they are
-gone.
+WHAT WAS STILL WRONG
+--------------------
+pkg760 fixed the CASH FLOW reading the drawn figure. It did not fix the Invoice
+Finance page, which keeps its own statement log - and that log still held
+122,711 as at 30/08.
 
-Twelve tagged in total:
+So the same number lived in two places and they had drifted:
 
-  13-week (9)   Invoice Finance behind your balances
-                Overdue items are NOT in the forecast
-                Placement check
-                The build marker (pkg761 ... store synced ...)
-                Could not read balances from Xero
-                and four further amber notices further down the page
+  statement log, this page    122,711  as at 30/08  -> availability 38,968
+  balances panel, 13-week     138,581  as at 07/09  -> availability 23,098
+  Bibby portal                138,581               -> availability 26,989
 
-  Forecast BS (2)  Press "Read balance sheet from Xero"
-                   Card accounts are not being matched
+THE FIX
+-------
+Whichever reading is MORE RECENT is used, and the "Currently drawn" card says
+which - "from the cash flow balances, as at 07/09/2026" or "statement log, as at
+30/08/2026".
 
-  Invoice Finance (1)  Applications with no customer name
+Nothing is deleted. The statement log is still there and still editable; it is
+simply no longer able to override a newer figure typed elsewhere.
 
-ALSO: COLLAPSED DRILL-DOWNS
-----------------------------
-A closed <details> prints as its one-line summary and nothing else - "Click for
-every invoice and where it landed", with no list under it. Those are hidden too.
-Anything you leave OPEN still prints in full, so the drill-downs you actually
-want in the pack are unaffected.
+An amber bar appears while the two disagree, naming both and saying which is in
+use, so a stale log cannot quietly overstate your headroom again. It is tagged
+rr-warn, so it does not print.
 
-WHY THIS MATTERS BEYOND TIDINESS
----------------------------------
-These messages exist to prompt an action while you are looking at the page.
-Printed into a document that goes to a bank, an accountant or a prospective
-client they read as faults in the figures - and by the time anyone reads the PDF
-they may already have been dealt with.
+WHAT YOU SHOULD SEE
+-------------------
+  Currently drawn    £138,581  (from the cash flow balances, as at 07/09/2026)
+  Availability now    £23,098
 
-The underlying figures are unchanged. Only what is displayed on paper.
+Against Bibby's own 26,989. The remaining 3,891 is this page calculating the
+advance from your ledger (161,679) versus Bibby's approved figure (165,570) -
+two different calculations of the same thing, and the smaller discrepancy by far.
+
+THE PATTERN, SINCE IT KEEPS HAPPENING
+--------------------------------------
+Drawn was held in two places. Receivables were read from two sources. Card
+headroom was computed twice. The project labels came from a cache that expired.
+Every one produced a wrong number that looked plausible. Where the same fact can
+be entered in two places, it will diverge - so the fix is always to make one of
+them read the other rather than to correct both.
