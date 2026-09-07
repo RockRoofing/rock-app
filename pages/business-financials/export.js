@@ -56,6 +56,10 @@ const TABS = [
   ['forecast-balance-sheet', 'Forecast Balance Sheet', ForecastBS],
 ]
 
+// Sections whose tables are simply too wide for A3 even compressed - twelve months plus
+// summary columns. They print scaled rather than clipped.
+const WIDE = new Set(['budgets', 'monthly', 'forecast-pl', 'forecast-balance-sheet', 'cash-schedule'])
+
 const btn = { background: '#fff', border: '1px solid #ddd9d2', borderRadius: 6, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer', color: '#57534e' }
 const btnMain = { ...btn, background: INK, color: '#fff', border: `1px solid ${INK}`, fontWeight: 600, padding: '8px 18px', fontSize: 13 }
 
@@ -170,7 +174,25 @@ export default function ExportFinancials() {
              printing on top of the Forecast P&L. */
           .rr-pg div { overflow: visible !important; }
           .rr-pg div { height: auto !important; max-height: none !important; resize: none !important; }
-          .rr-pg table { page-break-inside: auto; }
+          /* WIDE TABLES MUST FIT THE PAGE, NOT OVERFLOW IT.
+             Budgets is twelve months plus five summary columns, and the page sets a
+             minWidth on the table with nowrap on every cell. Print cannot scroll, so the
+             right-hand columns were simply falling off the sheet. Overriding both lets
+             the table compress instead of being cut. */
+          .rr-pg table { page-break-inside: auto; min-width: 0 !important; width: 100% !important;
+            table-layout: auto; font-size: 7.5pt !important; }
+          .rr-pg th, .rr-pg td { white-space: normal !important; padding: 1.4mm 1mm !important;
+            word-break: normal; overflow-wrap: anywhere; }
+
+          /* Controls carry width but no meaning on paper. A SELECT cannot be read once
+             printed, so it goes; an INPUT holds a figure you need, so it stays - stripped
+             of its box so it reads as text rather than an empty form field. */
+          .rr-pg select { display: none !important; }
+          .rr-pg input[type="text"], .rr-pg input[type="number"], .rr-pg input[type="date"] {
+            border: none !important; background: transparent !important; padding: 0 !important;
+            width: auto !important; max-width: 24mm !important; font-size: 7.5pt !important;
+            -webkit-appearance: none; appearance: none; }
+          .rr-pg input[type="checkbox"] { transform: scale(0.8); }
           .rr-pg tr { page-break-inside: avoid; }
           /* WARNINGS AND DIAGNOSTICS DO NOT BELONG IN A PDF.
              They exist to prompt an action while you are on the page. Printed into a
@@ -184,6 +206,11 @@ export default function ExportFinancials() {
           /* Controls are meaningless on paper. Inputs and selects are KEPT because they
              carry values you need to read - debtor days, retention %, manual figures. */
           .rr-pg button { display: none !important; }
+          /* LAST RESORT for anything still too wide. Scaling keeps every column on the
+             sheet, which is always better than losing the right-hand ones silently -
+             a reader can see small type, but cannot see a column that is not there. */
+          .rr-wide { zoom: 0.72; }
+
           .rr-brk { page-break-before: always; }
           /* The cover is the first sheet, so nothing before it may force a break. */
           .rr-cover { page-break-before: avoid; }
@@ -246,7 +273,7 @@ export default function ExportFinancials() {
                     </div>
                   </div>
                 </div>
-                <div className="rr-pg rr-brk">
+                <div className={`rr-pg rr-brk${WIDE.has(t[0]) ? ' rr-wide' : ''}`}>
                   <div style={{ padding: '10px 24px 0', fontSize: 15, fontWeight: 700, color: INK, background: '#fff' }}>
                     {t[1]}
                     <span style={{ fontWeight: 400, fontSize: 11.5, color: '#a8a49c', marginLeft: 10 }}>

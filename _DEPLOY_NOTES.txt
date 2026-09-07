@@ -1,7 +1,7 @@
-pkg762 - Invoice Finance reads the drawn figure you typed
-==========================================================
+pkg763 - Wide tables no longer cut off in the PDF
+==================================================
 
-DEPLOY OVER pkg761 (contains pkg761). Five files.
+DEPLOY OVER pkg762 (contains pkg762). Five files.
 
 REPLACE:
   pages/api/business-financials.js
@@ -10,44 +10,37 @@ REPLACE:
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-WHAT WAS STILL WRONG
---------------------
-pkg760 fixed the CASH FLOW reading the drawn figure. It did not fix the Invoice
-Finance page, which keeps its own statement log - and that log still held
-122,711 as at 30/08.
+WHY IT WAS CUT
+--------------
+Budgets is twelve months plus five summary columns. The page sets a minWidth on
+the table and nowrap on every cell, which is right on screen - you scroll
+sideways. Print cannot scroll, so the right-hand columns fell off the sheet with
+nothing to say they had.
 
-So the same number lived in two places and they had drifted:
+Neither of those was being overridden in print. Now both are: the table
+compresses to the page instead of being clipped.
 
-  statement log, this page    122,711  as at 30/08  -> availability 38,968
-  balances panel, 13-week     138,581  as at 07/09  -> availability 23,098
-  Bibby portal                138,581               -> availability 26,989
+WHAT CHANGED IN PRINT ONLY
+---------------------------
+  tables      min-width removed, width 100%, 7.5pt
+  cells       nowrap removed so long labels wrap, tighter padding
+  selects     hidden - a dropdown cannot be read on paper and the method column
+              was costing real width
+  inputs      kept, because they hold figures you need, but stripped of their
+              box so they read as text rather than empty form fields
 
-THE FIX
--------
-Whichever reading is MORE RECENT is used, and the "Currently drawn" card says
-which - "from the cash flow balances, as at 07/09/2026" or "statement log, as at
-30/08/2026".
+At 7.5pt across A3 landscape that is about 23mm per column against roughly 15mm
+for a seven-figure number, so it fits with room to spare.
 
-Nothing is deleted. The statement log is still there and still editable; it is
-simply no longer able to override a newer figure typed elsewhere.
+AND A BACKSTOP
+--------------
+The five widest sections - Budgets, 12-Month, Forecast P&L, Forecast Balance
+Sheet and Cash Schedule - also print scaled to 72%. Small type is always better
+than a missing column: a reader can squint, but cannot see a column that is not
+on the page.
 
-An amber bar appears while the two disagree, naming both and saying which is in
-use, so a stale log cannot quietly overstate your headroom again. It is tagged
-rr-warn, so it does not print.
-
-WHAT YOU SHOULD SEE
--------------------
-  Currently drawn    £138,581  (from the cash flow balances, as at 07/09/2026)
-  Availability now    £23,098
-
-Against Bibby's own 26,989. The remaining 3,891 is this page calculating the
-advance from your ledger (161,679) versus Bibby's approved figure (165,570) -
-two different calculations of the same thing, and the smaller discrepancy by far.
-
-THE PATTERN, SINCE IT KEEPS HAPPENING
---------------------------------------
-Drawn was held in two places. Receivables were read from two sources. Card
-headroom was computed twice. The project labels came from a cache that expired.
-Every one produced a wrong number that looked plausible. Where the same fact can
-be entered in two places, it will diverge - so the fix is always to make one of
-them read the other rather than to correct both.
+WHAT TO CHECK
+-------------
+Export Budgets on its own and confirm the FY total and Tracking columns are
+present at the right-hand edge. Those are the two that were being lost, and they
+are the two worth having.
