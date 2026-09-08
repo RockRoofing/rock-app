@@ -1,42 +1,38 @@
-pkg775 - See on map, from the deal's Site Location
-===================================================
+pkg776 - HOTFIX: email search crashed the CRM
+==============================================
 
-DEPLOY OVER pkg774 (contains pkg774). Thirteen files.
+DEPLOY OVER pkg775. Thirteen files. Contains everything from pkg775.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/crm.js                      (changed here)
-  everything else as pkg774
+  pages/crm.js                      (the fix)
+  everything else as pkg775
 
-WHAT IT DOES
-------------
-"See on map" appears beside Site Location in the Details panel of a deal,
-whenever a location is set. It opens a map over the page.
+WHAT HAPPENED
+-------------
+My bug, from pkg773. The line showing what the search had narrowed to read:
 
-Closes on the X or Escape ONLY - never on a backdrop click, same as every other
-modal in the portal.
+  {filtered.length} of {items.length}
 
-WHAT IT SEARCHES
-----------------
-Site location plus the postcode where one is recorded:
+The memo in EmailQueue is called `shown`, not `filtered`. Nothing is named
+`filtered` anywhere in that component. So the moment you typed a character the
+count line rendered and threw "filtered is not defined".
 
-  "Kilburn Square, NW6 6PS"
+Fixed - it reads `shown.length`, the same variable every other line in the
+component uses.
 
-The postcode matters. A site name on its own often lands on the wrong side of
-town; with a postcode it lands on the building.
+WHY THE BUILD DID NOT CATCH IT
+-------------------------------
+esbuild compiles an undefined identifier without complaint; it only fails on
+syntax. And the line only renders when the search box is NOT empty, so it never
+executed on load - which is why it got through.
 
-NO API KEY NEEDED
------------------
-An embedded Google map via maps.google.com/maps?...&output=embed, which needs no
-key, no account and no billing setup. Nothing to configure and nothing to expire.
+I also swept the whole component for any other identifier used in JSX with no
+declaration in scope. Nothing else - the only hits were callback parameters and
+one module-level style constant.
 
-If you later want pins, satellite view or driving time from the yard, that needs
-the paid Maps JavaScript API and a key - worth knowing before anyone asks.
-
-TWO SMALL THINGS
-----------------
-"Open in Google Maps" at the foot, for directions on a phone.
-
-A line saying it is a SEARCH location, not a surveyed position. It is a geocoded
-guess from a text field, and somebody will eventually try to set out from it.
+WHAT TO CHECK
+-------------
+Type in the nav search on the Emails tab. The list should narrow and the line
+should read: Search "waites" - 3 of 44   clear

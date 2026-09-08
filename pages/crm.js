@@ -1676,7 +1676,7 @@ function EmailQueue({ deals, users, onOpenDeal, navQuery = '', onClearNavQuery }
           </select>
           {String(navQuery || '').trim() && (
             <span style={{ fontSize: 12, color: C.dim, display: 'flex', alignItems: 'center', gap: 6 }}>
-              Search &ldquo;{String(navQuery).trim()}&rdquo; &middot; {filtered.length} of {items.length}
+              Search &ldquo;{String(navQuery).trim()}&rdquo; &middot; {shown.length} of {items.length}
               {onClearNavQuery && <span onClick={onClearNavQuery} style={{ color: C.link, cursor: 'pointer' }}>clear</span>}
             </span>
           )}
