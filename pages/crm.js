@@ -1532,14 +1532,16 @@ function ProjectPicker({ deals, onPick, onCancel }) {
 }
 
 // The review queue. Everything the sync could not place, newest first.
-function EmailQueue({ deals, users, onOpenDeal }) {
+// The nav search box drives this queue. It used to search deals only, which meant that
+// on the Emails tab the most prominent search on the page did nothing at all while a
+// second box sat below it doing the actual work. One box, in the place people reach for.
+function EmailQueue({ deals, users, onOpenDeal, navQuery = '', onClearNavQuery }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [noteDeal, setNoteDeal] = useState(null);
   const [noteUndo, setNoteUndo] = useState('');
-  const [search, setSearch] = useState('');
   const [mailboxFilter, setMailboxFilter] = useState('');
   const [pickerFor, setPickerFor] = useState(null);
   const [busy, setBusy] = useState('');
@@ -1657,10 +1659,10 @@ function EmailQueue({ deals, users, onOpenDeal }) {
   const shown = useMemo(() => {
     let out = items;
     if (mailboxFilter) out = out.filter((m) => String(m.mailbox || '').toLowerCase() === mailboxFilter);
-    const s = search.trim().toLowerCase();
+    const s = String(navQuery || '').trim().toLowerCase();
     if (s) out = out.filter((m) => `${m.subject} ${m.from} ${m.fromName} ${m.preview} ${m.mailbox}`.toLowerCase().includes(s));
     return out;
-  }, [items, search, mailboxFilter]);
+  }, [items, navQuery, mailboxFilter]);
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 16, boxSizing: 'border-box', background: C.feedBg }}>
@@ -1672,7 +1674,12 @@ function EmailQueue({ deals, users, onOpenDeal }) {
             <option value="">All mailboxes</option>
             {mailboxOptions.map((o) => <option key={o.mailbox} value={o.mailbox}>{o.label}</option>)}
           </select>
-          <input placeholder="Search&#8230;" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...miniInput, width: 220 }} />
+          {String(navQuery || '').trim() && (
+            <span style={{ fontSize: 12, color: C.dim, display: 'flex', alignItems: 'center', gap: 6 }}>
+              Search &ldquo;{String(navQuery).trim()}&rdquo; &middot; {filtered.length} of {items.length}
+              {onClearNavQuery && <span onClick={onClearNavQuery} style={{ color: C.link, cursor: 'pointer' }}>clear</span>}
+            </span>
+          )}
           <button onClick={load} style={ghostBtn}>Refresh</button>
         </div>
         <div style={{ fontSize: 12, color: C.dim, marginBottom: 12 }}>
@@ -1721,7 +1728,7 @@ function EmailQueue({ deals, users, onOpenDeal }) {
                   });
                 }}
                 style={{ width: 15, height: 15, cursor: 'pointer' }} />
-              Select all {(search.trim() || mailboxFilter) ? `${shown.length} shown` : `${shown.length}`}
+              Select all {(String(navQuery || '').trim() || mailboxFilter) ? `${shown.length} shown` : `${shown.length}`}
             </label>
 
             {sel.size > 0 && <>
@@ -4175,7 +4182,7 @@ function CRMPageInner() {
         <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
         <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <div style={{ position: 'relative', minWidth: 260 }}>
-          <input placeholder="Search…" value={query} onChange={(e) => { setQuery(e.target.value); setShowSuggest(true); }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', paddingRight: 26 }} />
+          <input placeholder={view === 'emails' ? "Search emails…" : "Search…"} value={query} onChange={(e) => { setQuery(e.target.value); setShowSuggest(true); }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', paddingRight: 26 }} />
           {query && <span onClick={() => setQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.dim, fontSize: 14 }}>✕</span>}
           {showSuggest && suggestions.length > 0 && isDealView && (
             <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
@@ -4272,7 +4279,7 @@ function CRMPageInner() {
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
-        {view === 'emails' && <EmailQueue deals={deals} users={users} onOpenDeal={openDealById} />}
+        {view === 'emails' && <EmailQueue deals={deals} users={users} onOpenDeal={openDealById} navQuery={query} onClearNavQuery={() => setQuery('')} />}
       </div>
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} users={users} />}

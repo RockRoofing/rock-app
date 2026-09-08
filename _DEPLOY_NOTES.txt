@@ -1,42 +1,43 @@
-pkg772 - Rename a deal
-=======================
+pkg773 - One search box on the Emails tab
+==========================================
 
-DEPLOY OVER pkg771 (contains pkg771). Twelve files.
+DEPLOY OVER pkg772 (contains pkg772). Twelve files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  everything else as pkg771
+  everything else as pkg772
 
-WHAT IT DOES
+WHAT CHANGED
 ------------
-An "edit" link beside the project title at the top of a deal. Click it, type,
-Enter to save or Escape to cancel. A blank name is rejected rather than saved.
+On the Emails tab the nav search box now searches the email queue - subject,
+sender name, sender address, preview text and mailbox.
 
-WHY IT CANNOT DOUBLE-COUNT
----------------------------
-I checked before building it. Every sales and scorecard report aggregates on
-d.id - the title appears in them only as a display column, never as a key. The
-rename patches the SAME deal in place, so no second record can exist.
+The second search box in the queue header is gone. Two boxes on one screen, with
+the more prominent one doing nothing, is worse than either alone.
 
-It writes a plain note to the timeline, NOT a value-change entry. The Value
-Changes report reads entries of type 'value', so a rename cannot appear there
-and cannot move a figure.
+The nav placeholder reads "Search emails..." on that tab so it is clear what it
+covers. Everywhere else it is unchanged and still searches deals.
 
-Nothing else on the deal is touched: value, stage, activities and fields are all
-unchanged.
+WHERE THE OLD BOX WAS
+----------------------
+A line showing what the search is doing:
 
-THE OLD NAME IS KEPT
---------------------
-The timeline records: Renamed: "old name" -> "new name", with who did it.
+  Search "waites" - 3 of 44        clear
 
-A renamed project is otherwise impossible to find later by the name everybody
-first knew it as - which on a job that ran for a year is the name half your
-emails and half your paperwork still use.
+Which is more useful than an empty box, because it says how much you are not
+looking at.
 
-ONE THING TO BE AWARE OF
--------------------------
-The CRM import is wipe-and-replace from a Pipedrive export. If you rename a deal
-here and then run an import, the Pipedrive title comes back. Rename in both, or
-rename here only on deals that no longer come down in the export.
+TWO LOOSE ENDS TIDIED
+----------------------
+The queue's local `search` state is removed rather than left orphaned.
+
+The "Select all" bar read that same state to decide between "Select all 12
+shown" and "Select all 12". It would have kept saying "44" while the nav search
+narrowed the list to three, and select-all acts on what is SHOWN - so it would
+have looked like it was about to file every email in the queue. Now reads the
+nav query.
+
+The deal suggestion dropdown was already suppressed outside the deal views, so
+typing here does not offer projects.
