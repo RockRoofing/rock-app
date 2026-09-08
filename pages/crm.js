@@ -699,8 +699,18 @@ function TimelineBar({ deal, onMove }) {
           ? `${s.label} - ${days} day${days === 1 ? '' : 's'}${isCur ? ' (current, and counting)' : ''}`
           : (passed ? `${s.label} - no dated history` : `${s.label} - not reached`);
         return (
-          <div key={s.id} title={title} onClick={() => onMove(deal.id, s.id)} style={{ flex: 1, height: 22, cursor: 'pointer', position: 'relative', background: passed ? C.greenBar : C.grey, clipPath: 'polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%, 7px 50%)' }}>
-            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{i === cur ? s.label : ''}</span>
+          // 30px rather than 22 - the current stage now carries two lines, and the day
+          // count is the thing you want to see without hovering. Only the current stage
+          // is labelled, so the rest of the bar is unaffected by the extra height.
+          <div key={s.id} title={title} onClick={() => onMove(deal.id, s.id)} style={{ flex: 1, height: 30, cursor: 'pointer', position: 'relative', background: passed ? C.greenBar : C.grey, clipPath: 'polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%, 7px 50%)' }}>
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1, color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden', padding: '0 4px' }}>
+              {isCur && <span style={{ fontSize: 10, fontWeight: 600 }}>{s.label}</span>}
+              {/* Days in the CURRENT stage only, always visible. Hidden where there is no
+                  dated history rather than shown as 0 - zero reads as "moved today". */}
+              {isCur && days != null && (
+                <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.85 }}>{days} day{days === 1 ? '' : 's'}</span>
+              )}
+            </span>
           </div>
         );
       })}

@@ -1,48 +1,30 @@
-pkg769 - Pin notes to the top of a deal
-========================================
+pkg770 - Days in current stage, always visible on the green bar
+================================================================
 
-DEPLOY OVER pkg768 (contains pkg768). Eleven files.
+DEPLOY OVER pkg769 (contains pkg769). Eleven files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  everything else as pkg768
+  everything else as pkg769
 
 WHAT IT DOES
 ------------
-Every note in the deal timeline now has a "Pin" link beside Edit and Delete.
-Pinned notes sort to the top of the feed and stay there.
+The current stage in the green bar now reads on two lines:
 
-  Pin      the note lifts to the top
-  Unpin    it drops back into date order
+        Negotiating
+          34 days
 
-ORDERING
---------
-Pinned first, then newest. Two pinned notes keep their own date order between
-them, so pinning lifts a block to the top rather than scrambling the sequence:
+Visible without hovering, on the current stage only. Every other segment is
+unchanged, and the hover tooltip still gives the day count for all of them.
 
-  n4  pinned  22 Jul
-  n2  pinned  10 Jun
-  n3          07 Sep
-  n1          01 Sep
+TWO SMALL DECISIONS
+-------------------
+The bar is 30px rather than 22. Two lines will not fit in 22 without the type
+becoming unreadable, and only the current stage carries a second line, so
+nothing else in the bar changes shape.
 
-A PINNED NOTE LOOKS PINNED
----------------------------
-Sitting at the top is not enough on its own - the next note anybody adds is also
-at the top, and the two would be indistinguishable. So a pinned note gets a blue
-border and a small PINNED label showing who pinned it and when.
-
-That last part matters more than it sounds. A pin from four months ago that
-nobody has revisited looks exactly like one from this morning otherwise, and the
-whole point of pinning is that the note still matters.
-
-WHERE IT IS STORED
-------------------
-On the history entry itself - pinned, pinnedAt, pinnedBy - saved through the same
-patch path as editing or deleting a note. No new store, no migration, and
-existing notes are simply unpinned.
-
-NOTE: pinning applies to NOTES only. Activities and emails share the timeline but
-sort by date as before - an activity is pinned by its due date, which is what a
-due date is for.
+Where there is no dated history the day count is HIDDEN rather than shown as
+zero. Zero reads as "moved today", which would be wrong on an old deal that
+simply has no recorded move. The tooltip says "no dated history" for those.
