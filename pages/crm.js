@@ -2362,6 +2362,66 @@ function ListView({ deals, columns, sort, onSort, onOpen, today, schema = [], us
   );
 }
 
+// ADD A COMPANY OR A CONTACT DIRECTLY.
+//
+// Both lists were read-only: a company only existed once a project referenced it, so a
+// customer you had met but not yet tendered for could not be recorded anywhere.
+//
+// One component for both, driven by the same field lists the tables use, so a field added
+// to COMPANY_FIELDS or CONTACT_FIELDS appears here without anybody remembering to.
+// The derived columns - deals, values, won, lost - are counted from projects and are not
+// editable, so they are left out.
+function AddEntityModal({ kind, fields, existing, onSave, onClose }) {
+  const [rec, setRec] = useState({});
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const DERIVED = new Set(['deals', 'open_value', 'won', 'lost']);
+  const editable = fields.filter(([k]) => !DERIVED.has(k));
+  const name = String(rec.name || '').trim();
+  // Case-insensitive, because "wates construction limited" and "Wates Construction
+  // Limited" are the same customer and two of them would split every report.
+  const clash = !!name && (existing || []).some((r) => String(r.name || '').trim().toLowerCase() === name.toLowerCase());
+
+  const save = () => { if (!name || clash) return; onSave({ ...rec, name }); onClose(); };
+
+  return (
+    <div style={overlay}>
+      <div style={{ ...modal, maxWidth: 520 }}>
+        <div style={modalHead}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>Add {kind}</span>
+          <button onClick={onClose} style={xBtn}>&#10005;</button>
+        </div>
+        <div style={{ padding: 18, overflowY: 'auto' }}>
+          {editable.map(([k, lbl]) => (
+            <div key={k} style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 11, color: C.dim, fontWeight: 600, marginBottom: 3 }}>
+                {lbl}{k === 'name' ? ' *' : ''}
+              </label>
+              <input value={rec[k] || ''} onChange={(e) => setRec((p) => ({ ...p, [k]: e.target.value }))}
+                autoFocus={k === 'name'}
+                onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+                style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
+            </div>
+          ))}
+          {clash && (
+            <div style={{ fontSize: 12, color: C.lost, marginTop: 4 }}>
+              A {kind.toLowerCase()} with that name already exists. Open it from the list instead.
+            </div>
+          )}
+        </div>
+        <div style={{ padding: '10px 18px', borderTop: `1px solid ${C.line}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onClose} style={ghostBtn}>Cancel</button>
+          <button onClick={save} disabled={!name || clash} style={{ ...primaryBtn, opacity: (!name || clash) ? 0.5 : 1 }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===========================================================================
 // Companies / Contacts views (derived from deals)
 // ===========================================================================
@@ -2576,6 +2636,7 @@ function CRMPageInner() {
   // Company whose project history is open. Lives here, not in the deal view - it is
   // opened from the Companies table.
   const [companyHistory, setCompanyHistory] = useState(null);
+  const [addEntity, setAddEntity] = useState('');   // '' | 'companies' | 'contacts'
   const [contactsData, setContactsData] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -4278,7 +4339,10 @@ function CRMPageInner() {
       {(view === 'companies' || view === 'contacts') && (
         <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 14, fontWeight: 700 }}>{view === 'companies' ? `Companies (${companyRows.length})` : `Contacts (${contactRows.length})`}</span>
-          <button onClick={() => setChooser(view)} style={ghostBtn}>Choose Columns</button>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => setAddEntity(view)} style={primaryBtn}>+ Add {view === 'companies' ? 'company' : 'contact'}</button>
+            <button onClick={() => setChooser(view)} style={ghostBtn}>Choose Columns</button>
+          </span>
         </div>
       )}
 
@@ -4291,6 +4355,15 @@ function CRMPageInner() {
         )}
         {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} schema={schema} users={users} onEditField={editField} />}
         {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteCompany} noun="company" onOpenName={(r) => setCompanyHistory(r.name)} />}
+        {addEntity === 'companies' && (
+          <AddEntityModal kind="company" fields={COMPANY_FIELDS} existing={companyRows}
+            onSave={(rec) => upsertOrg(rec)} onClose={() => setAddEntity('')} />
+        )}
+        {addEntity === 'contacts' && (
+          <AddEntityModal kind="contact" fields={CONTACT_FIELDS} existing={contactRows}
+            onSave={(rec) => upsertContact(rec)} onClose={() => setAddEntity('')} />
+        )}
+
         {companyHistory && (
           <CompanyHistoryModal
             company={companyHistory}

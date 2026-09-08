@@ -1,46 +1,47 @@
-pkg777 - See won / lost from inside a deal
-===========================================
+pkg778 - Add companies and contacts directly
+=============================================
 
-DEPLOY OVER pkg776 (contains pkg776). Thirteen files.
+DEPLOY OVER pkg777 (contains pkg777). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  everything else as pkg776
+  everything else as pkg777
 
 WHAT IT DOES
 ------------
-"See won / lost" beside the organisation name in the deal sidebar. Opens the
-SAME modal the Companies page opens when you click a company name: every project
-with that customer, grouped Won / Lost / Still tendered, with values and totals,
-newest first in each group.
+"+ Add company" and "+ Add contact" in the header of their respective pages,
+next to Choose Columns.
 
-Clicking a project in the list jumps straight to it.
+Both lists were read-only. A company only existed once a project referenced it,
+so a customer you had met but not yet tendered for could not be recorded at all.
 
-REUSED, NOT REBUILT
--------------------
-CompanyHistoryModal already existed as a standalone component taking company,
-deals, onOpenDeal and onClose. It is called from the deal with the full deal
-list, so the two entry points cannot show different answers - which a second
-copy of the grouping logic would have guaranteed sooner or later.
+WHAT YOU GET IN THE FORM
+-------------------------
+  Company   Company name*, Address, Phone, Website, Email,
+            Registration Number, Supply Chain Approved?
+  Contact   Name*, First name, Last name, Company, Phone,
+            Email, Job Role
 
-Closes on the X or Escape only, like every other modal.
+Driven by the SAME COMPANY_FIELDS / CONTACT_FIELDS lists the tables use, so a
+field added there appears here without anybody having to remember. The derived
+columns - Deals, Open value, Won, Lost - are counted from projects and are not
+editable, so they are left out.
 
-ONE THING WORTH KNOWING
-------------------------
-It matches on the EXACT organisation string. "Barnfield Construction Limited"
-and "Barnfield Construction Ltd." are two different customers to this modal, and
-your deal list has both. Same behaviour as the Companies page, so nothing has
-changed - but it means a customer whose name has been typed two ways will show
-split history.
+DUPLICATES ARE BLOCKED
+----------------------
+Case-insensitive and trimmed, so "wates construction limited" is caught against
+"Wates Construction Limited". Save is disabled and the reason is shown.
 
-Worth tidying the names at some point. I have not merged them automatically,
-because Torsion Construction and Torsion Projects are genuinely different
-companies and no rule can tell those apart from a typo.
+It will NOT catch "Wates Construction Ltd" against "...Limited" - those are
+different strings and no rule can tell a typo from two genuinely different
+companies. Same limitation the rest of the CRM has.
 
-A NOTE ON WHERE THE BUTTON WENT
---------------------------------
-You said the Details tab. Organisation actually lives in the SUMMARY box, not
-Details - the schema puts it there. The button is on the organisation row where
-it is, which is what you were pointing at. Say if you would rather it moved.
+NOTHING NEW UNDERNEATH
+----------------------
+It calls the existing upsertOrg and upsertContact, which already handle the
+merge, the API write and the optimistic update. No new endpoint, no new store,
+and records added here behave exactly like ones created from a project.
+
+Escape or the X to close, like every other modal.
