@@ -1,13 +1,14 @@
-pkg765 - Project Financials cards: AFA, applied for, remaining
-===============================================================
+pkg766 - Not-instructed variations were in the Projected Final Account
+=======================================================================
 
-DEPLOY OVER pkg764 (contains pkg764). Eight files.
+DEPLOY OVER pkg765 (contains pkg765). Ten files.
 
-FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets in the folder
-name - pages/project/ then the file [id].js.
+FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/project/[id].js             (changed here)
+  lib/applications.js               (changed here)
+  lib/applicationPdf.js             (changed here)
+  pages/project/[id].js             (as pkg765)
   pages/api/dashboard.js            (as pkg764)
   pages/retention.js                (as pkg764)
   pages/api/business-financials.js
@@ -16,42 +17,50 @@ REPLACE:
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-WHY THE AFA DISAGREED WITH THE TRACKER
----------------------------------------
-This page computed it as contractValue + instructedVars and nothing else - a
-FOURTH implementation of a rule that already lives in dashboard.js. It ignored
-both the sent application and the manual override, so it was always going to
-differ.
+YOU WERE RIGHT, TO THE PENNY
+-----------------------------
+  instructed variations sum to        65,011.42
+  the summary showed                  94,416.92
+  difference                          29,405.50  = V12, "Not instructed"
 
-It now uses the same order as the Retention Tracker, importing the same shared
-computeApplicationSummary rather than working it out again:
+Projected Final Account 169,679.70 -> 140,274.20.
 
-  latest SENT application  ->  manual override  ->  project details
+THE TEST WAS WRONG IN A SUBTLE WAY
+-----------------------------------
+lib/applications.js filtered with `v.instructed !== false`. That admits anything
+except a literal false - undefined, null, a missing field. V12's flag was not set
+to false; it simply was not set. So it counted as instructed.
 
-The card's sub-line names the source, so you can see which applies at a glance.
+MY FIRST FIX WAS ALSO WRONG. I changed it to a plain truthy test, matching the
+ten other call sites. But `instructed` is a BOOLEAN on records written by the
+current UI and the STRING 'yes'/'no' on older ones - and 'no' is truthy. That
+would have counted every uninstructed variation on an older record.
 
-THE THREE CARDS
----------------
-  AFA
-    Now the ANTICIPATED FINAL ACCOUNT: measured contract sum plus variations at
-    final value. What the job is expected to finish at.
+  value      correct   !== false said   truthy said
+  true       yes       yes              yes
+  'yes'      yes       yes              yes
+  false      no        no               no
+  'no'       NO        YES  wrong       YES  wrong
+  missing    NO        YES  wrong       no
+  null       NO        YES  wrong       no
 
-  Application total inc. retention   (was "Invoiced Inc. Retention")
-    Cumulative gross certified on the latest sent application - measured to date
-    plus variations to date plus materials on site. Gross of MCD, including
-    retention. What has been applied for, not what has been invoiced.
+The right test is `v.instructed === true || v.instructed === 'yes'`. It is now a
+single exported isInstructed() used by both the summary and the PDF.
 
-  Remaining to apply for             (was "Remaining to Invoice")
-    AFA less the application total. Gross. What is left of the final account
-    still to be certified.
+THIS WAS ALREADY FOUND ONCE
+----------------------------
+lib/applicationPdf.js had the identical fix, with a comment saying the loose test
+was "certifying every UNINSTRUCTED variation as instructed - a real figure on a
+document going to the customer". It was fixed in the PDF and never in the shared
+library the on-screen summary uses. Two copies of one rule; one got corrected.
 
-These are genuinely different things and the old card conflated them. On a job
-with 520,000 measured contract sum and 60,000 of final variations, certified to
-437,000: AFA reads 580,000, application total 437,000, remaining to apply for
-143,000. Before, the AFA card would have shown the certified figure.
+They are now one definition, imported.
 
 WHAT TO CHECK
 -------------
-Open the project you spotted the mismatch on. The AFA on this page and the Gross
-AFA on the Retention Tracker should now be the same number, and both should name
-the same source underneath.
+On that project: Variations "TOTAL (instructed only)" final value should read
+65,011.42, and the Projected Final Account 140,274.20. V12 stays visible in the
+list, greyed, as information only.
+
+Worth a scan of other live projects too - any with a not-instructed variation
+will have had its PFA overstated by the same amount.
