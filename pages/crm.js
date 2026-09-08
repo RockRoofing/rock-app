@@ -1901,8 +1901,9 @@ function LostReasonModal({ schema, me, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onRenameDeal, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onOpenDeal, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onRenameDeal, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [mapFor, setMapFor] = useState('');
+  const [orgHistoryFor, setOrgHistoryFor] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -2109,7 +2110,21 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
         {/* LEFT — collapsible grey boxes on white */}
         <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: statusTint }}>
           <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')}>
-            {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
+            {summaryFields.map((f) => (
+              <div key={f.key + f.label} style={sideRow}>
+                <span style={sideKey}>{f.label}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                  <EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
+                  {/* Same modal the Companies page opens on a company name. Reused rather
+                      than rebuilt - one component, so the two cannot drift. */}
+                  {f.key === 'organization' && String(deal.fields.organization || '').trim() && (
+                    <span onClick={() => setOrgHistoryFor(String(deal.fields.organization).trim())}
+                      title="Won, lost and still tendering for this customer"
+                      style={{ fontSize: 11, fontWeight: 600, color: C.link, cursor: 'pointer', whiteSpace: 'nowrap' }}>See won / lost</span>
+                  )}
+                </span>
+              </div>
+            ))}
           </SideBox>
           <SideBox title="Details" collapsed={collapsed.details} onToggle={() => toggle('details')}>
             {groupFields('details').map((f) => (
@@ -2229,6 +2244,14 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
           )}
 
           {mapFor && <SiteMapModal query={mapFor} onClose={() => setMapFor('')} />}
+
+          {orgHistoryFor && (
+            <CompanyHistoryModal
+              company={orgHistoryFor}
+              deals={allDeals || []}
+              onOpenDeal={(id) => { setOrgHistoryFor(''); if (onOpenDeal) onOpenDeal(id); }}
+              onClose={() => setOrgHistoryFor('')} />
+          )}
 
           {lostFor != null && (
             <LostReasonModal
@@ -4022,7 +4045,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onPinHistory={pinHistory} onRenameDeal={renameDeal} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onOpenDeal={openDealById} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onPinHistory={pinHistory} onRenameDeal={renameDeal} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }

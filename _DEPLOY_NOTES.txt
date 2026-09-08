@@ -1,38 +1,46 @@
-pkg776 - HOTFIX: email search crashed the CRM
-==============================================
+pkg777 - See won / lost from inside a deal
+===========================================
 
-DEPLOY OVER pkg775. Thirteen files. Contains everything from pkg775.
+DEPLOY OVER pkg776 (contains pkg776). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/crm.js                      (the fix)
-  everything else as pkg775
+  pages/crm.js                      (changed here)
+  everything else as pkg776
 
-WHAT HAPPENED
--------------
-My bug, from pkg773. The line showing what the search had narrowed to read:
+WHAT IT DOES
+------------
+"See won / lost" beside the organisation name in the deal sidebar. Opens the
+SAME modal the Companies page opens when you click a company name: every project
+with that customer, grouped Won / Lost / Still tendered, with values and totals,
+newest first in each group.
 
-  {filtered.length} of {items.length}
+Clicking a project in the list jumps straight to it.
 
-The memo in EmailQueue is called `shown`, not `filtered`. Nothing is named
-`filtered` anywhere in that component. So the moment you typed a character the
-count line rendered and threw "filtered is not defined".
+REUSED, NOT REBUILT
+-------------------
+CompanyHistoryModal already existed as a standalone component taking company,
+deals, onOpenDeal and onClose. It is called from the deal with the full deal
+list, so the two entry points cannot show different answers - which a second
+copy of the grouping logic would have guaranteed sooner or later.
 
-Fixed - it reads `shown.length`, the same variable every other line in the
-component uses.
+Closes on the X or Escape only, like every other modal.
 
-WHY THE BUILD DID NOT CATCH IT
--------------------------------
-esbuild compiles an undefined identifier without complaint; it only fails on
-syntax. And the line only renders when the search box is NOT empty, so it never
-executed on load - which is why it got through.
+ONE THING WORTH KNOWING
+------------------------
+It matches on the EXACT organisation string. "Barnfield Construction Limited"
+and "Barnfield Construction Ltd." are two different customers to this modal, and
+your deal list has both. Same behaviour as the Companies page, so nothing has
+changed - but it means a customer whose name has been typed two ways will show
+split history.
 
-I also swept the whole component for any other identifier used in JSX with no
-declaration in scope. Nothing else - the only hits were callback parameters and
-one module-level style constant.
+Worth tidying the names at some point. I have not merged them automatically,
+because Torsion Construction and Torsion Projects are genuinely different
+companies and no rule can tell those apart from a typo.
 
-WHAT TO CHECK
--------------
-Type in the nav search on the Emails tab. The list should narrow and the line
-should read: Search "waites" - 3 of 44   clear
+A NOTE ON WHERE THE BUTTON WENT
+--------------------------------
+You said the Details tab. Organisation actually lives in the SUMMARY box, not
+Details - the schema puts it there. The button is on the organisation row where
+it is, which is what you were pointing at. Say if you would rather it moved.
