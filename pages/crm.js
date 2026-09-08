@@ -638,17 +638,66 @@ function BoardColumn({ stage, deals, onOpen, onDragStart, onDrop, today, isFirst
 // ===========================================================================
 // Timeline bar (tight gaps, hover day-count scaffold, current-stage label only)
 // ===========================================================================
+// DAYS IN EACH STAGE, from the history the deal already keeps.
+//
+// Every move writes a { type: 'stage', ts, stageFrom, stageTo } entry, so the timeline
+// can be reconstructed rather than needing a new field. The deal's Created date anchors
+// the first stage; without one the run starts at the first recorded move, and stages
+// before that are left blank rather than guessed at.
+//
+// Returns days SPENT in each stage, summed where a deal has been in and out of one more
+// than once - which happens, and reporting only the last visit would understate it.
+function stageDaysFrom(deal) {
+  const out = {};
+  const hist = (deal.history || [])
+    .filter((h) => h && h.type === 'stage' && h.ts)
+    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+  const labelToId = {};
+  for (const st of STAGES) labelToId[st.label] = st.id;
+
+  const created = deal.fields && deal.fields.created ? new Date(deal.fields.created) : null;
+  // Where the run starts. The first move tells us which stage it was LEAVING, so that is
+  // the stage the deal sat in from creation.
+  const haveCreated = !!(created && !isNaN(created));
+  // Without a Created date there is no start for the stage before the first move, so it
+  // is left OUT rather than recorded as zero. Zero reads as a fact; blank reads as
+  // "we do not know", which is the truth.
+  let curId = hist.length ? (haveCreated ? (labelToId[hist[0].stageFrom] || null) : null) : deal.stageId;
+  let since = haveCreated ? created : (hist.length ? new Date(hist[0].ts) : null);
+
+  const add = (id, from, to) => {
+    if (!id || !from || !to) return;
+    const d = Math.max(0, Math.round((to - from) / 86400000));
+    out[id] = (out[id] || 0) + d;
+  };
+
+  for (const h of hist) {
+    const t = new Date(h.ts);
+    if (isNaN(t)) continue;
+    add(curId, since, t);
+    curId = labelToId[h.stageTo] || null;
+    since = t;
+  }
+  // The stage it is in now, up to today.
+  add(curId || deal.stageId, since, new Date());
+  return out;
+}
+
 function TimelineBar({ deal, onMove }) {
   const cur = STAGE_INDEX[deal.stageId];
-  // stageDays: map stageId -> days in stage. Not available from import yet.
-  // When persistence records stage-entry timestamps we compute real values here.
-  const stageDays = deal.stageDays || {};
+  // Computed from history. deal.stageDays is still honoured if something upstream ever
+  // supplies it, but nothing does - which is why this read blank for so long.
+  const stageDays = (deal.stageDays && Object.keys(deal.stageDays).length) ? deal.stageDays : stageDaysFrom(deal);
   return (
     <div style={{ display: 'flex', gap: 1, padding: '10px 0' }}>
       {STAGES.map((s, i) => {
         const passed = i <= cur;
         const days = stageDays[s.id];
-        const title = days != null ? `${s.label}: ${days} day${days === 1 ? '' : 's'}` : s.label;
+        const isCur = i === cur;
+        const title = days != null
+          ? `${s.label} - ${days} day${days === 1 ? '' : 's'}${isCur ? ' (current, and counting)' : ''}`
+          : (passed ? `${s.label} - no dated history` : `${s.label} - not reached`);
         return (
           <div key={s.id} title={title} onClick={() => onMove(deal.id, s.id)} style={{ flex: 1, height: 22, cursor: 'pointer', position: 'relative', background: passed ? C.greenBar : C.grey, clipPath: 'polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%, 7px 50%)' }}>
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{i === cur ? s.label : ''}</span>

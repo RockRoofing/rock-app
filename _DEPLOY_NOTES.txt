@@ -1,54 +1,50 @@
-pkg767 - CRM search now covers the Details card
-================================================
+pkg768 - Days in stage on the deal's timeline bar
+==================================================
 
-DEPLOY OVER pkg766 (contains pkg766). Eleven files.
+DEPLOY OVER pkg767 (contains pkg767). Eleven files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  lib/applications.js               (as pkg766)
-  lib/applicationPdf.js             (as pkg766)
-  pages/project/[id].js             (as pkg765)
-  pages/api/dashboard.js            (as pkg764)
-  pages/retention.js                (as pkg764)
-  pages/api/business-financials.js
-  pages/business-financials/cashflow.js
-  pages/business-financials/invoice-finance.js
-  pages/business-financials/forecast-balance-sheet.js
-  pages/business-financials/export.js
+  everything else as pkg767
 
-WHAT IT SEARCHED BEFORE
-------------------------
-Title, organization, contact person. Three fields.
+WHAT IT DOES
+------------
+Hover any segment of the green bar at the top of a deal and the tooltip now
+reads:
 
-WHAT IT SEARCHES NOW
----------------------
-Those three plus every field on the Details card:
+  Received - 51 days
+  Negotiating - 34 days (current, and counting)
+  MC Unsecured - not reached
+  1st Contact - no dated history
 
-  Glenigan ID, site location, region, size m2, credit score, credit limit,
-  insured credit limit, project stage, roofing works onsite, estimator
-  responsible, scope of works, general info, sales person, project start date,
-  project type, lead source
+NO NEW DATA WAS NEEDED
+-----------------------
+The scaffold was already there - TimelineBar read deal.stageDays with a comment
+saying "Not available from import yet. When persistence records stage-entry
+timestamps we compute real values here."
 
-Scope of works and general info are the useful ones - free text, and usually
-where somebody has written the thing you are trying to find. Searching
-"tapered", "mansafe" or a postcode now returns the project.
+It turned out those timestamps have been recorded all along. Every stage move
+writes a history entry with type 'stage', a timestamp, stageFrom and stageTo. So
+the timeline is reconstructed from what the deal already holds rather than
+adding a field and starting the clock from today.
 
-Applies to Kanban, List and Activities. All three read one function.
+That also means it works retrospectively - deals moved months ago show their
+real history immediately.
 
-HOW IT IS BUILT
----------------
-DETAIL_KEYS lived inside the deal editor component, so the filters could not see
-it. It is now CRM_DETAIL_KEYS at module scope, with a dealHaystack(deal) helper
-beside it, and the editor reads the same constant.
+THREE THINGS IT GETS RIGHT
+---------------------------
+A stage entered more than once SUMS. Deals go backwards - Received to MC Secured
+and back to Received - and reporting only the last visit would understate it. On
+a test deal that was 25 days plus 11, shown as 36.
 
-Two copies of that list would drift, and a search that quietly stopped covering
-a field is a fault nobody reports - you just assume the project is not there.
+The Created date anchors the first stage, so the time before the first move is
+counted rather than lost.
 
-Activity rows carry the haystack from the deal they were built from, computed
-once with the row rather than rebuilt on every keystroke.
+Where there is no Created date the stage before the first move is left BLANK,
+not zero. Zero reads as a fact; blank reads as "we do not know", which is the
+truth. The tooltip says "no dated history" for those.
 
-Both are declared at the top of the file, above every use. A const read before
-its declaration throws at runtime and compiles cleanly, which has taken this
-file out before.
+deal.stageDays is still honoured if anything ever supplies it, so this cannot
+fight a future import.
