@@ -1,43 +1,48 @@
-pkg773 - One search box on the Emails tab
-==========================================
+pkg774 - Emails: won and lost projects in the matching
+=======================================================
 
-DEPLOY OVER pkg772 (contains pkg772). Twelve files.
+DEPLOY OVER pkg773 (contains pkg773). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/crm.js                      (changed here)
-  everything else as pkg772
+  lib/crmEmailSync.js               (changed here)
+  everything else as pkg773
 
-WHAT CHANGED
-------------
-On the Emails tab the nav search box now searches the email queue - subject,
-sender name, sender address, preview text and mailbox.
+FIRST, WHAT ALREADY WORKED
+---------------------------
+Manually assigning an email to a won or lost project was already possible - the
+picker includes them, its placeholder says "won and lost too", and the server
+does no status check. If you tried and it failed, tell me what you saw, because
+that is a different fault from the one I found.
 
-The second search box in the queue header is gone. Two boxes on one screen, with
-the more prominent one doing nothing, is worse than either alone.
+WHAT DID NOT WORK
+-----------------
+buildIndex skipped every non-open deal, so a won project could never be
+SUGGESTED. Emails about a job you had just won - invoice chasing, variations,
+site queries, which is most of the email a job ever generates - arrived in the
+queue with no suggestion, and you had to search the name out by hand each time.
 
-The nav placeholder reads "Search emails..." on that tab so it is clear what it
-covers. Everywhere else it is unchanged and still searches deals.
+NOW
+---
+Closed projects are indexed and offered. They are still not allowed to file
+themselves on a title match: a finished job must not silently capture mail on a
+name it shares with a live one, which was the sound half of the original
+reasoning. So it appears as "Looks like ..." with an Accept button, and waits
+for a person.
 
-WHERE THE OLD BOX WAS
-----------------------
-A line showing what the search is doing:
+A SECOND FAULT THE SAME LINE WAS CAUSING
+-----------------------------------------
+The `continue` sat ABOVE the contact and domain indexing, so those skipped
+closed deals too - even though the comment beneath them says "Every deal now,
+whatever its status" and explains why that matters. The comment described
+behaviour the code prevented. Known contacts on a won job now file as intended.
 
-  Search "waites" - 3 of 44        clear
+AND A REGRESSION THAT WOULD HAVE INTRODUCED
+--------------------------------------------
+byEmail was first-writer-wins, which was safe while only open deals were in it.
+With closed deals indexed, a finished job could take a contact ahead of the live
+job the same person is working on - purely on array order.
 
-Which is more useful than an empty box, because it says how much you are not
-looking at.
-
-TWO LOOSE ENDS TIDIED
-----------------------
-The queue's local `search` state is removed rather than left orphaned.
-
-The "Select all" bar read that same state to decide between "Select all 12
-shown" and "Select all 12". It would have kept saying "44" while the nav search
-narrowed the list to three, and select-all acts on what is SHOWN - so it would
-have looked like it was about to file every email in the queue. Now reads the
-nav query.
-
-The deal suggestion dropdown was already suppressed outside the deal views, so
-typing here does not offer projects.
+An OPEN deal now takes a shared contact from a closed one, whichever comes
+first. Between two of the same status, first still wins. Checked both orders.
