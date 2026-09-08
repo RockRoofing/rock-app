@@ -1,57 +1,57 @@
-pkg764 - Gross AFA comes from the latest SENT application
-==========================================================
+pkg765 - Project Financials cards: AFA, applied for, remaining
+===============================================================
 
-DEPLOY OVER pkg763 (contains pkg763). Seven files.
+DEPLOY OVER pkg764 (contains pkg764). Eight files.
+
+FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets in the folder
+name - pages/project/ then the file [id].js.
 
 REPLACE:
-  pages/api/dashboard.js            (changed here)
-  pages/retention.js                (changed here)
+  pages/project/[id].js             (changed here)
+  pages/api/dashboard.js            (as pkg764)
+  pages/retention.js                (as pkg764)
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-TWO FAULTS, BOTH IN THE GROSS AFA
-----------------------------------
-1. IT TOOK THE LATEST APPLICATION OF ANY STATUS. A draft that had been started
-   but never issued could set the Gross AFA - and with it the Final Account and
-   the retention calculated on it. A draft is a working document, not a figure
-   put to the customer. Now filtered to status === 'sent', which is how
-   application-send.js and applications.js already treat it (a missing status
-   counts as draft).
+WHY THE AFA DISAGREED WITH THE TRACKER
+---------------------------------------
+This page computed it as contractValue + instructedVars and nothing else - a
+FOURTH implementation of a rule that already lives in dashboard.js. It ignored
+both the sent application and the manual override, so it was always going to
+differ.
 
-2. THE MANUAL OVERRIDE BEAT EVERYTHING. A figure typed once into
-   settings.afaOverride sat on top of a real issued application indefinitely,
-   and nothing moved when the application changed.
+It now uses the same order as the Retention Tracker, importing the same shared
+computeApplicationSummary rather than working it out again:
 
-ORDER OF PREFERENCE NOW
-------------------------
   latest SENT application  ->  manual override  ->  project details
 
-  sent app + stale override    uses the application, override ignored
-  sent app only                uses the application
-  no sent app, override set    uses the override
-  neither                      contract value + instructed variations
+The card's sub-line names the source, so you can see which applies at a glance.
 
-The override is kept as a fallback for projects with no sent application, which
-is the case it was added for. It simply can no longer contradict one.
+THE THREE CARDS
+---------------
+  AFA
+    Now the ANTICIPATED FINAL ACCOUNT: measured contract sum plus variations at
+    final value. What the job is expected to finish at.
 
-FINDING YOUR MISMATCHED PROJECT
---------------------------------
-The Gross AFA cell already showed its source in small grey text. Two changes:
+  Application total inc. retention   (was "Invoiced Inc. Retention")
+    Cumulative gross certified on the latest sent application - measured to date
+    plus variations to date plus materials on site. Gross of MCD, including
+    retention. What has been applied for, not what has been invoiced.
 
-  "manual override" now prints in AMBER rather than grey, so it stands out
-  "stale override saved" appears where an override exists but a sent
-  application has overtaken it
+  Remaining to apply for             (was "Remaining to Invoice")
+    AFA less the application total. Gross. What is left of the final account
+    still to be certified.
 
-Sort or scan for those two and you will have the project. Clear the override in
-Edit Project Details and the row follows the application from then on.
+These are genuinely different things and the old card conflated them. On a job
+with 520,000 measured contract sum and 60,000 of final variations, certified to
+437,000: AFA reads 580,000, application total 437,000, remaining to apply for
+143,000. Before, the AFA card would have shown the certified figure.
 
-ONE THING I HAVE NOT CHANGED, DELIBERATELY
--------------------------------------------
-latestAppEnd - the date the 13-week cash flow uses to drop superseded forecasts
-- still takes the latest application of ANY status. By the same argument a draft
-should not supersede a forecast either, since that money is not real yet. But
-changing it moves the cash flow, and you asked about the AFA. Say the word and I
-will make it sent-only too.
+WHAT TO CHECK
+-------------
+Open the project you spotted the mismatch on. The AFA on this page and the Gross
+AFA on the Retention Tracker should now be the same number, and both should name
+the same source underneath.

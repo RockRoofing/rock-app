@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
+import { computeApplicationSummary } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { missingProjectFields } from '../../lib/projectComplete'
 import ReportImprovementLink from '../../components/ReportImprovementLink'
@@ -41,13 +42,50 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
   const grossInvoiced = invoicedToDate
   const contractValue = parseFloat(settings.contractValue || 0)
   const instructedVars = (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
-  const afa = contractValue + instructedVars
+
+  // ANTICIPATED FINAL ACCOUNT, on the SAME rule as the Retention Tracker.
+  //
+  // This card read contractValue + instructedVars and nothing else - a fourth
+  // implementation of a rule that lives in dashboard.js, and the reason the figure here
+  // disagreed with the tracker. It also showed the APPLICATION TOTAL rather than the
+  // anticipated final account, which are different things: the application total is
+  // what has been certified to date, the AFA is what the job is expected to finish at.
+  //
+  // Order of preference: latest SENT application -> manual override -> project details.
+  // A draft is a working document and must not set this.
+  const apps = Array.isArray(settings.applications) ? settings.applications.slice() : []
+  apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
+  const sentApps = apps.filter(a => a && a.status === 'sent')
+  const latestSent = sentApps.length ? sentApps[sentApps.length - 1] : null
+  let afaFromApp = null, appliedForGross = 0, afaSource = 'project details'
+  if (latestSent) {
+    let prevGross = 0
+    for (const a of apps) { if ((a.seq || 0) < (latestSent.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
+    const sum = computeApplicationSummary(latestSent, prevGross)
+    // Cumulative gross certified: measured to date + variations to date + materials on
+    // site. Gross of MCD and INCLUDING retention, which is what was applied for.
+    appliedForGross = sum.grossCurrent || sum.applicationTotal || 0
+    const a2 = sum.anticipatedFinalAccount
+    if (a2 != null && isFinite(a2) && a2 > 0) {
+      afaFromApp = a2
+      afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
+    }
+  }
+  const hasAfaOverride = settings.afaOverride != null && isFinite(settings.afaOverride)
+  let afa
+  if (afaFromApp != null) afa = afaFromApp
+  else if (hasAfaOverride) { afa = Number(settings.afaOverride); afaSource = 'manual override' }
+  else afa = contractValue + instructedVars
+
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
+  // Remaining to APPLY FOR, gross - what is left of the final account still to be
+  // certified. Measured against what has been applied for, not what has been invoiced.
+  const remainingToApply = afa - appliedForGross
   const remainingToInvoice = afa - invoicedToDate
   const totalLabourBudget = parseFloat(settings.labourBudget || 0) + (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
   const totalMaterialsBudget = parseFloat(settings.materialsBudget || 0) + (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
   const totalBudget = totalLabourBudget + totalMaterialsBudget
-  return { costsToDate, labourToDate, materialsToDate, invoicedToDate, grossInvoiced, retention, afa, margin, remainingToInvoice, totalBudget, totalLabourBudget, totalMaterialsBudget }
+  return { costsToDate, labourToDate, materialsToDate, invoicedToDate, grossInvoiced, retention, afa, afaSource, appliedForGross, margin, remainingToApply, remainingToInvoice, totalBudget, totalLabourBudget, totalMaterialsBudget }
 }
 
 function getPastValuationDates(valuationDay, months = 12, dateOverrides = {}) {
@@ -318,12 +356,12 @@ export default function ProjectPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'AFA', value: fmt(atDate.afa), sub: `CV: ${fmt(parseFloat(settings?.contractValue || 0))}` },
-              { label: 'Invoiced Inc. Retention', value: fmt(atDate.grossInvoiced), sub: atDate.afa > 0 ? `${((atDate.grossInvoiced / atDate.afa) * 100).toFixed(0)}% of AFA` : `as at ${vDateLabel}` },
+              { label: 'AFA', value: fmt(atDate.afa), sub: atDate.afaSource ? `${atDate.afaSource} · CV: ${fmt(parseFloat(settings?.contractValue || 0))}` : `CV: ${fmt(parseFloat(settings?.contractValue || 0))}` },
+              { label: 'Application total inc. retention', value: fmt(atDate.appliedForGross), sub: atDate.afa > 0 ? `${((atDate.appliedForGross / atDate.afa) * 100).toFixed(0)}% of AFA` : `as at ${vDateLabel}` },
               { label: 'Total Spent', value: fmt(atDate.costsToDate), sub: atDate.totalBudget > 0 ? `${((atDate.costsToDate / atDate.totalBudget) * 100).toFixed(0)}% of budget` : `as at ${vDateLabel}` },
               { label: 'Total Budget', value: fmt(atDate.totalBudget), sub: atDate.totalBudget > 0 ? `${((atDate.costsToDate / atDate.totalBudget) * 100).toFixed(0)}% used` : '⚠ Set budget' },
               { label: 'Current Margin', value: atDate.margin != null ? (atDate.margin * 100).toFixed(1) + '%' : '—', sub: `as at ${vDateLabel}`, color: marginColor(atDate.margin), bg: marginBg(atDate.margin), showKey: true },
-              { label: 'Remaining to Invoice', value: fmt(atDate.remainingToInvoice), color: atDate.remainingToInvoice > 0 ? '#2563eb' : '#e63946' },
+              { label: 'Remaining to apply for', value: fmt(atDate.remainingToApply), sub: 'gross, AFA less applied for', color: atDate.remainingToApply > 0 ? '#2563eb' : '#e63946' },
             ].map(card => (
               <div key={card.label} style={{ background: card.bg || '#fff', borderRadius: 10, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: card.bg ? `1px solid ${card.color}22` : 'none' }}>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
@@ -971,7 +1009,7 @@ function IncomeTab({ invoiceLines, atDate }) {
           {[
             { label: 'Total Invoiced', value: atDate.invoicedToDate, color: '#16a34a' },
             { label: 'Retention Held', value: atDate.retention, color: '#ca8a04' },
-            { label: 'Invoiced Inc. Retention', value: atDate.grossInvoiced, color: '#1a1a2e' },
+            { label: 'Application total inc. retention', value: atDate.appliedForGross, color: '#1a1a2e' },
           ].map(card => (
             <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flex: 1 }}>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
