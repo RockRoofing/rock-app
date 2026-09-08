@@ -1,13 +1,14 @@
-pkg766 - Not-instructed variations were in the Projected Final Account
-=======================================================================
+pkg767 - CRM search now covers the Details card
+================================================
 
-DEPLOY OVER pkg765 (contains pkg765). Ten files.
+DEPLOY OVER pkg766 (contains pkg766). Eleven files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  lib/applications.js               (changed here)
-  lib/applicationPdf.js             (changed here)
+  pages/crm.js                      (changed here)
+  lib/applications.js               (as pkg766)
+  lib/applicationPdf.js             (as pkg766)
   pages/project/[id].js             (as pkg765)
   pages/api/dashboard.js            (as pkg764)
   pages/retention.js                (as pkg764)
@@ -17,50 +18,37 @@ REPLACE:
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-YOU WERE RIGHT, TO THE PENNY
------------------------------
-  instructed variations sum to        65,011.42
-  the summary showed                  94,416.92
-  difference                          29,405.50  = V12, "Not instructed"
+WHAT IT SEARCHED BEFORE
+------------------------
+Title, organization, contact person. Three fields.
 
-Projected Final Account 169,679.70 -> 140,274.20.
+WHAT IT SEARCHES NOW
+---------------------
+Those three plus every field on the Details card:
 
-THE TEST WAS WRONG IN A SUBTLE WAY
------------------------------------
-lib/applications.js filtered with `v.instructed !== false`. That admits anything
-except a literal false - undefined, null, a missing field. V12's flag was not set
-to false; it simply was not set. So it counted as instructed.
+  Glenigan ID, site location, region, size m2, credit score, credit limit,
+  insured credit limit, project stage, roofing works onsite, estimator
+  responsible, scope of works, general info, sales person, project start date,
+  project type, lead source
 
-MY FIRST FIX WAS ALSO WRONG. I changed it to a plain truthy test, matching the
-ten other call sites. But `instructed` is a BOOLEAN on records written by the
-current UI and the STRING 'yes'/'no' on older ones - and 'no' is truthy. That
-would have counted every uninstructed variation on an older record.
+Scope of works and general info are the useful ones - free text, and usually
+where somebody has written the thing you are trying to find. Searching
+"tapered", "mansafe" or a postcode now returns the project.
 
-  value      correct   !== false said   truthy said
-  true       yes       yes              yes
-  'yes'      yes       yes              yes
-  false      no        no               no
-  'no'       NO        YES  wrong       YES  wrong
-  missing    NO        YES  wrong       no
-  null       NO        YES  wrong       no
+Applies to Kanban, List and Activities. All three read one function.
 
-The right test is `v.instructed === true || v.instructed === 'yes'`. It is now a
-single exported isInstructed() used by both the summary and the PDF.
+HOW IT IS BUILT
+---------------
+DETAIL_KEYS lived inside the deal editor component, so the filters could not see
+it. It is now CRM_DETAIL_KEYS at module scope, with a dealHaystack(deal) helper
+beside it, and the editor reads the same constant.
 
-THIS WAS ALREADY FOUND ONCE
-----------------------------
-lib/applicationPdf.js had the identical fix, with a comment saying the loose test
-was "certifying every UNINSTRUCTED variation as instructed - a real figure on a
-document going to the customer". It was fixed in the PDF and never in the shared
-library the on-screen summary uses. Two copies of one rule; one got corrected.
+Two copies of that list would drift, and a search that quietly stopped covering
+a field is a fault nobody reports - you just assume the project is not there.
 
-They are now one definition, imported.
+Activity rows carry the haystack from the deal they were built from, computed
+once with the row rather than rebuilt on every keystroke.
 
-WHAT TO CHECK
--------------
-On that project: Variations "TOTAL (instructed only)" final value should read
-65,011.42, and the Projected Final Account 140,274.20. V12 stays visible in the
-list, greyed, as information only.
-
-Worth a scan of other live projects too - any with a not-instructed variation
-will have had its PFA overstated by the same amount.
+Both are declared at the top of the file, above every use. A const read before
+its declaration throws at runtime and compiles cleanly, which has taken this
+file out before.

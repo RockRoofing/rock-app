@@ -332,6 +332,23 @@ function displayCell(deal, key) {
 }
 
 const FONT = "'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+// THE FIELDS ON THE DEAL'S DETAILS CARD.
+//
+// At module scope because the deal editor renders them AND the search filters read them.
+// Defined twice they would drift, and a search that quietly stopped covering a field is
+// the kind of fault nobody reports - you just assume the project is not there.
+const CRM_DETAIL_KEYS = ['glenigan_id','site_location','region','size_m2','credit_score','credit_limit','insured_credit_limit','project_stage','roofing_works_onsite','estimator_responsible','scope_of_works','general_info','sales_person','project_start_date','project_type','lead_source'];
+
+// Everything a search should look at on a deal: the title, the headline fields, and the
+// whole Details card. scope_of_works and general_info are free text and are usually where
+// somebody has written the thing you are trying to find.
+function dealHaystack(d) {
+  const f = (d && d.fields) || {};
+  const parts = [d && d.title, f.organization, f.contact_person];
+  for (const k of CRM_DETAIL_KEYS) { const v = f[k]; if (v != null && v !== '') parts.push(v); }
+  return parts.join(' ').toLowerCase();
+}
+
 const C = {
   greenBar: '#3a9c3e', grey: '#e4e7ea', line: '#e1e4e8', text: '#1a1a1a', dim: '#7a828a',
   link: '#2a7de1', bg: '#f4f5f7', card: '#ffffff', won: '#2a862f', lost: '#d64545',
@@ -2800,7 +2817,7 @@ function CRMPageInner() {
   const filtered = useMemo(() => {
     let list = deals.filter(statusOK).filter(savedOK);
     const q = query.trim().toLowerCase();
-    if (q) list = list.filter((d) => (d.title || '').toLowerCase().includes(q) || (d.fields.organization || '').toLowerCase().includes(q) || (d.fields.contact_person || '').toLowerCase().includes(q));
+    if (q) list = list.filter((d) => dealHaystack(d).includes(q));
     customFilters.forEach((cf) => { if (cf.field && cf.value.trim()) { const cv = cf.value.trim().toLowerCase(); list = list.filter((d) => String(cellValue(d, cf.field)).toLowerCase().includes(cv)); } });
     return list;
   }, [deals, statusFilter, savedFilter, query, customFilters]);
@@ -3733,6 +3750,9 @@ function CRMPageInner() {
         id: key,
         rawId: a.id,
         dealId,
+        // The deal's Details card, folded in so the search here covers the same ground as
+        // the Kanban and List. Built once with the row rather than rebuilt per keystroke.
+        dealDetails: dealHaystack(deal),
         project: deal.title || '',
         stage: (STAGES.find((x) => x.id === deal.stageId) || {}).label || '',
         text: a.text || 'Activity',
@@ -3779,7 +3799,10 @@ function CRMPageInner() {
 
   const activitiesShown = useMemo(() => {
     let rows = activityRows;
-    const match = (r, term) => `${r.project} ${r.text} ${r.assignee} ${r.company} ${r.customer}`.toLowerCase().includes(term);
+    const match = (r, term) => (
+      `${r.project} ${r.text} ${r.assignee} ${r.company} ${r.customer}`.toLowerCase().includes(term)
+      || (r.dealDetails || '').includes(term)
+    );
 
     const q = actSearch.trim().toLowerCase();
     if (q) rows = rows.filter((r) => match(r, q));
@@ -4124,7 +4147,7 @@ function AddProjectModal({ onClose, onCreate, users }) {
 
   // Field groups (mirror the sidebar). Person/org detail fields live in their own sections.
   const PROJECT_FIELDS = [['title','Project title', true],['value','Value (£)', false],['project_score','Project Score', false],['expected_close_date','Tender Return date', false]];
-  const DETAIL_KEYS = ['glenigan_id','site_location','region','size_m2','credit_score','credit_limit','insured_credit_limit','project_stage','roofing_works_onsite','estimator_responsible','scope_of_works','general_info','sales_person','project_start_date','project_type','lead_source'];
+  const DETAIL_KEYS = CRM_DETAIL_KEYS;
   const CONTACT_KEYS = [['contact_phone','Phone'],['contact_email','Email'],['contact_job_role','Job Role']];
   const ORG_KEYS = [['org_address','Address'],['org_phone','Phone'],['org_website','Website'],['org_email','Email'],['org_reg_number','Registration Number'],['supply_chain_approved','Supply Chain Approved?']];
 
