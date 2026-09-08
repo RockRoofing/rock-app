@@ -3218,6 +3218,18 @@ function CRMPageInner() {
     const before = deals.find((x) => x.id === id);
     const entering = stageId === 'stage_negotiating' && before && before.stageId !== 'stage_negotiating';
     moveDealStage(id, stageId);
+
+    // LEAVING PROJECT IN is when a tender return becomes somebody's job.
+    //
+    // The activity is deliberately not created while a deal sits in the inbox, so the
+    // date entered on the enquiry would otherwise never become one. Created here instead,
+    // once, and only if the date is set and there is not one already.
+    if (before && before.stageId === 'stage_project_in' && stageId !== 'stage_project_in') {
+      const due = before.fields?.expected_close_date;
+      const already = (before.activities || []).some((a) => a.text === 'Tender return' && !a.done);
+      if (due && !already) addActivity(id, 'Tender return', due, before.fields?.estimator_responsible || null);
+    }
+
     if (!entering) return;
 
     // ONCE ONLY, for the life of the project. Recorded on the deal itself rather than
@@ -3670,7 +3682,15 @@ function CRMPageInner() {
     // A tender return date becomes an ACTIVITY rather than a field sitting in the summary,
     // so it turns up on the Activities tab and drives the kanban dot like any other date
     // that has to be worked to.
-    if (fields.expected_close_date) {
+    //
+    // NOT WHILE IT IS IN PROJECT IN. That stage is the inbox - a lead that has arrived and
+    // nobody has picked up. Creating an activity there gives it an owner and a due date
+    // before anyone has agreed to take it on, and the date is usually the one that came in
+    // with the enquiry rather than one somebody has committed to.
+    //
+    // The date is still saved on the deal. Move it to 1st Contact and the activity is
+    // created then, which is the point at which it becomes somebody's job.
+    if (fields.expected_close_date && d.stageId !== 'stage_project_in') {
       addActivity(id, 'Tender return', fields.expected_close_date, fields.estimator_responsible || null);
     }
 

@@ -1,30 +1,48 @@
-pkg770 - Days in current stage, always visible on the green bar
-================================================================
+pkg771 - Project In is exempt from activity reminders
+======================================================
 
-DEPLOY OVER pkg769 (contains pkg769). Eleven files.
+DEPLOY OVER pkg770 (contains pkg770). Twelve files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
+  lib/crmDailyActivityEmail.js      (changed here)
   pages/crm.js                      (changed here)
-  everything else as pkg769
+  everything else as pkg770
 
-WHAT IT DOES
-------------
-The current stage in the green bar now reads on two lines:
+1. THE DAILY "NO ACTIVITY" EMAIL SKIPS PROJECT IN
+--------------------------------------------------
+It filtered on status === 'open' with no stage test, so every lead sitting in
+the inbox appeared every morning. Project In is the inbox - nobody has picked
+the lead up, so there is nothing to chase.
 
-        Negotiating
-          34 days
+A warning that is usually noise gets skimmed, and the real ones go with it.
 
-Visible without hovering, on the current stage only. Every other segment is
-unchanged, and the hover tooltip still gives the day count for all of them.
+Deals reappear in the report the moment they are moved to 1st Contact, which is
+the point at which they become somebody's job.
 
-TWO SMALL DECISIONS
--------------------
-The bar is 30px rather than 22. Two lines will not fit in 22 without the type
-becoming unreadable, and only the current stage carries a second line, so
-nothing else in the bar changes shape.
+2. AND NOTHING CREATES AN ACTIVITY THERE ANY MORE
+--------------------------------------------------
+Exempting the stage would have been half a fix: adding a project WITH a tender
+return date immediately created a "Tender return" activity, on a deal that had
+just landed in Project In. So the rule and the behaviour disagreed.
 
-Where there is no dated history the day count is HIDDEN rather than shown as
-zero. Zero reads as "moved today", which would be wrong on an old deal that
-simply has no recorded move. The tooltip says "no dated history" for those.
+That activity is no longer created while a deal is in Project In. The date is
+still saved on the deal - nothing is lost.
+
+3. IT IS CREATED WHEN THE DEAL LEAVES PROJECT IN
+-------------------------------------------------
+Without this the date would be saved and the activity would never appear at all,
+which is worse than the original fault.
+
+Moving a deal out of Project In now creates the Tender return activity, once,
+using the saved date and the Estimator Responsible - and only if there is not
+one already. Same handler as the Negotiating handover tasks, so the pattern is
+consistent.
+
+WHAT TO CHECK
+-------------
+  - Tomorrow's no-activity email should be materially shorter, and nothing on it
+    should be in Project In.
+  - Add a project with a tender return date: no activity while it sits in the
+    inbox, and the activity appears when you move it to 1st Contact.
