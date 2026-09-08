@@ -1,48 +1,42 @@
-pkg774 - Emails: won and lost projects in the matching
-=======================================================
+pkg775 - See on map, from the deal's Site Location
+===================================================
 
-DEPLOY OVER pkg773 (contains pkg773). Thirteen files.
+DEPLOY OVER pkg774 (contains pkg774). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  lib/crmEmailSync.js               (changed here)
-  everything else as pkg773
+  pages/crm.js                      (changed here)
+  everything else as pkg774
 
-FIRST, WHAT ALREADY WORKED
----------------------------
-Manually assigning an email to a won or lost project was already possible - the
-picker includes them, its placeholder says "won and lost too", and the server
-does no status check. If you tried and it failed, tell me what you saw, because
-that is a different fault from the one I found.
+WHAT IT DOES
+------------
+"See on map" appears beside Site Location in the Details panel of a deal,
+whenever a location is set. It opens a map over the page.
 
-WHAT DID NOT WORK
+Closes on the X or Escape ONLY - never on a backdrop click, same as every other
+modal in the portal.
+
+WHAT IT SEARCHES
+----------------
+Site location plus the postcode where one is recorded:
+
+  "Kilburn Square, NW6 6PS"
+
+The postcode matters. A site name on its own often lands on the wrong side of
+town; with a postcode it lands on the building.
+
+NO API KEY NEEDED
 -----------------
-buildIndex skipped every non-open deal, so a won project could never be
-SUGGESTED. Emails about a job you had just won - invoice chasing, variations,
-site queries, which is most of the email a job ever generates - arrived in the
-queue with no suggestion, and you had to search the name out by hand each time.
+An embedded Google map via maps.google.com/maps?...&output=embed, which needs no
+key, no account and no billing setup. Nothing to configure and nothing to expire.
 
-NOW
----
-Closed projects are indexed and offered. They are still not allowed to file
-themselves on a title match: a finished job must not silently capture mail on a
-name it shares with a live one, which was the sound half of the original
-reasoning. So it appears as "Looks like ..." with an Accept button, and waits
-for a person.
+If you later want pins, satellite view or driving time from the yard, that needs
+the paid Maps JavaScript API and a key - worth knowing before anyone asks.
 
-A SECOND FAULT THE SAME LINE WAS CAUSING
------------------------------------------
-The `continue` sat ABOVE the contact and domain indexing, so those skipped
-closed deals too - even though the comment beneath them says "Every deal now,
-whatever its status" and explains why that matters. The comment described
-behaviour the code prevented. Known contacts on a won job now file as intended.
+TWO SMALL THINGS
+----------------
+"Open in Google Maps" at the foot, for directions on a phone.
 
-AND A REGRESSION THAT WOULD HAVE INTRODUCED
---------------------------------------------
-byEmail was first-writer-wins, which was safe while only open deals were in it.
-With closed deals indexed, a finished job could take a contact ahead of the live
-job the same person is working on - purely on array order.
-
-An OPEN deal now takes a shared contact from a closed one, whichever comes
-first. Between two of the same status, first still wins. Checked both orders.
+A line saying it is a SEARCH location, not a surveyed position. It is a geocoded
+guess from a text field, and somebody will eventually try to set out from it.

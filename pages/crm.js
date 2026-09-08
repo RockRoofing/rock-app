@@ -1902,6 +1902,7 @@ function LostReasonModal({ schema, me, onCancel, onConfirm }) {
 // Deal view
 // ===========================================================================
 function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onRenameDeal, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+  const [mapFor, setMapFor] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -2111,7 +2112,21 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
             {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
           </SideBox>
           <SideBox title="Details" collapsed={collapsed.details} onToggle={() => toggle('details')}>
-            {groupFields('details').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
+            {groupFields('details').map((f) => (
+              <div key={f.key + f.label} style={sideRow}>
+                <span style={sideKey}>{f.label}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                  <EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
+                  {/* Postcode first where there is one - a postcode lands on the building,
+                      a site name often lands on the wrong side of town. */}
+                  {f.key === 'site_location' && String(deal.fields.site_location || '').trim() && (
+                    <span onClick={() => setMapFor([deal.fields.site_location, deal.fields.site_postcode].filter(Boolean).join(', '))}
+                      title="Show this site on a map"
+                      style={{ fontSize: 11, fontWeight: 600, color: C.link, cursor: 'pointer', whiteSpace: 'nowrap' }}>See on map</span>
+                  )}
+                </span>
+              </div>
+            ))}
           </SideBox>
           <SideBox title="Customer Contact" collapsed={collapsed.person} onToggle={() => toggle('person')}>
             <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text', search: 'contact' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
@@ -2212,6 +2227,8 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
                 setFlash(true);
               }} />
           )}
+
+          {mapFor && <SiteMapModal query={mapFor} onClose={() => setMapFor('')} />}
 
           {lostFor != null && (
             <LostReasonModal
@@ -4407,6 +4424,41 @@ const sideValLink = { color: C.link, textAlign: 'right', wordBreak: 'break-word'
 const tag = { background: '#eef3fb', border: `1px solid ${C.line}`, borderRadius: 4, padding: '1px 7px', color: C.text };
 const th = { textAlign: 'left', padding: '10px 12px', fontSize: 12, color: C.dim, fontWeight: 700, borderBottom: `2px solid ${C.line}`, background: '#fafbfc', position: 'sticky', top: 0 };
 const td = { padding: '9px 12px', color: C.text, whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' };
+// SITE ON A MAP.
+//
+// An embedded Google map, which needs no API key and no account. Closes on the X or
+// Escape only - never on a backdrop click, which is how a half-read screen gets shut by
+// accident.
+function SiteMapModal({ query, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const q = encodeURIComponent(String(query || '').trim());
+  return (
+    <div style={overlay}>
+      <div style={{ ...modal, maxWidth: 900, height: '78vh' }}>
+        <div style={modalHead}>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>{query}</span>
+          <button onClick={onClose} style={xBtn}>&#10005;</button>
+        </div>
+        <iframe
+          title="Site location"
+          src={`https://maps.google.com/maps?q=${q}&z=15&output=embed`}
+          style={{ flex: 1, width: '100%', border: 0 }}
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade" />
+        <div style={{ padding: '8px 14px', borderTop: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+          <span style={{ color: C.dim }}>Search location - not a surveyed position.</span>
+          <a href={`https://www.google.com/maps/search/?api=1&query=${q}`} target="_blank" rel="noreferrer"
+            style={{ color: C.link, fontWeight: 600, textDecoration: 'none' }}>Open in Google Maps</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
 const modal = { background: '#fff', borderRadius: 10, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
 const modalHead = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${C.line}` };
