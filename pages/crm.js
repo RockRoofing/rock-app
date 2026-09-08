@@ -963,7 +963,7 @@ function DealLink({ id, onOpen, style, children, title }) {
 // History feed (combined edit for activities incl date + reopen; comments on notes)
 // ===========================================================================
 function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇', mention: '@' })[t] || '•'; }
-function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment, onEditComment, onDeleteComment, users }) {
+function HistoryItem({ h, onEdit, onEditActivity, onDelete, onPin, onReopen, onComment, onEditComment, onDeleteComment, users }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(h.body || '');
   const [date, setDate] = useState(h.ts ? new Date(h.ts).toISOString().slice(0, 16) : '');
@@ -976,7 +976,11 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
   // yellow of the Notes box, activities the blue of Activities to do - so nothing new has
   // to be learned. Changes keep the plain grey feed styling they had; an email card
   // brings its own white.
-  const rowStyle = isNote
+  // A PINNED NOTE HAS TO LOOK PINNED. Sitting at the top is not enough - the next note
+  // added is also at the top, and the two would be indistinguishable.
+  const rowStyle = isNote && h.pinned
+    ? { background: C.noteSaved, border: `1.5px solid ${C.link}`, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }
+    : isNote
     ? { background: C.noteSaved, border: `1px solid ${C.noteBorder}` }
     : isActivity
       ? { background: C.activityBg, border: `1px solid ${C.activityBorder}` }
@@ -991,6 +995,11 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
           of the card rather than a hole punched in a tinted background. */}
       <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: rowStyle.border, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
+        {isNote && h.pinned && (
+          <div style={{ fontSize: 10, fontWeight: 700, color: C.link, letterSpacing: 0.4, marginBottom: 2 }}>
+            PINNED{h.pinnedBy ? ` by ${h.pinnedBy}` : ''}{h.pinnedAt ? ` · ${shortDate(h.pinnedAt)}` : ''}
+          </div>
+        )}
         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}{(h.type === 'note' || h.type === 'activity') && h.author ? <span style={{ color: C.dim }}> · {h.author}</span> : ''}</div>
         {editing ? (
           <div style={{ marginTop: 4 }}>
@@ -1026,6 +1035,11 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
           <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>
           {(isNote || isActivity) && !editing && <span onClick={() => setEditing(true)} style={{ color: C.link, cursor: 'pointer' }}>Edit</span>}
           {isActivity && <span onClick={() => onReopen(h.id)} style={{ color: C.link, cursor: 'pointer' }}>Reopen / Mark undone</span>}
+          {isNote && onPin && (
+            <span onClick={() => onPin(h.id, !h.pinned)} style={{ color: h.pinned ? C.dim : C.link, cursor: 'pointer' }}>
+              {h.pinned ? 'Unpin' : 'Pin'}
+            </span>
+          )}
           {(isNote || isActivity) && <span onClick={() => onDelete(h.id)} style={{ color: C.lost, cursor: 'pointer' }}>Delete</span>}
           {isNote && <span onClick={() => setShowComments((v) => !v)} style={{ color: C.link, cursor: 'pointer' }}>{showComments ? 'Hide' : 'Comment'} ({(h.comments || []).length})</span>}
         </div>
@@ -1069,8 +1083,14 @@ function HistoryFeed(props) {
   const emailEntries = (emails || []).map((m) => ({
     id: `em_${m.id}`, type: 'email', ts: m.date, __email: m,
   }));
+  // PINNED FIRST, then newest. Two pinned notes keep their own date order between them,
+  // so pinning does not scramble the sequence - it lifts a block to the top.
   const merged = [...props.history, ...emailEntries]
-    .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    .sort((a, b) => {
+      const pa = a.pinned ? 1 : 0, pb = b.pinned ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return new Date(b.ts) - new Date(a.ts);
+    });
   const shown = filter === 'all' ? merged : merged.filter((h) => timelineBucket(h) === filter);
 
   const counts = merged.reduce((acc, h) => { const b = timelineBucket(h); acc[b] = (acc[b] || 0) + 1; return acc; }, {});
@@ -1864,7 +1884,7 @@ function LostReasonModal({ schema, me, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
   // Filed email for the timeline. The Email section that used to fetch this has gone, so
@@ -2179,6 +2199,7 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
             onEdit={(hid, body) => onEditHistory(deal.id, hid, body)}
             onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
             onDelete={(hid) => onDeleteHistory(deal.id, hid)}
+            onPin={(hid, pinned) => onPinHistory(deal.id, hid, pinned)}
             onReopen={(hid) => onReopenActivity(deal.id, hid)}
             onComment={(hid, body) => onCommentNote(deal.id, hid, body)}
             onEditComment={(hid, cid, body) => onEditComment(deal.id, hid, cid, body)}
@@ -3305,6 +3326,16 @@ function CRMPageInner() {
 
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));
   const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
+  // PIN A NOTE. Stored on the entry itself, with WHO and WHEN, so an old pin can be
+  // recognised as old rather than looking like somebody pinned it this morning.
+  const pinHistory = (id, hid, pinned) => patch(id, (d) => ({
+    ...d,
+    history: d.history.map((h) => h.id === hid
+      ? (pinned
+          ? { ...h, pinned: true, pinnedAt: nowIso(), pinnedBy: me?.name || '' }
+          : { ...h, pinned: false, pinnedAt: undefined, pinnedBy: undefined })
+      : h),
+  }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text, author: me?.name || '' }] }; });
   const addActivity = (id, text, due, assignee) => {
@@ -3898,7 +3929,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onPinHistory={pinHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }

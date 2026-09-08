@@ -1,50 +1,48 @@
-pkg768 - Days in stage on the deal's timeline bar
-==================================================
+pkg769 - Pin notes to the top of a deal
+========================================
 
-DEPLOY OVER pkg767 (contains pkg767). Eleven files.
+DEPLOY OVER pkg768 (contains pkg768). Eleven files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  everything else as pkg767
+  everything else as pkg768
 
 WHAT IT DOES
 ------------
-Hover any segment of the green bar at the top of a deal and the tooltip now
-reads:
+Every note in the deal timeline now has a "Pin" link beside Edit and Delete.
+Pinned notes sort to the top of the feed and stay there.
 
-  Received - 51 days
-  Negotiating - 34 days (current, and counting)
-  MC Unsecured - not reached
-  1st Contact - no dated history
+  Pin      the note lifts to the top
+  Unpin    it drops back into date order
 
-NO NEW DATA WAS NEEDED
------------------------
-The scaffold was already there - TimelineBar read deal.stageDays with a comment
-saying "Not available from import yet. When persistence records stage-entry
-timestamps we compute real values here."
+ORDERING
+--------
+Pinned first, then newest. Two pinned notes keep their own date order between
+them, so pinning lifts a block to the top rather than scrambling the sequence:
 
-It turned out those timestamps have been recorded all along. Every stage move
-writes a history entry with type 'stage', a timestamp, stageFrom and stageTo. So
-the timeline is reconstructed from what the deal already holds rather than
-adding a field and starting the clock from today.
+  n4  pinned  22 Jul
+  n2  pinned  10 Jun
+  n3          07 Sep
+  n1          01 Sep
 
-That also means it works retrospectively - deals moved months ago show their
-real history immediately.
-
-THREE THINGS IT GETS RIGHT
+A PINNED NOTE LOOKS PINNED
 ---------------------------
-A stage entered more than once SUMS. Deals go backwards - Received to MC Secured
-and back to Received - and reporting only the last visit would understate it. On
-a test deal that was 25 days plus 11, shown as 36.
+Sitting at the top is not enough on its own - the next note anybody adds is also
+at the top, and the two would be indistinguishable. So a pinned note gets a blue
+border and a small PINNED label showing who pinned it and when.
 
-The Created date anchors the first stage, so the time before the first move is
-counted rather than lost.
+That last part matters more than it sounds. A pin from four months ago that
+nobody has revisited looks exactly like one from this morning otherwise, and the
+whole point of pinning is that the note still matters.
 
-Where there is no Created date the stage before the first move is left BLANK,
-not zero. Zero reads as a fact; blank reads as "we do not know", which is the
-truth. The tooltip says "no dated history" for those.
+WHERE IT IS STORED
+------------------
+On the history entry itself - pinned, pinnedAt, pinnedBy - saved through the same
+patch path as editing or deleting a note. No new store, no migration, and
+existing notes are simply unpinned.
 
-deal.stageDays is still honoured if anything ever supplies it, so this cannot
-fight a future import.
+NOTE: pinning applies to NOTES only. Activities and emails share the timeline but
+sort by date as before - an activity is pinned by its due date, which is what a
+due date is for.
