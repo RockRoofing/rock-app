@@ -416,6 +416,7 @@ export default function RetentionPage() {
           ret612From: p.ret612From || '',
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
           afaSource: p.afaSource || '',
+          afaOverrideIgnored: !!p.afaOverrideIgnored,
           mcdPct: p.mcdPct != null ? p.mcdPct : 0,
           mcdRecorded: !!p.mcdRecorded,
           mcdValue: p.mcdValue || 0,
@@ -533,7 +534,7 @@ export default function RetentionPage() {
         appRelease1: x.appRelease1, appRelease2: x.appRelease2,
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
-        afaGross: x.afaGross, afaSource: x.afaSource, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
+        afaGross: x.afaGross, afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
@@ -1044,7 +1045,15 @@ export default function RetentionPage() {
                             {/* Gross AFA - before MCD */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#666' }}>
                               {entry.afaGross != null ? fmt(parseFloat(entry.afaGross)) : '\u2014'}
-                              {entry.afaSource && <div style={{ fontSize: 9.5, color: '#bbb' }}>{entry.afaSource}</div>}
+                              {entry.afaSource && <div style={{ fontSize: 9.5, color: entry.afaSource === 'manual override' ? '#b45309' : '#bbb' }}>{entry.afaSource}</div>}
+                              {/* A figure typed in settings that a sent application has
+                                  now overtaken. Not used, but worth clearing so nobody
+                                  wonders which one is live. */}
+                              {entry.afaOverrideIgnored && (
+                                <div style={{ fontSize: 9, color: '#b45309' }} title="A manual AFA override is saved on this project but is no longer used - the sent application takes precedence. Clear it in Edit Project Details.">
+                                  stale override saved
+                                </div>
+                              )}
                             </td>
                             {/* MCD deducted. A missing percentage is shown, not hidden -
                                 a blank here means nobody has recorded one and the Final

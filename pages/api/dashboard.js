@@ -267,11 +267,25 @@ export default async function handler(req, res) {
           // the whole picture.
           appRelease1 = !!(sum.release1Value > 0)
           appRelease2 = !!(sum.release2Value > 0)
-          // measured contract sum + variations at final value, GROSS of MCD.
-          const afaApp = sum.anticipatedFinalAccount
-          if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
-            afaFromApplication = afaApp
-            afaSource = `application ${latest.appNumber || latest.seq || ''}`.trim()
+          // GROSS AFA COMES FROM THE LATEST *SENT* APPLICATION.
+          //
+          // This read the latest application of any status, so a draft that had been
+          // started but not issued could set the Gross AFA - and with it the Final
+          // Account and the retention calculated on it. A draft is a working document;
+          // it is not a figure that has been put to the customer.
+          //
+          // A missing status counts as draft, which is how application-send.js and
+          // applications.js both treat it.
+          const sentApps = apps.filter(a => a && a.status === 'sent')
+          const latestSent = sentApps.length ? sentApps[sentApps.length - 1] : null
+          if (latestSent) {
+            let prevSentGross = 0
+            for (const a of apps) { if ((a.seq || 0) < (latestSent.seq || 0)) prevSentGross = computeApplicationSummary(a, 0).grossCurrent }
+            const afaApp = computeApplicationSummary(latestSent, prevSentGross).anticipatedFinalAccount
+            if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
+              afaFromApplication = afaApp
+              afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
+            }
           }
         }
       } catch {}
@@ -291,13 +305,32 @@ export default async function handler(req, res) {
       const instructedVars = (settings.variations || [])
         .filter(v => v.instructed)
         .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
-      // A sent application's Anticipated Final Account is the source of truth when set;
-      // otherwise fall back to contract value + instructed variations.
-      // Order of preference: manual override -> latest application -> project details.
+      // ORDER OF PREFERENCE: latest SENT application -> manual override -> project details.
+      //
+      // The override used to win over everything, so a figure typed once could sit on top
+      // of a real issued application indefinitely and nothing downstream would move when
+      // the application changed. A sent application is a figure that has gone to the
+      // customer; nothing typed in settings should quietly contradict it.
+      //
+      // The override is kept as a fallback for projects with no sent application - which
+      // is the case it was added for - and the row still says when one is in use.
       const afaFromSettings = contractValue + instructedVars
-      const grossAfa = afaFromApplication != null ? afaFromApplication : afaFromSettings
-      const afaBeforeMcd = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : grossAfa
-      if (settings.afaOverride != null && isFinite(settings.afaOverride)) afaSource = 'manual override'
+      const hasOverride = settings.afaOverride != null && isFinite(settings.afaOverride)
+      let afaBeforeMcd
+      if (afaFromApplication != null) {
+        afaBeforeMcd = afaFromApplication
+        // afaSource already names the application
+      } else if (hasOverride) {
+        afaBeforeMcd = Number(settings.afaOverride)
+        afaSource = 'manual override'
+      } else {
+        afaBeforeMcd = afaFromSettings
+        afaSource = 'project details'
+      }
+      // Flagged so a stale override sitting behind a sent application is visible rather
+      // than silently ignored.
+      const afaOverrideIgnored = hasOverride && afaFromApplication != null
+      const grossAfa = afaBeforeMcd
 
       // MCD, DEDUCTED FROM THE FINAL ACCOUNT.
       //
@@ -511,6 +544,7 @@ export default async function handler(req, res) {
         afa,
         afaGross: afaBeforeMcd,
         afaSource,
+        afaOverrideIgnored,
         mcdPct,
         mcdRecorded,
         mcdValue,

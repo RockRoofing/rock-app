@@ -1,46 +1,57 @@
-pkg763 - Wide tables no longer cut off in the PDF
-==================================================
+pkg764 - Gross AFA comes from the latest SENT application
+==========================================================
 
-DEPLOY OVER pkg762 (contains pkg762). Five files.
+DEPLOY OVER pkg763 (contains pkg763). Seven files.
 
 REPLACE:
+  pages/api/dashboard.js            (changed here)
+  pages/retention.js                (changed here)
   pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/business-financials/forecast-balance-sheet.js
   pages/business-financials/export.js
 
-WHY IT WAS CUT
---------------
-Budgets is twelve months plus five summary columns. The page sets a minWidth on
-the table and nowrap on every cell, which is right on screen - you scroll
-sideways. Print cannot scroll, so the right-hand columns fell off the sheet with
-nothing to say they had.
+TWO FAULTS, BOTH IN THE GROSS AFA
+----------------------------------
+1. IT TOOK THE LATEST APPLICATION OF ANY STATUS. A draft that had been started
+   but never issued could set the Gross AFA - and with it the Final Account and
+   the retention calculated on it. A draft is a working document, not a figure
+   put to the customer. Now filtered to status === 'sent', which is how
+   application-send.js and applications.js already treat it (a missing status
+   counts as draft).
 
-Neither of those was being overridden in print. Now both are: the table
-compresses to the page instead of being clipped.
+2. THE MANUAL OVERRIDE BEAT EVERYTHING. A figure typed once into
+   settings.afaOverride sat on top of a real issued application indefinitely,
+   and nothing moved when the application changed.
 
-WHAT CHANGED IN PRINT ONLY
----------------------------
-  tables      min-width removed, width 100%, 7.5pt
-  cells       nowrap removed so long labels wrap, tighter padding
-  selects     hidden - a dropdown cannot be read on paper and the method column
-              was costing real width
-  inputs      kept, because they hold figures you need, but stripped of their
-              box so they read as text rather than empty form fields
+ORDER OF PREFERENCE NOW
+------------------------
+  latest SENT application  ->  manual override  ->  project details
 
-At 7.5pt across A3 landscape that is about 23mm per column against roughly 15mm
-for a seven-figure number, so it fits with room to spare.
+  sent app + stale override    uses the application, override ignored
+  sent app only                uses the application
+  no sent app, override set    uses the override
+  neither                      contract value + instructed variations
 
-AND A BACKSTOP
---------------
-The five widest sections - Budgets, 12-Month, Forecast P&L, Forecast Balance
-Sheet and Cash Schedule - also print scaled to 72%. Small type is always better
-than a missing column: a reader can squint, but cannot see a column that is not
-on the page.
+The override is kept as a fallback for projects with no sent application, which
+is the case it was added for. It simply can no longer contradict one.
 
-WHAT TO CHECK
--------------
-Export Budgets on its own and confirm the FY total and Tracking columns are
-present at the right-hand edge. Those are the two that were being lost, and they
-are the two worth having.
+FINDING YOUR MISMATCHED PROJECT
+--------------------------------
+The Gross AFA cell already showed its source in small grey text. Two changes:
+
+  "manual override" now prints in AMBER rather than grey, so it stands out
+  "stale override saved" appears where an override exists but a sent
+  application has overtaken it
+
+Sort or scan for those two and you will have the project. Clear the override in
+Edit Project Details and the row follows the application from then on.
+
+ONE THING I HAVE NOT CHANGED, DELIBERATELY
+-------------------------------------------
+latestAppEnd - the date the 13-week cash flow uses to drop superseded forecasts
+- still takes the latest application of ANY status. By the same argument a draft
+should not supersede a forecast either, since that money is not real yet. But
+changing it moves the cash flow, and you asked about the AFA. Say the word and I
+will make it sent-only too.
