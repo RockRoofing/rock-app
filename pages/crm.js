@@ -1894,7 +1894,9 @@ function LostReasonModal({ schema, me, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onRenameDeal, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
   // Filed email for the timeline. The Email section that used to fetch this has gone, so
@@ -2047,14 +2049,30 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
       <div style={{ background: C.nav, color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={guardedBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
-          <CopyButton
-            text={deal.title || ''}
-            title="Click to copy the project title"
-            copiedLabel="Copied"
-            style={{ background: 'transparent', border: '1px solid transparent', color: '#fff', fontSize: 17, fontWeight: 700, fontFamily: 'inherit', padding: '2px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left' }}>
-            {deal.title}
-            <span style={{ fontSize: 11, color: '#8a8a8a', fontWeight: 600 }}>copy</span>
-          </CopyButton>
+          {editingTitle ? (
+            <form onSubmit={(e) => { e.preventDefault(); onRenameDeal(deal.id, titleDraft); setEditingTitle(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input autoFocus value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setEditingTitle(false); }}
+                style={{ fontSize: 17, fontWeight: 700, fontFamily: 'inherit', padding: '2px 8px', borderRadius: 6, border: '1px solid #555', background: '#1e1e1e', color: '#fff', minWidth: 320 }} />
+              <button type="submit" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Save</button>
+              <button type="button" onClick={() => setEditingTitle(false)} style={{ ...backBtn, background: 'transparent', color: '#8a8a8a', borderColor: '#333' }}>Cancel</button>
+            </form>
+          ) : (
+            <>
+              <CopyButton
+                text={deal.title || ''}
+                title="Click to copy the project title"
+                copiedLabel="Copied"
+                style={{ background: 'transparent', border: '1px solid transparent', color: '#fff', fontSize: 17, fontWeight: 700, fontFamily: 'inherit', padding: '2px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left' }}>
+                {deal.title}
+                <span style={{ fontSize: 11, color: '#8a8a8a', fontWeight: 600 }}>copy</span>
+              </CopyButton>
+              <span onClick={() => { setTitleDraft(deal.title || ''); setEditingTitle(true); }}
+                title="Rename this project"
+                style={{ fontSize: 11, color: '#8a8a8a', fontWeight: 600, cursor: 'pointer' }}>edit</span>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
@@ -3358,6 +3376,27 @@ function CRMPageInner() {
           : { ...h, pinned: false, pinnedAt: undefined, pinnedBy: undefined })
       : h),
   }));
+  // RENAME. Title only - it touches nothing the sales figures read.
+  //
+  // Every sales and scorecard report aggregates on d.id, and the title appears in them
+  // only as a display column. Patching the same deal in place cannot produce a second
+  // record, and no value history is written, so nothing is counted twice.
+  //
+  // The old name is kept in the timeline. A project that has been renamed is otherwise
+  // impossible to find later by the name everyone first knew it as.
+  const renameDeal = (id, title) => {
+    const clean = String(title || '').trim();
+    if (!clean) return;
+    patch(id, (d) => {
+      if (clean === (d.title || '')) return d;
+      return {
+        ...d,
+        title: clean,
+        history: [{ id: uid(), type: 'note', ts: nowIso(), text: `Renamed: "${d.title || '(untitled)'}" -> "${clean}"`, author: me?.name || '' }, ...(d.history || [])],
+      };
+    });
+  };
+
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text, author: me?.name || '' }] }; });
   const addActivity = (id, text, due, assignee) => {
@@ -3959,7 +3998,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onPinHistory={pinHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onPinHistory={pinHistory} onRenameDeal={renameDeal} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }

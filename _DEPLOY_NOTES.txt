@@ -1,48 +1,42 @@
-pkg771 - Project In is exempt from activity reminders
-======================================================
+pkg772 - Rename a deal
+=======================
 
-DEPLOY OVER pkg770 (contains pkg770). Twelve files.
+DEPLOY OVER pkg771 (contains pkg771). Twelve files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  lib/crmDailyActivityEmail.js      (changed here)
   pages/crm.js                      (changed here)
-  everything else as pkg770
+  everything else as pkg771
 
-1. THE DAILY "NO ACTIVITY" EMAIL SKIPS PROJECT IN
---------------------------------------------------
-It filtered on status === 'open' with no stage test, so every lead sitting in
-the inbox appeared every morning. Project In is the inbox - nobody has picked
-the lead up, so there is nothing to chase.
+WHAT IT DOES
+------------
+An "edit" link beside the project title at the top of a deal. Click it, type,
+Enter to save or Escape to cancel. A blank name is rejected rather than saved.
 
-A warning that is usually noise gets skimmed, and the real ones go with it.
+WHY IT CANNOT DOUBLE-COUNT
+---------------------------
+I checked before building it. Every sales and scorecard report aggregates on
+d.id - the title appears in them only as a display column, never as a key. The
+rename patches the SAME deal in place, so no second record can exist.
 
-Deals reappear in the report the moment they are moved to 1st Contact, which is
-the point at which they become somebody's job.
+It writes a plain note to the timeline, NOT a value-change entry. The Value
+Changes report reads entries of type 'value', so a rename cannot appear there
+and cannot move a figure.
 
-2. AND NOTHING CREATES AN ACTIVITY THERE ANY MORE
---------------------------------------------------
-Exempting the stage would have been half a fix: adding a project WITH a tender
-return date immediately created a "Tender return" activity, on a deal that had
-just landed in Project In. So the rule and the behaviour disagreed.
+Nothing else on the deal is touched: value, stage, activities and fields are all
+unchanged.
 
-That activity is no longer created while a deal is in Project In. The date is
-still saved on the deal - nothing is lost.
+THE OLD NAME IS KEPT
+--------------------
+The timeline records: Renamed: "old name" -> "new name", with who did it.
 
-3. IT IS CREATED WHEN THE DEAL LEAVES PROJECT IN
--------------------------------------------------
-Without this the date would be saved and the activity would never appear at all,
-which is worse than the original fault.
+A renamed project is otherwise impossible to find later by the name everybody
+first knew it as - which on a job that ran for a year is the name half your
+emails and half your paperwork still use.
 
-Moving a deal out of Project In now creates the Tender return activity, once,
-using the saved date and the Estimator Responsible - and only if there is not
-one already. Same handler as the Negotiating handover tasks, so the pattern is
-consistent.
-
-WHAT TO CHECK
--------------
-  - Tomorrow's no-activity email should be materially shorter, and nothing on it
-    should be in Project In.
-  - Add a project with a tender return date: no activity while it sits in the
-    inbox, and the activity appears when you move it to 1st Contact.
+ONE THING TO BE AWARE OF
+-------------------------
+The CRM import is wipe-and-replace from a Pipedrive export. If you rename a deal
+here and then run an import, the Pipedrive title comes back. Rename in both, or
+rename here only on deals that no longer come down in the export.
