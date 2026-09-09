@@ -1,52 +1,43 @@
-pkg791 - Show the 612 working instead of inferring it
-======================================================
+pkg792 - J147 612: a dead-end allocation was suppressing the reference fallback
 
-DEPLOY OVER pkg790 (contains pkg790). Fourteen files.
+FILES (both already exist - overwrite in place, no new files)
+  pages/api/dashboard.js
+  pages/retention.js
 
-FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
+WHAT WAS WRONG
+  The App 2 credit note carries ONE Xero allocation. That allocation resolves to a
+  document that cannot be the reversal - its 612 line is the same way up as the credit
+  note's. The pairing code was written as:
 
-REPLACE:
-  pages/api/dashboard.js            (changed here)
-  pages/retention.js                (changed here)
-  everything else as pkg790
+      const byRef = byAlloc.length ? [] : (...)
 
-WHY THIS AND NOT A FIFTH FIX
------------------------------
-Four attempts at the 612 figures have been made by inferring from totals. Every
-one of them was a reasonable theory and none of them worked, because I cannot
-see what the app actually holds. Guessing again would waste another round.
+  so as soon as the allocation resolved to ANYTHING, the reference fallback was switched
+  off - even though the allocation candidate was then rejected two lines later. The pair
+  was never cancelled and both columns stayed inflated by 642.20.
 
-WHAT IT ADDS
-------------
-Click the 612 Deducted cell on any row. You get every account-612 line the app
-holds for that project:
+  This is why pkg790's fallback appeared not to work: it was correct, and it never ran.
 
-  Date | Reference | Invoice or Credit note | Raw | Used | Side | Netted | Allocs
+WHAT CHANGED
+  1. Allocation matching and reference matching BOTH always run. Allocation is still
+     tried first; reference is the fallback, deduped against it.
+  2. One key function (lineKey) for a document everywhere. The cancel set keyed on
+     `xeroInvoiceId || invoiceNumber`, the offset map on `String(xeroInvoiceId)` alone -
+     where an id is null those collide as 'null' across unrelated lines.
+  3. New MATCH column in the 612 drill-down showing how each credit note paired, or why
+     it did not. Always on, whether or not anything is wrong.
+  4. Cache marker bumped to ret612Match_v1 - the old cache will not be served.
 
-  Raw     what came from Xero
-  Used    after any credit note cancellation
-  Side    which column it landed in
-  Netted  highlighted amber where a reversal was cancelled
-  Allocs  how many Xero allocations the line carries
+EXPECTED ON J147 AFTER DEPLOY
+  Deducted  1,118.18   (was 1,760.38)
+  Released  1,118.19   (was 1,760.39)
+  Retention Owed 1,118.19 - ties, and matches Vinay's figures exactly.
+  The two 642.20 lines show Used 0.00 and Match "ref -> Lancaster Moor - App 2".
 
-With totals underneath, and Retention Owed shown for comparison.
+  The drill-down header now reads v792 - confirms the new build is serving.
 
-WHAT TO DO
-----------
-Open J147 and read it against the spreadsheet Vinay sent. One of these will be
-true and each points somewhere different:
-
-  Twelve lines, Allocs all 0        allocations still are not syncing; the
-                                    reference fallback is the route and I will
-                                    see from the references why it did not match
-
-  The credit note is missing        it never reached this project - a tracking
-                                    or matching problem at sync time
-
-  It is there with Netted blank     the pairing rule is not firing and the Raw
-                                    amounts will show why
-
-  Lines you do not recognise        something from another project is landing
-                                    here
-
-Send me a screenshot of that modal and the next fix will be the right one.
+STILL WORTH KNOWING (not a bug in the app)
+  The Feb-2024 App 2 invoice holds a POSITIVE 612 line in Xero (+642.20). A deduction
+  should be negative. So Xero itself recorded App 2's retention the wrong way up, which
+  is almost certainly why it was credited out and re-raised in Nov 2025 at -33.80. The
+  app now nets it away correctly either way, but the original entry is still wrong in
+  Xero if you want the account itself to read properly.
