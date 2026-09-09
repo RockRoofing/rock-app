@@ -1,51 +1,56 @@
-pkg783 - Retention card rebased, and a totals row
-==================================================
+pkg782 - Release halves on the final account
+=============================================
 
-DEPLOY OVER pkg782 (contains pkg782). Thirteen files.
+DEPLOY OVER pkg781 (contains pkg781). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
+  pages/api/dashboard.js            (changed here)
   pages/retention.js                (changed here)
-  everything else as pkg782
+  everything else as pkg781
 
-1. THE CARD
------------
-Now: total Retention Owed across ALL projects, less the 1st or 2nd Value of any
-half marked released.
+WHAT WAS WRONG
+--------------
+The tracker showed each half as totalRetention / 2 - half of retention ACCRUED
+on what had been applied for so far.
 
-Two changes from pkg782:
-  - it no longer nets off 612, it nets off the RELEASED HALVES
-  - it is no longer limited to Live and Defects
+An application certificate releases half of retention on the FINAL ACCOUNT. The
+comment in lib/applications.js has said so all along: "A release claimed at 90%
+complete is still half of the whole retention pot, which is what the contract
+says."
 
-Dropping the status filter is deliberate. A completed project with an unreleased
-half is still money being held, and hiding it is how retention gets forgotten -
-which is what this register exists to prevent.
+So the two disagreed on every part-complete job, and the tracker was always the
+lower of the two.
 
-"Released" means released1/released2 - a click on the cell OR a half ticked in
-an application's retention section. Those are the same functions that colour the
-cells, so the card and the rows cannot disagree.
+  Final account 580,000 gross, 5% MCD, 3% retention, 437,000 applied for
 
-  J244 live       owed 12,455   released      0  -> 12,455
-  J197 defects    owed 16,530   released  8,265  ->  8,265
-  J147 complete   owed 16,530   released 16,530  ->      0
-  card                                              20,720
+    retention on the final account   16,530  -> each half  8,265   application
+    retention on applied for         12,455  -> each half  6,227   tracker
 
-Floored per project, so a release larger than its owed figure cannot pull the
-total down - that is a data problem on one row, not a credit against the others.
+  A 2,038 gap per half, closing only when the job is fully applied for.
 
-2. TOTALS ROW
--------------
-At the foot of the table, sticky, so it stays visible however far you scroll.
+NOW
+---
+New retentionOnFinalAccount and retentionHalf on the dashboard record, computed
+as Final Account (Gross AFA less MCD) x retention %. The tracker's 1st and 2nd
+Value default to retentionHalf.
 
-Totals: Gross AFA, MCD, Final Account, Applied for, Invoiced, Account Remaining,
-Retention Owed, 612 Deducted, 612 Released, VAT, Total Due, Total Paid, Total
-Remaining - and the 1st / 2nd Value columns showing only the halves actually
-RELEASED, matching the card.
+Both column tooltips now say so: "half of the retention on the FINAL ACCOUNT
+(Gross AFA less MCD x retention %), which is what the contract holds and what an
+application certificate releases."
 
-It sums the rows CURRENTLY SHOWN, so it answers the filter you have applied. The
-row count sits beside the label - "43 shown" - so a filtered total cannot be
-mistaken for the whole register.
+WHAT HAS *NOT* CHANGED
+-----------------------
+Retention Owed is still retention on APPLIED FOR, less anything claimed back.
+That is correct and it is a different question: what the customer is holding
+today, against what the contract will eventually release in two halves. The
+register needs both figures and they are not the same until a job is finished.
 
-Cell count checked against the header: 28 and 28, so nothing sits under the
-wrong column.
+CACHE MARKER BUMPED AGAIN
+--------------------------
+retentionHalfOnFinal. Without it the four-hour cache would keep serving records
+with no retentionHalf field and the halves would fall back to the old figure.
+
+EXPECT EVERY RELEASE VALUE ON A PART-COMPLETE JOB TO RISE. That is the
+correction - they were understated, and by more the earlier the job is.
