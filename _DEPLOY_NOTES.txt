@@ -1,60 +1,55 @@
-pkg780 - Retention owed off Applied for, net of MCD
-====================================================
+pkg781 - Retention: applied-for basis, descriptions, 612 netting
+=================================================================
 
-DEPLOY OVER pkg779 (contains pkg779). Thirteen files.
+DEPLOY OVER pkg780 (contains pkg780). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/api/dashboard.js            (changed here)
-  everything else as pkg779
+  pages/retention.js                (changed here)
+  everything else as pkg780
 
-WHAT I CHECKED FIRST
---------------------
-Two of the three things you asked for were already right:
+1. DESCRIPTIONS NOW SAY APPLICATION, NOT INVOICED
+--------------------------------------------------
+Retention Owed hover:
+  "Retention still held: APPLIED FOR, gross less MCD with retention included,
+   x retention %, LESS any half already claimed back through an application's
+   Retention section. Falls back to invoiced only where a project has no
+   application."
 
-  Retention owed already worked off Applied for where an application existed -
-  totalRetention reads appliedForLatest and only falls back to invoiced when
-  there is no application. Rows still showing an invoiced basis have no sent
-  application, and the retentionBasis field says which was used.
+2. ACCOUNT REMAINING WORKS OFF THE APPLICATION
+-----------------------------------------------
+It was Final Account minus INVOICED, which answers a different question.
+Invoicing lags the application by weeks, so a project that had applied for
+everything still read as having value left to claim purely because the invoice
+had not gone out.
 
-  The card already sums the retentionOwed COLUMN for live and defects rows only.
-  It reads the same figure the column shows, so the two cannot disagree.
+Now Final Account minus APPLIED FOR, falling back to invoiced only where there
+is no application - the same rule the retention figures use. Both the column
+header and the "Remaining to Claim" card tooltip updated to match.
 
-WHAT WAS ACTUALLY WRONG
+3. THE OUTSTANDING CARD NETS OFF 612
+-------------------------------------
+Retention Owed is what the applications say is held. Account 612 is where a
+release lands when it is actually paid. A half already received is not still
+outstanding.
+
+Card is now: total Retention Owed less total 612 Released, Live and Defects
+Liability only. Floored at zero per project, so a row where 612 exceeds owed
+cannot pull the total down.
+
+  J244 Waungron   live      owed 12,455   612     0  -> 12,455
+  J197 Hollis     defects   owed  8,200   612 4,100  ->  4,100
+  J147 Lancaster  defects   owed  3,400   612 3,400  ->      0
+  J092 Old job    complete  excluded from both
+  card                      was 24,055    now 16,555
+
+4. BOOKKEEPING SHOWS IT
 ------------------------
-Applied for read grossCurrent - the account BEFORE main contractor's discount.
+Bookkeeping embeds this register with ?embed=1, and the embed hides the whole
+tile row - four cards eat the height the table needs inside a frame. That is
+still right for the other three, but the outstanding total is the figure
+Bookkeeping is there for.
 
-Retention is not charged on that. On a certificate MCD comes off first and
-retention is charged on the sub-total after it. So Applied for was overstated by
-the discount, and every retention figure derived from it was overstated by the
-same proportion.
-
-On a job at 437,000 gross with 5% MCD and 3% retention:
-
-  Applied for   was 437,000   now 415,150
-  Retention     was  13,110   now  12,455
-
-It now reads current.netBeforeRet - MCD taken off whatever it applies to,
-retention still inside it. That is the exact line the certificate shows above
-the retention deduction, so the tracker and the application agree.
-
-YES, IT INCLUDES RETENTION
----------------------------
-You asked me to check. netBeforeRet is the figure BEFORE retention is deducted,
-so retention is inside it and is not applied twice. mkCol() in lib/applications.js
-computes retention FROM netBeforeRet, which is the same basis.
-
-MCD is also handled properly per project: some contracts charge it on the
-contract sum only, valuing variations and materials separately. netBeforeRet
-respects the mcdOnVariations and mcdOnMaterials flags stamped on each
-application, so a split-MCD job is right too.
-
-CACHE MARKER BUMPED
--------------------
-The dashboard cache validity check now requires appliedForNetOfMcd. Without it a
-cache written by the old code would keep serving the old figures for up to four
-hours and the fix would look like it had not deployed.
-
-EXPECT EVERY RETENTION FIGURE TO FALL SLIGHTLY - by the MCD percentage. That is
-the correction, not a new fault.
+It now appears on its own line above the register in the embed, with the same
+number and the same basis as the Commercial card.

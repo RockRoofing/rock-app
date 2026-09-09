@@ -64,11 +64,19 @@ function calcTotalDue(entry) {
   const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
   return fa + calcVat(entry)
 }
-// Account Remaining = Final Account − Invoiced Net (ex-VAT).
+// Account Remaining = Final Account - APPLIED FOR (ex-VAT).
+//
+// It measured against INVOICED, which answers a different question. Invoicing lags the
+// application by weeks, so a project that had applied for everything still read as having
+// value left to claim purely because the invoice had not been raised.
+//
+// What is left to CLAIM is measured against what has been applied for. Falls back to
+// invoiced only where there is no application - the same rule the retention figures use.
 function calcAccountRemaining(entry) {
   const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const applied = parseFloat(entry.appliedForLatest || 0) || 0
   const invNet = parseFloat(entry.invoicedNet != null ? entry.invoicedNet : entry.invoiced || 0) || 0
-  return fa - invNet
+  return fa - (applied > 0 ? applied : invNet)
 }
 // Total Remaining (Check) = Total Due (inc VAT) − Total Paid (inc VAT).
 // Hits £0 when everything (incl. VAT) has been paid → retention closed.
@@ -659,9 +667,17 @@ export default function RetentionPage() {
     // It also reads the same retentionOwed the column shows, so the card and the column
     // it sits above cannot disagree. calcBalance was a second calculation of the same
     // thing, which is how the two came to differ in the first place.
+    // LESS WHAT HAS ALREADY COME BACK THROUGH 612.
+    //
+    // Retention Owed is what the applications say is held. Account 612 is where a release
+    // actually lands when it is paid. A half that has been released and received is no
+    // longer outstanding, so carrying it here overstates what is still to chase.
+    //
+    // Owed minus 612 released, live and defects only.
     outstanding: allEntries
       .filter((e) => { const st = retStatusOf(e); return st === 'live' || st === 'defects' })
-      .reduce((s, e) => s + (parseFloat(e.retentionOwed || 0) || 0), 0),
+      .reduce((s, e) => s + Math.max(0,
+        (parseFloat(e.retentionOwed || 0) || 0) - (parseFloat(e.retention612Released || 0) || 0)), 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
     //
     // It was Total Due minus Total Paid - inc VAT, and measuring what had been RECEIVED
@@ -744,14 +760,27 @@ export default function RetentionPage() {
             />
           )}
 
+          {/* THE EMBED GETS THIS ONE FIGURE. The full tile row is hidden in Bookkeeping
+              because four cards eat the height the register needs inside a frame - but
+              the total outstanding is the number Bookkeeping is there for, so it is shown
+              on its own line rather than being lost with the rest. */}
+          {embed && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}
+              title="Total Retention Owed less total 612 Released, for Live and Defects Liability projects only.">
+              <span style={{ fontSize: 11, color: '#888' }}>Retention outstanding</span>
+              <span style={{ fontSize: 20, fontWeight: 700, color: totals.outstanding > 1 ? '#dc2626' : '#16a34a' }}>{fmtC(totals.outstanding)}</span>
+              <span style={{ fontSize: 11, color: '#aaa' }}>Owed less 612 released, Live and Defects only</span>
+            </div>
+          )}
+
           {!embed && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch', flexShrink: 0 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
                 { label: 'Retention Outstanding', value: fmtC(totals.outstanding), color: totals.outstanding > 1 ? '#dc2626' : '#16a34a',
-                  tip: 'The halves not yet confirmed released, across the projects shown - what is still being chased. Driven by the release marks on each row and by any half ticked on an application. It does not read payments from Xero.' },
+                  tip: 'Total Retention Owed less total 612 Released, for Live and Defects Liability projects only. Retention Owed is what the applications say is held; 612 is where a release lands when it is actually paid, so a half already received is not still outstanding.' },
                 { label: 'Remaining to Claim', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a',
-                  tip: 'Final Account minus Invoiced, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
+                  tip: 'Final Account minus Applied for, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
                 { label: 'In Defects Liability', value: totals.defects, raw: true, color: '#ca8a04',
                   tip: 'Every project on the register at Defects Liability. Does not change with the filters.' },
                 { label: 'Live Projects', value: totals.live, raw: true,
@@ -895,8 +924,8 @@ export default function RetentionPage() {
                         ['Applied for', 'right', 'Auto-populates from the latest application on this project. You can still type a value to override it.', 'appliedFor'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
-                        ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
-                        ['Retention Owed', 'right', 'Retention still held: invoiced (Sales, code 200) \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
+                        ['Account Remaining', 'right', 'Final Account − Applied for. What is still to be CLAIMED against the final account. Falls back to invoiced only where a project has no application.', null],
+                        ['Retention Owed', 'right', 'Retention still held: APPLIED FOR, gross less MCD with retention included, \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
                         ['612 Deducted', 'right', 'Retention withheld on invoices under account code 612 - the GROSS figure, before any release. Sum of the negative 612 lines. NOTE: the old "612 Allocated" column was the NET (deducted less released), which is a different number.', 'r612ded'],
                         ['612 Released', 'right', 'Retention invoiced back out - the POSITIVE account 612 lines. WARNING: a release posted as a plain sales invoice with no 612 line does not appear here, which is common on older projects. A dash means no 612 movement was found at all, which is NOT the same as nothing released.', 'r612rel'],
                         ['\u2713', 'center', 'Reconciliation: retention is released in halves, so 612 Released should be NOTHING, HALF of 612 Deducted, or ALL of it. Green on any of those three, with which one shown underneath. Red flag on anything else, with how far out it is - usually a part-release, or a deduction still growing because the job is not fully invoiced. A dash means no 612 lines at all.', null],
