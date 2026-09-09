@@ -4407,7 +4407,13 @@ function AddProjectModal({ onClose, onCreate, users }) {
   const [f, setF] = useState({});
   const [org, setOrg] = useState('');
   const [contact, setContact] = useState('');
-  const [stageId, setStageId] = useState('stage_project_in');
+  // BLANK, AND MUST BE CHOSEN.
+  //
+  // It defaulted to Project In, so anyone who did not look at the field created the
+  // project there by accident. Project In is the inbox - it now carries real meaning
+  // (no activity reminders, no tender return activity), so landing there should be a
+  // decision rather than the consequence of not scrolling.
+  const [stageId, setStageId] = useState('');
   const [showNewOrg, setShowNewOrg] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -4437,6 +4443,7 @@ function AddProjectModal({ onClose, onCreate, users }) {
 
   const create = () => {
     if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; }
+    if (!stageId) { alert('Please choose a stage.'); return; }
     onCreate({ ...f, organization: org, contact_person: contact, stageId });
   };
   const grpHdr = { fontSize: 13, fontWeight: 700, margin: '18px 0 8px', paddingBottom: 6, borderBottom: `1px solid ${C.line}` };
@@ -4451,7 +4458,14 @@ function AddProjectModal({ onClose, onCreate, users }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {fieldCell('title','Project title', true, true)}
           {fieldCell('value','Value (£)', false)}
-          <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+          <div>
+            <label style={fLbl}>Stage *</label>
+            <select value={stageId} onChange={(e) => setStageId(e.target.value)}
+              style={{ ...miniInput, width: '100%', boxSizing: 'border-box', borderColor: stageId ? undefined : C.lost }}>
+              <option value="">Select a stage&hellip;</option>
+              {STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
           {fieldCell('project_score','Project Score', false)}
           {fieldCell('expected_close_date','Tender return date', false)}
           <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: C.dim, marginTop: -4 }}>

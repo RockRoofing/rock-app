@@ -1,47 +1,34 @@
-pkg778 - Add companies and contacts directly
-=============================================
+pkg779 - Stage must be chosen on a new project
+===============================================
 
-DEPLOY OVER pkg777 (contains pkg777). Thirteen files.
+DEPLOY OVER pkg778 (contains pkg778). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/crm.js                      (changed here)
-  everything else as pkg777
+  everything else as pkg778
 
-WHAT IT DOES
+WHAT CHANGED
 ------------
-"+ Add company" and "+ Add contact" in the header of their respective pages,
-next to Choose Columns.
+The Stage dropdown on Add new project starts blank, reads "Select a stage...",
+is marked with an asterisk like the title, and shows a red border until one is
+picked. Save is refused with "Please choose a stage."
 
-Both lists were read-only. A company only existed once a project referenced it,
-so a customer you had met but not yet tendered for could not be recorded at all.
+WHY IT MATTERS MORE THAN IT DID LAST WEEK
+------------------------------------------
+It defaulted to Project In, so anybody who did not look at the field created the
+project there without deciding to.
 
-WHAT YOU GET IN THE FORM
--------------------------
-  Company   Company name*, Address, Phone, Website, Email,
-            Registration Number, Supply Chain Approved?
-  Contact   Name*, First name, Last name, Company, Phone,
-            Email, Job Role
+That was harmless when Project In was just the first column. It is not now:
+pkg771 made Project In exempt from the no-activity reminders and stopped it
+creating a Tender return activity. A project that lands there by accident is a
+project nobody will be reminded about.
 
-Driven by the SAME COMPANY_FIELDS / CONTACT_FIELDS lists the tables use, so a
-field added there appears here without anybody having to remember. The derived
-columns - Deals, Open value, Won, Lost - are counted from projects and are not
-editable, so they are left out.
+Landing in the inbox should be a decision.
 
-DUPLICATES ARE BLOCKED
-----------------------
-Case-insensitive and trimmed, so "wates construction limited" is caught against
-"Wates Construction Limited". Save is disabled and the reason is shown.
-
-It will NOT catch "Wates Construction Ltd" against "...Limited" - those are
-different strings and no rule can tell a typo from two genuinely different
-companies. Same limitation the rest of the CRM has.
-
-NOTHING NEW UNDERNEATH
-----------------------
-It calls the existing upsertOrg and upsertContact, which already handle the
-merge, the API write and the optimistic update. No new endpoint, no new store,
-and records added here behave exactly like ones created from a project.
-
-Escape or the X to close, like every other modal.
+THE SERVER FALLBACK IS KEPT
+----------------------------
+addDeal still reads `data.stageId || 'stage_project_in'`. The modal now prevents
+an empty stage reaching it, but if anything else ever creates a deal without one
+it goes somewhere sensible rather than into a stage that does not exist.
