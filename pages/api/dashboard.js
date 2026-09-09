@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612NettedV2 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612Detail_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -156,6 +156,7 @@ export default async function handler(req, res) {
       let invoicedExVat = 0, invoicedSales200 = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—', retention612 = 0
       let retention612Deducted = 0, retention612Released = 0, retention612ReleasedPaid = 0
       let ret612Lines = 0, ret612First = ''
+      const ret612Detail = []
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
         if (invCache) {
@@ -242,6 +243,20 @@ export default async function handler(req, res) {
           }
           if (v < 0) retention612Deducted += -v
           else if (v > 0) retention612Released += v
+          // WHAT THIS PROJECT ACTUALLY HOLDS, line by line.
+          //
+          // Four attempts at this have been made by inferring from totals. This carries
+          // the working so it can be read against Xero directly - the raw amount, what
+          // the netting did to it, and which column it ended in.
+          ret612Detail.push({
+            date: l.date || '', ref: l.reference || l.invoiceNumber || '',
+            creditNote: !!l.creditNote,
+            raw: Math.round((l.retention612 || 0) * 100) / 100,
+            used: Math.round(v * 100) / 100,
+            netted: Math.abs((l.retention612 || 0) - v) > 0.005,
+            allocs: (l.allocatedTo || []).length,
+            side: v < 0 ? 'deducted' : v > 0 ? 'released' : '-',
+          })
           if (v !== 0) {
             ret612Lines += 1
             if (!ret612First || (l.date && l.date < ret612First)) ret612First = l.date || ret612First
@@ -670,6 +685,7 @@ export default async function handler(req, res) {
         // releases were often posted as a plain sales invoice with no 612 line at all, so
         // a zero here means "no evidence", NOT "nothing released".
         ret612Lines,
+        ret612Detail: ret612Detail.slice(0, 60),
         ret612From: ret612First || '',
         grossInvoiced,
         currentMargin,
@@ -701,6 +717,7 @@ export default async function handler(req, res) {
         // Bumped again: 612 now nets credit note reversals.
         ret612Netted: true,
         ret612NettedV2: true,
+        ret612Detail_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

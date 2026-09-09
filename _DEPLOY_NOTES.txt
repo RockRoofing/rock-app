@@ -1,45 +1,52 @@
-pkg790 - Why the netting never fired
-=====================================
+pkg791 - Show the 612 working instead of inferring it
+======================================================
 
-DEPLOY OVER pkg789 (contains pkg789). Fourteen files.
+DEPLOY OVER pkg790 (contains pkg790). Fourteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/api/sync-invoices.js        (changed here)
   pages/api/dashboard.js            (changed here)
-  everything else as pkg789
+  pages/retention.js                (changed here)
+  everything else as pkg790
 
-THE CAUSE
----------
-Xero's /CreditNotes LIST endpoint omits Allocations - the same reason it omits
-LineItems, which the sync was already re-fetching one credit note at a time.
+WHY THIS AND NOT A FIFTH FIX
+-----------------------------
+Four attempts at the 612 figures have been made by inferring from totals. Every
+one of them was a reasonable theory and none of them worked, because I cannot
+see what the app actually holds. Guessing again would waste another round.
 
-I only tested for missing line items. Allocations are absent even when the lines
-ARE present, so allocatedTo came back empty on every credit note and there was
-never anything to pair against. The netting in pkg789 was correct and simply
-never ran.
+WHAT IT ADDS
+------------
+Click the 612 Deducted cell on any row. You get every account-612 line the app
+holds for that project:
 
-TWO FIXES, SO IT WORKS EITHER WAY
-----------------------------------
-1. The sync now fetches the whole credit note when EITHER lines or allocations
-   are missing, and keeps the allocations.
+  Date | Reference | Invoice or Credit note | Raw | Used | Side | Netted | Allocs
 
-2. The dashboard falls back to matching on REFERENCE where a stored line has no
-   allocation - a credit note reversing an application carries that
-   application's reference, and it must also be an exact equal-and-opposite 612
-   amount. Two coincidences at once is not a coincidence.
+  Raw     what came from Xero
+  Used    after any credit note cancellation
+  Side    which column it landed in
+  Netted  highlighted amber where a reversal was cancelled
+  Allocs  how many Xero allocations the line carries
 
-The second means lines already in the store net correctly without waiting for a
-re-sync. Tested against J147 with allocations stripped out entirely:
-
-  deducted 1,118.18   released 1,118.19   Retention Owed 1,118.19
+With totals underneath, and Retention Owed shown for comparison.
 
 WHAT TO DO
 ----------
-Deploy, then hard refresh. The reference fallback should correct J147
-immediately without a re-sync.
+Open J147 and read it against the spreadsheet Vinay sent. One of these will be
+true and each points somewhere different:
 
-Then run Sync Invoices at 48 months when convenient - that picks up the real
-allocations, which are more reliable than reference matching for anything where
-the reference was edited or a credit note covers more than one invoice.
+  Twelve lines, Allocs all 0        allocations still are not syncing; the
+                                    reference fallback is the route and I will
+                                    see from the references why it did not match
+
+  The credit note is missing        it never reached this project - a tracking
+                                    or matching problem at sync time
+
+  It is there with Netted blank     the pairing rule is not firing and the Raw
+                                    amounts will show why
+
+  Lines you do not recognise        something from another project is landing
+                                    here
+
+Send me a screenshot of that modal and the next fix will be the right one.

@@ -222,6 +222,7 @@ export default function RetentionPage() {
   const [xeroEntries, setXeroEntries] = useState([])
   const [hiddenIds, setHiddenIds] = useState([])
   const [loading, setLoading] = useState(true)
+  const [ret612For, setRet612For] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_ENTRY)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -454,6 +455,7 @@ export default function RetentionPage() {
           retention612Deducted: p.retention612Deducted || 0,
           retention612Released: p.retention612Released || 0,
           retention612ReleasedPaid: p.retention612ReleasedPaid || 0,
+          ret612Detail: p.ret612Detail || [],
           ret612Lines: p.ret612Lines || 0,
           ret612From: p.ret612From || '',
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
@@ -581,6 +583,7 @@ export default function RetentionPage() {
         appRelease1: x.appRelease1, appRelease2: x.appRelease2,
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
+        ret612Detail: x.ret612Detail,
         afaGross: x.afaGross, afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
@@ -776,6 +779,63 @@ export default function RetentionPage() {
         // the host page do the scrolling.
         ? { minHeight: '100vh', background: '#f0f2f5' }
         : { height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f0f2f5' }}>
+        {ret612For && (() => {
+          const rows = ret612For.ret612Detail || []
+          const d = rows.filter(r => r.side === 'deducted').reduce((t, r) => t + Math.abs(r.used), 0)
+          const rl = rows.filter(r => r.side === 'released').reduce((t, r) => t + r.used, 0)
+          const th2 = { padding: '6px 8px', textAlign: 'left', fontSize: 10.5, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }
+          const td2 = { padding: '6px 8px', fontSize: 12, borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }
+          return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref}</span>
+                  <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
+                </div>
+                <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
+                  Every account-612 line the app holds for this project. <strong>Raw</strong> is what came from Xero;
+                  <strong> Used</strong> is after a credit note has been cancelled against the invoice it reverses.
+                  Read it straight against your Xero account-transactions export.
+                </div>
+                <div style={{ overflow: 'auto', padding: '0 16px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr>
+                      <th style={th2}>Date</th><th style={th2}>Reference</th><th style={th2}>Type</th>
+                      <th style={{ ...th2, textAlign: 'right' }}>Raw</th>
+                      <th style={{ ...th2, textAlign: 'right' }}>Used</th>
+                      <th style={th2}>Side</th><th style={th2}>Netted</th><th style={th2}>Allocs</th>
+                    </tr></thead>
+                    <tbody>
+                      {rows.length === 0 && <tr><td style={td2} colSpan={8}>No 612 lines stored. If Xero shows some, they are not reaching this project - check the tracking category on those invoices.</td></tr>}
+                      {rows.map((r, i) => (
+                        <tr key={i} style={{ background: r.netted ? '#fffbeb' : undefined }}>
+                          <td style={td2}>{r.date || '-'}</td>
+                          <td style={{ ...td2, whiteSpace: 'normal' }}>{r.ref || '-'}</td>
+                          <td style={td2}>{r.creditNote ? 'Credit note' : 'Invoice'}</td>
+                          <td style={{ ...td2, textAlign: 'right' }}>{fmt(r.raw)}</td>
+                          <td style={{ ...td2, textAlign: 'right', fontWeight: r.netted ? 700 : 400 }}>{fmt(r.used)}</td>
+                          <td style={{ ...td2, color: r.side === 'deducted' ? '#dc2626' : r.side === 'released' ? '#16a34a' : '#bbb' }}>{r.side}</td>
+                          <td style={td2}>{r.netted ? 'cancelled' : ''}</td>
+                          <td style={td2}>{r.allocs || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot><tr style={{ fontWeight: 700, background: '#f8fafc' }}>
+                      <td style={td2} colSpan={4}>Totals from these lines</td>
+                      <td style={{ ...td2, textAlign: 'right' }} colSpan={4}>
+                        deducted {fmt(d)} &nbsp;&middot;&nbsp; released {fmt(rl)}
+                      </td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', fontSize: 12, color: '#555' }}>
+                  Retention Owed <strong>{fmt(calcRetentionOwed(ret612For))}</strong> is the source of truth. Deducted should match it.
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         {importMsg && (
           <div style={{ margin: '10px 0', padding: '8px 12px', borderRadius: 8, fontSize: 13, background: importMsg.startsWith('Imported') ? '#e8f5ee' : '#fff4e5', border: `1px solid ${importMsg.startsWith('Imported') ? '#1c704f' : '#f0c98a'}`, color: '#1a1a2e' }}>
             {importMsg}
@@ -1179,7 +1239,12 @@ export default function RetentionPage() {
                                 rather than a zero where no 612 movement exists at all -
                                 "no evidence" and "nothing released" are different
                                 answers, and older projects give the first. */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.ret612Lines ? fmt(parseFloat(entry.retention612Deducted || 0)) : '\u2014'}</td>
+                            {/* CLICK FOR THE WORKING. Four attempts at the 612 figures
+                                were made by inferring from totals; this shows the stored
+                                lines so they can be read straight against Xero. */}
+                            <td onClick={() => entry.ret612Lines && setRet612For(entry)}
+                              title={entry.ret612Lines ? 'Click for every 612 line on this project' : undefined}
+                              style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555', cursor: entry.ret612Lines ? 'pointer' : 'default', textDecoration: entry.ret612Lines ? 'underline dotted' : 'none' }}>{entry.ret612Lines ? fmt(parseFloat(entry.retention612Deducted || 0)) : '\u2014'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: (parseFloat(entry.retention612Released) || 0) > 0 ? '#16a34a' : '#bbb' }}
                               title={entry.ret612Lines ? `${entry.ret612Lines} account 612 line${entry.ret612Lines === 1 ? '' : 's'}${entry.ret612From ? ` from ${entry.ret612From}` : ''}${(parseFloat(entry.retention612ReleasedPaid) || 0) > 0 ? ` - ${fmtC(parseFloat(entry.retention612ReleasedPaid))} of it on invoices now paid` : ''}` : 'No account 612 lines found on this project - either none synced yet, or releases were posted straight to sales.'}>
                               {entry.ret612Lines ? fmt(parseFloat(entry.retention612Released || 0)) : '\u2014'}</td>
