@@ -89,6 +89,20 @@ export function calcRetentionOwed(entry) {
   return base * (pct > 1 ? pct / 100 : pct)
 }
 
+// EACH RELEASE HALF = HALF THE RETENTION OWED.
+//
+// The imported spreadsheet values were stale: J147 carried 289.03 a half, which is half
+// of the App 1 deduction of 578.05 - the only application that existed when the sheet was
+// built. Nothing recalculated them as later applications added retention, and an imported
+// value beat the computed one because release1Value was never in the merge's override
+// list.
+//
+// Computed from the row now, so the two halves always sum to Retention Owed. J147 becomes
+// 559.09 each against 1,118.19 owed.
+export function calcReleaseHalf(entry) {
+  return calcRetentionOwed(entry) / 2
+}
+
 function calcAccountRemaining(entry) {
   const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
   const applied = parseFloat(entry.appliedForLatest || 0) || 0
@@ -134,8 +148,8 @@ function releaseSource(entry, half) {
 }
 
 function calcBalance(entry) {
-  const r1 = parseFloat(entry.release1Value || 0)
-  const r2 = parseFloat(entry.release2Value || 0)
+  const r1 = calcReleaseHalf(entry)
+  const r2 = calcReleaseHalf(entry)
   const total = r1 + r2
   const received = (released1(entry) ? r1 : 0) + (released2(entry) ? r2 : 0)
   return total - received
@@ -652,8 +666,8 @@ export default function RetentionPage() {
     const noDate = [], overdue = []
     for (const e of allEntries) {
       if (retStatusOf(e) === 'complete') continue
-      const r1 = parseFloat(e.release1Value || 0) || 0
-      const r2 = parseFloat(e.release2Value || 0) || 0
+      const r1 = calcReleaseHalf(e)
+      const r2 = calcReleaseHalf(e)
       const label = [e.ourRef, e.projectName || e.customerName].filter(Boolean).join(' - ') || 'Unnamed'
 
       // A half with money against it but NO date is invisible everywhere else: it never
@@ -716,8 +730,7 @@ export default function RetentionPage() {
     // row, and where the releases are right the two agree by definition.
     outstanding: allEntries.reduce((s, e) => {
       const owed = calcRetentionOwed(e)
-      const rel = (released1(e) ? (parseFloat(e.release1Value || 0) || 0) : 0)
-        + (released2(e) ? (parseFloat(e.release2Value || 0) || 0) : 0)
+      const rel = (released1(e) ? calcReleaseHalf(e) : 0) + (released2(e) ? calcReleaseHalf(e) : 0)
       return s + (owed - rel)
     }, 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
@@ -1029,8 +1042,8 @@ export default function RetentionPage() {
                       //  • 1st release is settled once only the 2nd half remains to pay
                       //    (remaining <= 2nd release value).
                       //  • 2nd release is settled once the account is paid in full.
-                      const r1v = parseFloat(entry.release1Value || 0) || 0
-                      const r2v = parseFloat(entry.release2Value || 0) || 0
+                      const r1v = calcReleaseHalf(entry)
+                      const r2v = calcReleaseHalf(entry)
                       const paidKnown = hasPaid && fa
                       // Final Account vs Invoiced. Releases should only go green once the
                       // FA and the invoiced value reconcile; if invoiced exceeds FA the
@@ -1190,26 +1203,38 @@ export default function RetentionPage() {
                               const ded = parseFloat(entry.retention612Deducted) || 0
                               const rel = parseFloat(entry.retention612Released) || 0
                               if (!entry.ret612Lines) return <td style={{ padding: '8px 6px', textAlign: 'center', color: '#cbd5e1' }} title="No account 612 lines on this project, so there is nothing to reconcile against.">&mdash;</td>
-                              const half = ded / 2
+                              // DOES XERO AGREE WITH THE REGISTER?
+                              //
+                              // This compared 612 Released against 612 Deducted and
+                              // printed "both halves" when they matched - the language of
+                              // the release cells beside it, for a test that never looked
+                              // at them. Unticking a release changed nothing, because the
+                              // column was not reading your marks at all.
+                              //
+                              // Retention Owed is the source of truth. Xero should show
+                              // that much deducted, and should show released whatever you
+                              // have marked released. Two comparisons, both stated.
+                              const owed = calcRetentionOwed(entry)
+                              const markedRel = (released1(entry) ? calcReleaseHalf(entry) : 0)
+                                + (released2(entry) ? calcReleaseHalf(entry) : 0)
                               // A pound of tolerance - retention halves round.
-                              const isNone = Math.abs(rel) < 1
-                              const isHalf = Math.abs(rel - half) < 1
-                              const isFull = Math.abs(rel - ded) < 1
-                              const ok = isNone || isHalf || isFull
-                              // isNone FIRST. With nothing deducted all three tests pass
-                              // and 'both halves' would be printed on a project that has
-                              // released nothing at all.
-                              const label = isNone ? 'none yet' : isFull ? 'both halves' : isHalf ? '1st half' : ''
+                              const dedOk = Math.abs(ded - owed) < 1
+                              const relOk = Math.abs(rel - markedRel) < 1
+                              const ok = dedOk && relOk
+                              const label = ok ? 'ties' : !dedOk && !relOk ? 'both out' : !dedOk ? 'deducted out' : 'released out'
                               // Distance to whichever expected figure is nearest, so a flag
                               // says HOW FAR out rather than only that it is out.
-                              const near = [0, half, ded].reduce((a, b) => Math.abs(b - rel) < Math.abs(a - rel) ? b : a, 0)
+                              // The bigger of the two gaps, so the number under the flag
+                              // says how far out the worse side is.
+                              const dedGap = ded - owed, relGap = rel - markedRel
+                              const worst = Math.abs(dedGap) >= Math.abs(relGap) ? dedGap : relGap
                               return (
                                 <td style={{ padding: '6px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}
-                                  title={ok
-                                    ? `612 released ${fmtC(rel)} = ${label}. Expected one of: 0, ${fmtC(half)} or ${fmtC(ded)}.`
-                                    : `612 released ${fmtC(rel)} is not 0, half (${fmtC(half)}) or all (${fmtC(ded)}) of the retention withheld. Nearest is ${fmtC(near)}, out by ${fmtC(rel - near)}. Usually a part-release, or a deduction still growing because the job is not fully invoiced.`}>
+                                  title={`Retention Owed ${fmtC(owed)} vs 612 Deducted ${fmtC(ded)}${dedOk ? ' - ties' : ` - out by ${fmtC(dedGap)}`}.\n`
+                                    + `Marked released ${fmtC(markedRel)} vs 612 Released ${fmtC(rel)}${relOk ? ' - ties' : ` - out by ${fmtC(relGap)}`}.\n\n`
+                                    + `Retention Owed is the source of truth; Xero should match it. A gap usually means a 612 line coded to the wrong project, a release invoiced without a 612 line, or a credit note that has not synced.`}>
                                   <div style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '\u2713' : '\u2691'}</div>
-                                  <div style={{ fontSize: 8.5, color: ok ? '#9ca3af' : '#dc2626', fontWeight: 600 }}>{ok ? label : fmtC(rel - near)}</div>
+                                  <div style={{ fontSize: 8.5, color: ok ? '#9ca3af' : '#dc2626', fontWeight: 600 }}>{ok ? label : fmtC(worst)}</div>
                                 </td>
                               )
                             })()}
@@ -1227,7 +1252,7 @@ export default function RetentionPage() {
                             {/* 1st Value (coloured) */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
-                              : releaseCell(entry.release1Value, 1)}
+                              : releaseCell(calcReleaseHalf(entry), 1)}
                             {/* 1st Date */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
@@ -1235,7 +1260,7 @@ export default function RetentionPage() {
                             {/* 2nd Value (coloured) */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
-                              : releaseCell(entry.release2Value, 2)}
+                              : releaseCell(calcReleaseHalf(entry), 2)}
                             {/* 2nd Date */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
@@ -1313,8 +1338,7 @@ export default function RetentionPage() {
                     {sortedEntries.length > 0 && (() => {
                       const sum = (fn) => sortedEntries.reduce((t, e) => t + (Number(fn(e)) || 0), 0)
                       const n = (k) => sum((e) => parseFloat(e[k] || 0) || 0)
-                      const relSum = (which) => sum((e) => (which === 1 ? released1(e) : released2(e))
-                        ? (parseFloat(e[which === 1 ? 'release1Value' : 'release2Value'] || 0) || 0) : 0)
+                      const relSum = (which) => sum((e) => (which === 1 ? released1(e) : released2(e)) ? calcReleaseHalf(e) : 0)
                       const tdT = { padding: '9px 10px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap',
                         position: 'sticky', bottom: 0, zIndex: 2, background: '#f1f5f9', borderTop: '2px solid #cbd5e1' }
                       const tdL = { ...tdT, textAlign: 'left' }

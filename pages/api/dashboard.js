@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].retentionHalfOnFinal === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612Netted === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -188,8 +188,47 @@ export default async function handler(req, res) {
         // deducted. That single figure is the reason the register will not reconcile.
         //
         // Derived from the stored lines, so it works without waiting for a resync.
+        // CANCEL A CREDIT NOTE AGAINST THE INVOICE IT REVERSES.
+        //
+        // A credited-and-reissued application posts its retention twice - once on the
+        // original invoice and once, opposite, on the credit note. Counting both inflates
+        // BOTH columns by the same amount and the account still nets to zero, so nothing
+        // looks wrong until you compare against Retention Owed.
+        //
+        // J147: gross 1,760.38 deducted / 1,760.39 released. Cancel the 642.20 reversal
+        // pair and it is 1,118.18 / 1,118.19 - against Retention Owed of 1,118.19.
+        // Everything ties. That is the test that says this rule is right.
+        //
+        // Matched through allocatedTo, which the sync keeps from Xero's Allocations. Only
+        // the overlapping amount is cancelled, so a partial credit leaves the remainder.
+        const adj = new Map()   // xeroInvoiceId -> amount of 612 already cancelled
+        const cancelled = new Set()
+        for (const cn of invoiceLines) {
+          if (!cn.creditNote || !(cn.retention612 || 0)) continue
+          for (const invId of (cn.allocatedTo || [])) {
+            const inv = invoiceLines.find(l => !l.creditNote && String(l.xeroInvoiceId) === String(invId))
+            if (!inv || !(inv.retention612 || 0)) continue
+            // Opposite signs only - a credit note reinforcing a deduction is not a reversal.
+            if (Math.sign(inv.retention612) === Math.sign(cn.retention612)) continue
+            const already = adj.get(String(invId)) || 0
+            const room = Math.abs(inv.retention612) - already
+            const take = Math.min(room, Math.abs(cn.retention612))
+            if (take <= 0) continue
+            adj.set(String(invId), already + take)
+            cancelled.add(cn.xeroInvoiceId || cn.invoiceNumber)
+            break
+          }
+        }
+
         for (const l of invoiceLines) {
-          const v = l.retention612 || 0
+          let v = l.retention612 || 0
+          // A fully cancelled credit note contributes nothing, and the invoice it
+          // reversed is reduced by the same amount.
+          if (l.creditNote && cancelled.has(l.xeroInvoiceId || l.invoiceNumber)) v = 0
+          else if (!l.creditNote && adj.has(String(l.xeroInvoiceId))) {
+            const off = adj.get(String(l.xeroInvoiceId))
+            v = v > 0 ? Math.max(0, v - off) : Math.min(0, v + off)
+          }
           if (v < 0) retention612Deducted += -v
           else if (v > 0) retention612Released += v
           if (v !== 0) {
@@ -648,6 +687,8 @@ export default async function handler(req, res) {
         appliedForNetOfMcd: true,
         // Bumped again: the release halves moved to the final-account basis.
         retentionHalfOnFinal: true,
+        // Bumped again: 612 now nets credit note reversals.
+        ret612Netted: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

@@ -1,56 +1,61 @@
-pkg788 - 612 on credit notes now reaches the project
-=====================================================
+pkg789 - Retention Owed is the source of truth, and everything ties to it
+=========================================================================
 
-DEPLOY OVER pkg787 (contains pkg787). Fourteen files.
+DEPLOY OVER pkg788 (contains pkg788). Fourteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/api/sync-invoices.js        (changed here)
-  everything else as pkg787
+  pages/api/dashboard.js            (changed here)
+  pages/retention.js                (changed here)
+  everything else as pkg788
 
-WHAT WAS HAPPENING
+THE PROOF, ON J147
 ------------------
-Credit notes WERE being fetched, and their 612 lines WERE being read and
-negated. The problem was the matching.
+  Retention Owed  22,363.79 x 5%        = 1,118.19
+  612 Deducted    gross 1,760.38, netted  1,118.18
+  612 Released    gross 1,760.39, netted  1,118.19
+  Halves          559.09 each, both released = 1,118.19
 
-A line is put against a project by the tracking category on its own line items.
-A credit note raised against an invoice in Xero usually carries no tracking - it
-just reverses part of something already coded - so trackingNames came back
-empty, it fell to __UNASSIGNED__, and its 612 movement never reached the
-project.
+Everything ties to the penny, and the penny is in Xero's own export.
 
-Hence the discrepancy on any job where a credit note has been applied.
+1. CREDIT NOTE REVERSALS ARE NETTED
+------------------------------------
+App 2 was raised in Feb 2024, credited out in full in Nov 2025 and re-raised the
+same day. Both postings were counted, inflating each column by 642.20. The
+account still nets to zero, so nothing looked wrong until you compared against
+Retention Owed.
 
-THE FIX
--------
-Two passes. Invoices are matched first, building a map of Xero invoice ID to
-project. Untracked credit notes are then resolved through the invoice they were
-ALLOCATED to, which the sync now keeps from Xero's Allocations.
+A credit note is now cancelled against the invoice it reverses, matched through
+Xero's Allocations (captured in pkg788). Only the overlapping amount and only
+where the signs oppose, so a partial credit leaves the remainder and a credit
+note that reinforces a deduction is left alone.
 
-  invoice    tracked                 -> project
-  credit     tracked                 -> project (as before)
-  credit     untracked, allocated    -> project via the invoice  (NEW)
-  credit     untracked, unallocated  -> unassigned, as it should be
+2. THE HALVES ARE CALCULATED
+-----------------------------
+J147 carried 289.03 a half - half of the App 1 deduction of 578.05, the only
+application that existed when the old spreadsheet was built. Nothing
+recalculated them, and an imported value beat the computed one because
+release1Value was never in the merge's override list.
 
-The sync response now reports creditNotesMatchedByAllocation so you can see how
-many were rescued.
+Each half is now Retention Owed / 2, so the two always sum to what is owed.
+J147: 559.09 each. As agreed, this overwrites the imported values.
 
-YOU MUST RE-SYNC
-----------------
-This changes how the lines store is BUILT. Nothing moves until you press Sync
-Invoices - the existing store still has those credit notes filed under
-unassigned.
+3. THE TICK COLUMN NOW READS YOUR MARKS
+----------------------------------------
+It compared 612 Released against 612 Deducted and printed "both halves" when
+they matched - the language of the release cells, for a test that never looked
+at them. That is why unticking a release changed nothing.
 
-ONE THING TO CHECK AFTERWARDS
-------------------------------
-The Deducted / Released split. A deduction is a negative 612 line, a release is
-positive - and a credit note's amounts are negated on the way in. So a credit
-note that REVERSES part of a retention deduction arrives as a positive, and will
-be counted as RELEASED rather than as a smaller deduction.
+Two comparisons now, with Retention Owed as the source of truth:
 
-The net position is right either way, and the outstanding card is unaffected.
-But the two columns individually may read high on both sides. Look at a project
-you know has a credit note and tell me whether Deducted and Released match what
-you would expect - if not, I will split them on the transaction type rather than
-the sign.
+  Retention Owed   vs  612 Deducted
+  Marked released  vs  612 Released
+
+Labels: ties / deducted out / released out / both out, with the larger gap shown
+underneath and both comparisons spelled out in the hover.
+
+RE-SYNC FIRST
+-------------
+The netting reads allocatedTo, which only exists on lines synced with pkg788.
+Run Sync Invoices at 48 months before judging the figures.
