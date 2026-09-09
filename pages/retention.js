@@ -558,7 +558,17 @@ export default function RetentionPage() {
         retentionOwed: (() => {
           const fromProject = parseFloat(x.retentionOwed || 0) || 0
           if (fromProject > 0) return fromProject
-          const pctRow = parseFloat(e.retentionPct || 0) || 0
+          // READ EXACTLY WHAT THE TWO COLUMNS BESIDE IT SHOW.
+          //
+          // My first attempt read e.retentionPct only. But the Ret % column resolves
+          // `e.retentionPct || x.retentionPct`, so a project carrying the percentage and
+          // a row that does not still displays 5% - and the fallback saw nothing and
+          // returned zero again. Same for Applied for, which is a typed value on the row
+          // OR the figure from the latest application.
+          //
+          // Whatever those two cells display is what this cell is computed from. That is
+          // the only way the three can be read across and make sense.
+          const pctRow = parseFloat(e.retentionPct || x.retentionPct || 0) || 0
           if (pctRow <= 0) return fromProject
           const base = parseFloat((e.appliedFor != null && e.appliedFor !== '') ? e.appliedFor : (x.appliedForLatest || 0)) || 0
           if (base <= 0) return fromProject

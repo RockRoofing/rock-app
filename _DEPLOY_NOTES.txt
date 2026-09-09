@@ -1,43 +1,50 @@
-pkg785 - Retention Owed showed £0.00 against a 5% row
-======================================================
+pkg786 - HOTFIX: the retention fallback was reading the wrong field
+====================================================================
 
-DEPLOY OVER pkg784 (contains pkg784). Thirteen files.
+DEPLOY OVER pkg785. Thirteen files. Contains pkg785.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/retention.js                (changed here)
-  everything else as pkg784
+  pages/retention.js                (the fix)
+  everything else as pkg785
 
-WHY J109 READ ZERO
-------------------
-Not because it was added manually - because the Ret % you can see and the Ret %
-the calculation uses are two different fields.
+WHY pkg785 DID NOT FIX IT
+--------------------------
+My fallback read e.retentionPct - the percentage saved on the TRACKER ROW.
 
-  the COLUMN shows      e.retentionPct - saved on the tracker row, and it wins
-  the CALCULATION uses  settings.retentionPct - held on the PROJECT
+But the Ret % column resolves `e.retentionPct || x.retentionPct`. So where the
+PROJECT carries the percentage and the row does not, the column still shows 5%
+while my fallback saw nothing and returned zero. Exactly the fault I was fixing,
+one field along.
 
-J109 has 5% on the tracker row and nothing on the project, so the column said 5%
-and Retention Owed said £0.00. Gross AFA reading "-" and MCD "0.00 (default)"
-say the same thing: that project record is largely empty.
+Same for Applied for, which is a typed value on the row OR the figure from the
+latest application.
 
 THE FIX
 -------
-Where the project has no retention percentage, the row falls back to its own
-against its applied-for figure, less anything already claimed back.
+Retention Owed is now computed from precisely what the two columns beside it
+display, using the same resolution:
 
-  J109   £112,263.79 applied for at 5%   ->   £5,613.19
+  Ret %        e.retentionPct || x.retentionPct
+  Applied for  typed on the row, else from the latest application
 
-The project figure still wins wherever it is set, so nothing that was already
-right changes. It also handles both forms - project percentages are stored as
-fractions (0.05), tracker rows as whole numbers (5).
+  pct on the ROW only        £5,613.19
+  pct on the PROJECT only    £5,613.19
+  applied-for typed on row   £5,613.19
+  neither                        £0.00
+  dashboard already right    unchanged
 
-WHAT YOU SHOULD STILL DO
--------------------------
-Set the retention percentage in Project Details on J109. Every other calculation
-reads the project record, not the tracker row - the cash flow schedules releases
-from it, the WIP figures use it, and the application certificates take it from
-there too. This fallback fixes the column you were looking at; it does not make
-the rest of the system agree.
+J109 should read £5,613.19 - £112,263.79 at 5%.
 
-If several projects show a Ret % with £0.00 owed, they all have the same gap.
+The card and the totals row both read this merged value, so they follow without
+further change.
+
+THE UNDERLYING POINT
+--------------------
+Three columns sat side by side and were computed from three different places.
+Reading across them could not make sense. They now come from one resolution.
+
+Setting the retention percentage in Project Details on J109 is still worth
+doing - the cash flow, WIP and the application certificates all read the project
+record, not the tracker row.
