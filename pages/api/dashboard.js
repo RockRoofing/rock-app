@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].appliedForNetOfMcd === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -249,7 +249,18 @@ export default async function handler(req, res) {
           let prevGross = 0
           for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
           const sum = computeApplicationSummary(latest, prevGross)
-          appliedForLatest = sum.grossCurrent || sum.applicationTotal || 0
+          // APPLIED FOR = GROSS, LESS MCD, INCLUDING RETENTION.
+          //
+          // This read grossCurrent, which is the account BEFORE main contractor's
+          // discount. Retention is not charged on that - it is charged on the sub-total
+          // after MCD - so the Applied for column was overstated by the discount and the
+          // retention calculated from it was overstated by the same proportion.
+          //
+          // netBeforeRet is exactly the right figure: MCD taken off whatever it applies
+          // to, retention still inside it. It is the number the certificate itself shows
+          // on the line above the retention deduction, so the tracker and the application
+          // now agree.
+          appliedForLatest = (sum.current && sum.current.netBeforeRet) || 0
           // The PERIOD END of the latest application. The 13-week cash flow uses this to
           // drop project forecasts for periods already applied for - that money is now a
           // real invoice, and counting the forecast as well double-counts it.
@@ -369,7 +380,21 @@ export default async function handler(req, res) {
       // Net value EXCLUDING retention (what's on the invoices' SubTotal after the
       // 612 deduction) — used to derive retention amounts for display.
       const netExRetention = invoicedSales200 > 0 ? invoicedSales200 * (1 - retPct) : invoicedExVat
-      const totalRetention = invoicedSales200 > 0 ? invoicedSales200 * retPct : (retPct > 0 ? invoicedExVat * retPct / (1 - retPct) : 0)
+      // RETENTION IS HELD ON WHAT HAS BEEN APPLIED FOR, NOT WHAT HAS BEEN INVOICED.
+      //
+      // This read invoicedSales200 - Xero sales - so retention on a certified application
+      // did not exist until the invoice was raised. On a job applying monthly that left a
+      // month of retention missing from the register every month, and understated the
+      // total by whatever was sitting between application and invoice.
+      //
+      // The customer holds it from the moment they certify. Applied for is the right base.
+      // Falls back to the invoiced figure where there are no applications - a legacy or
+      // tracker-only project still needs a number.
+      const retentionBase = appliedForLatest > 0
+        ? appliedForLatest
+        : (invoicedSales200 > 0 ? invoicedSales200 : (retPct > 0 ? invoicedExVat / (1 - retPct) : 0))
+      const totalRetention = retentionBase * retPct
+      const retentionBasis = appliedForLatest > 0 ? 'applied for' : 'invoiced'
       const now = new Date()
       const pc1 = settings.pcDate ? new Date(settings.pcDate) : null
       const pc2 = settings.defectsDate ? new Date(settings.defectsDate) : null
@@ -564,6 +589,7 @@ export default async function handler(req, res) {
         materialsBudget,
         retentionOutstanding,
         totalRetention,
+        retentionBasis,
         // Kept for anything still reading it: retention still HELD per Xero, i.e.
         // deducted less released. Was Math.abs(retention612), which read a net credit as
         // if it were retention held.
@@ -597,6 +623,10 @@ export default async function handler(req, res) {
             : (retPct != null && !isNaN(retPct) ? retPct : ''),
         }, resolvedPeople),
         completeV6: true,
+        // Bumped when Applied for moved from gross to net-of-MCD. Without a new marker a
+        // cache written by the old code keeps serving the old figures for four hours,
+        // and the fix looks like it did not deploy.
+        appliedForNetOfMcd: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

@@ -1,34 +1,60 @@
-pkg779 - Stage must be chosen on a new project
-===============================================
+pkg780 - Retention owed off Applied for, net of MCD
+====================================================
 
-DEPLOY OVER pkg778 (contains pkg778). Thirteen files.
+DEPLOY OVER pkg779 (contains pkg779). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
-  pages/crm.js                      (changed here)
-  everything else as pkg778
+  pages/api/dashboard.js            (changed here)
+  everything else as pkg779
 
-WHAT CHANGED
-------------
-The Stage dropdown on Add new project starts blank, reads "Select a stage...",
-is marked with an asterisk like the title, and shows a red border until one is
-picked. Save is refused with "Please choose a stage."
+WHAT I CHECKED FIRST
+--------------------
+Two of the three things you asked for were already right:
 
-WHY IT MATTERS MORE THAN IT DID LAST WEEK
-------------------------------------------
-It defaulted to Project In, so anybody who did not look at the field created the
-project there without deciding to.
+  Retention owed already worked off Applied for where an application existed -
+  totalRetention reads appliedForLatest and only falls back to invoiced when
+  there is no application. Rows still showing an invoiced basis have no sent
+  application, and the retentionBasis field says which was used.
 
-That was harmless when Project In was just the first column. It is not now:
-pkg771 made Project In exempt from the no-activity reminders and stopped it
-creating a Tender return activity. A project that lands there by accident is a
-project nobody will be reminded about.
+  The card already sums the retentionOwed COLUMN for live and defects rows only.
+  It reads the same figure the column shows, so the two cannot disagree.
 
-Landing in the inbox should be a decision.
+WHAT WAS ACTUALLY WRONG
+------------------------
+Applied for read grossCurrent - the account BEFORE main contractor's discount.
 
-THE SERVER FALLBACK IS KEPT
-----------------------------
-addDeal still reads `data.stageId || 'stage_project_in'`. The modal now prevents
-an empty stage reaching it, but if anything else ever creates a deal without one
-it goes somewhere sensible rather than into a stage that does not exist.
+Retention is not charged on that. On a certificate MCD comes off first and
+retention is charged on the sub-total after it. So Applied for was overstated by
+the discount, and every retention figure derived from it was overstated by the
+same proportion.
+
+On a job at 437,000 gross with 5% MCD and 3% retention:
+
+  Applied for   was 437,000   now 415,150
+  Retention     was  13,110   now  12,455
+
+It now reads current.netBeforeRet - MCD taken off whatever it applies to,
+retention still inside it. That is the exact line the certificate shows above
+the retention deduction, so the tracker and the application agree.
+
+YES, IT INCLUDES RETENTION
+---------------------------
+You asked me to check. netBeforeRet is the figure BEFORE retention is deducted,
+so retention is inside it and is not applied twice. mkCol() in lib/applications.js
+computes retention FROM netBeforeRet, which is the same basis.
+
+MCD is also handled properly per project: some contracts charge it on the
+contract sum only, valuing variations and materials separately. netBeforeRet
+respects the mcdOnVariations and mcdOnMaterials flags stamped on each
+application, so a split-MCD job is right too.
+
+CACHE MARKER BUMPED
+-------------------
+The dashboard cache validity check now requires appliedForNetOfMcd. Without it a
+cache written by the old code would keep serving the old figures for up to four
+hours and the fix would look like it had not deployed.
+
+EXPECT EVERY RETENTION FIGURE TO FALL SLIGHTLY - by the MCD percentage. That is
+the correction, not a new fault.

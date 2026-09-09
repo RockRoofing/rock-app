@@ -650,7 +650,18 @@ export default function RetentionPage() {
     // had been sitting in this file unused since it was written - it is exactly this, and
     // it is what "how much retention are we chasing" actually means. The gross figure it
     // replaced took no account of anything having been released.
-    outstanding: allEntries.reduce((s, e) => s + calcBalance(e), 0),
+    // LIVE AND DEFECTS LIABILITY ONLY, off the Retention Owed column.
+    //
+    // It summed calcBalance across EVERY row, completed jobs included. A completed
+    // project has had its retention released - carrying it in "outstanding" is chasing
+    // money that has already arrived, and on a register this old that is most of the rows.
+    //
+    // It also reads the same retentionOwed the column shows, so the card and the column
+    // it sits above cannot disagree. calcBalance was a second calculation of the same
+    // thing, which is how the two came to differ in the first place.
+    outstanding: allEntries
+      .filter((e) => { const st = retStatusOf(e); return st === 'live' || st === 'defects' })
+      .reduce((s, e) => s + (parseFloat(e.retentionOwed || 0) || 0), 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
     //
     // It was Total Due minus Total Paid - inc VAT, and measuring what had been RECEIVED
