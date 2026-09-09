@@ -1,51 +1,45 @@
-pkg783 - Retention card rebased, and a totals row
-==================================================
+pkg784 - Retention Outstanding now ties to the totals row
+==========================================================
 
-DEPLOY OVER pkg782 (contains pkg782). Thirteen files.
+DEPLOY OVER pkg783 (contains pkg783). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/retention.js                (changed here)
-  everything else as pkg782
+  everything else as pkg783
 
-1. THE CARD
------------
-Now: total Retention Owed across ALL projects, less the 1st or 2nd Value of any
-half marked released.
+THE FLOOR IS GONE
+-----------------
+The card used max(0, owed - released) per project, so a row whose released
+halves exceeded its Retention Owed contributed zero rather than a negative.
 
-Two changes from pkg782:
-  - it no longer nets off 612, it nets off the RELEASED HALVES
-  - it is no longer limited to Live and Defects
+Your second screenshot shows the row responsible: Retention Owed £0.00 with a
+£2,766.97 first value marked released. That single row put the card £2,766.96
+above the column arithmetic, with nothing on screen to explain it.
 
-Dropping the status filter is deliberate. A completed project with an unreleased
-half is still money being held, and hiding it is how retention gets forgotten -
-which is what this register exists to prevent.
+Straight subtraction now:
 
-"Released" means released1/released2 - a click on the cell OR a half ticked in
-an application's retention section. Those are the same functions that colour the
-cells, so the card and the rows cannot disagree.
+  Retention Owed total    168,076.12
+  less 1st released        48,667.20
+  less 2nd released        13,452.49
+  card                    105,956.43     (was 108,723.39)
 
-  J244 live       owed 12,455   released      0  -> 12,455
-  J197 defects    owed 16,530   released  8,265  ->  8,265
-  J147 complete   owed 16,530   released 16,530  ->      0
-  card                                              20,720
+You are right that it is the better rule. Where the tracker balances, the
+releases are right and the two agree by definition - and a card you can check
+against the row underneath is worth more than one that quietly absorbs an odd
+row.
 
-Floored per project, so a release larger than its owed figure cannot pull the
-total down - that is a data problem on one row, not a credit against the others.
+ONE THING TO KEEP IN MIND
+--------------------------
+The card is ALL projects; the totals row sums what the FILTER is showing. They
+tie when all three status buttons are on, as in your second screenshot. With
+only Live Project selected the totals row is smaller, and that is the filter
+working, not a fault. The card tooltip now says so.
 
-2. TOTALS ROW
--------------
-At the foot of the table, sticky, so it stays visible however far you scroll.
-
-Totals: Gross AFA, MCD, Final Account, Applied for, Invoiced, Account Remaining,
-Retention Owed, 612 Deducted, 612 Released, VAT, Total Due, Total Paid, Total
-Remaining - and the 1st / 2nd Value columns showing only the halves actually
-RELEASED, matching the card.
-
-It sums the rows CURRENTLY SHOWN, so it answers the filter you have applied. The
-row count sits beside the label - "43 shown" - so a filtered total cannot be
-mistaken for the whole register.
-
-Cell count checked against the header: 28 and 28, so nothing sits under the
-wrong column.
+WORTH A LOOK
+------------
+That £0.00-owed row with a released half is worth checking. Either the release
+value belongs to a project whose retention has been fully claimed back through
+applications, or the owed figure is wrong. The floor was hiding it; now it is
+part of the total and will pull it down slightly.

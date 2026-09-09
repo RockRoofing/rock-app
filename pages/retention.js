@@ -683,13 +683,22 @@ export default function RetentionPage() {
     // being held, and dropping it hides exactly the sort of forgotten retention this
     // register exists to catch.
     //
-    // Floored per project so a release larger than the owed figure cannot pull the total
-    // down - that is a data problem on one row, not a credit against the others.
+    // NO PER-PROJECT FLOOR.
+    //
+    // It used max(0, owed - released), so a row whose released halves exceeded its
+    // Retention Owed contributed nothing instead of a negative - and the card then could
+    // not be reconciled against the column totals underneath it. One row with 0.00 owed
+    // and a 2,766.97 first release put the card 2,766.97 above the arithmetic, with
+    // nothing on screen to explain the gap.
+    //
+    // Straight subtraction now: Retention Owed less the halves released. A card you can
+    // check against the totals row is worth more than one that quietly absorbs an odd
+    // row, and where the releases are right the two agree by definition.
     outstanding: allEntries.reduce((s, e) => {
       const owed = parseFloat(e.retentionOwed || 0) || 0
       const rel = (released1(e) ? (parseFloat(e.release1Value || 0) || 0) : 0)
         + (released2(e) ? (parseFloat(e.release2Value || 0) || 0) : 0)
-      return s + Math.max(0, owed - rel)
+      return s + (owed - rel)
     }, 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
     //
@@ -791,7 +800,7 @@ export default function RetentionPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
                 { label: 'Retention Outstanding', value: fmtC(totals.outstanding), color: totals.outstanding > 1 ? '#dc2626' : '#16a34a',
-                  tip: 'Total Retention Owed across all projects, less any 1st or 2nd Value marked released - by clicking the cell or by a half ticked on an application. What is still being held.' },
+                  tip: 'Total Retention Owed across all projects, less any 1st or 2nd Value marked released - by clicking the cell or by a half ticked on an application. Ties to the totals row when all three status filters are on.' },
                 { label: 'Remaining to Claim', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a',
                   tip: 'Final Account minus Applied for, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
                 { label: 'In Defects Liability', value: totals.defects, raw: true, color: '#ca8a04',
