@@ -541,7 +541,32 @@ export default function RetentionPage() {
         ...e,
         inXero: x.inXero !== false,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
-        retentionOwed: x.retentionOwed, retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
+        // RETENTION OWED, WITH A FALLBACK TO THE ROW'S OWN RET %.
+        //
+        // x.retentionOwed is computed in the dashboard from settings.retentionPct - the
+        // PROJECT's percentage. But the Ret % COLUMN shows e.retentionPct, the value
+        // saved on this tracker row, and that wins on display (line below).
+        //
+        // So a project with no retention % in its details, edited on the tracker instead,
+        // showed 5% in one column and £0.00 in the next. J109 Sheffield: £112,263.79
+        // applied for, 5% on screen, nothing owed.
+        //
+        // Where the dashboard has nothing, fall back to the row's own percentage against
+        // its applied-for figure. The column then agrees with the Ret % beside it. The
+        // proper fix is still to set the percentage in Project Details, which is what
+        // every other calculation reads.
+        retentionOwed: (() => {
+          const fromProject = parseFloat(x.retentionOwed || 0) || 0
+          if (fromProject > 0) return fromProject
+          const pctRow = parseFloat(e.retentionPct || 0) || 0
+          if (pctRow <= 0) return fromProject
+          const base = parseFloat((e.appliedFor != null && e.appliedFor !== '') ? e.appliedFor : (x.appliedForLatest || 0)) || 0
+          if (base <= 0) return fromProject
+          // Row percentages are held as whole numbers (5), project ones as fractions.
+          const frac = pctRow > 1 ? pctRow / 100 : pctRow
+          return Math.max(0, (base * frac) - (parseFloat(x.retentionClaimed || 0) || 0))
+        })(),
+        retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
         // Live Xero figures - must be layered on like the rest, or an edited row shows
         // blanks where an untouched one shows the numbers.
         appRelease1: x.appRelease1, appRelease2: x.appRelease2,

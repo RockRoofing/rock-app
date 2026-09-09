@@ -1,45 +1,43 @@
-pkg784 - Retention Outstanding now ties to the totals row
-==========================================================
+pkg785 - Retention Owed showed £0.00 against a 5% row
+======================================================
 
-DEPLOY OVER pkg783 (contains pkg783). Thirteen files.
+DEPLOY OVER pkg784 (contains pkg784). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/retention.js                (changed here)
-  everything else as pkg783
+  everything else as pkg784
 
-THE FLOOR IS GONE
------------------
-The card used max(0, owed - released) per project, so a row whose released
-halves exceeded its Retention Owed contributed zero rather than a negative.
+WHY J109 READ ZERO
+------------------
+Not because it was added manually - because the Ret % you can see and the Ret %
+the calculation uses are two different fields.
 
-Your second screenshot shows the row responsible: Retention Owed £0.00 with a
-£2,766.97 first value marked released. That single row put the card £2,766.96
-above the column arithmetic, with nothing on screen to explain it.
+  the COLUMN shows      e.retentionPct - saved on the tracker row, and it wins
+  the CALCULATION uses  settings.retentionPct - held on the PROJECT
 
-Straight subtraction now:
+J109 has 5% on the tracker row and nothing on the project, so the column said 5%
+and Retention Owed said £0.00. Gross AFA reading "-" and MCD "0.00 (default)"
+say the same thing: that project record is largely empty.
 
-  Retention Owed total    168,076.12
-  less 1st released        48,667.20
-  less 2nd released        13,452.49
-  card                    105,956.43     (was 108,723.39)
+THE FIX
+-------
+Where the project has no retention percentage, the row falls back to its own
+against its applied-for figure, less anything already claimed back.
 
-You are right that it is the better rule. Where the tracker balances, the
-releases are right and the two agree by definition - and a card you can check
-against the row underneath is worth more than one that quietly absorbs an odd
-row.
+  J109   £112,263.79 applied for at 5%   ->   £5,613.19
 
-ONE THING TO KEEP IN MIND
---------------------------
-The card is ALL projects; the totals row sums what the FILTER is showing. They
-tie when all three status buttons are on, as in your second screenshot. With
-only Live Project selected the totals row is smaller, and that is the filter
-working, not a fault. The card tooltip now says so.
+The project figure still wins wherever it is set, so nothing that was already
+right changes. It also handles both forms - project percentages are stored as
+fractions (0.05), tracker rows as whole numbers (5).
 
-WORTH A LOOK
-------------
-That £0.00-owed row with a released half is worth checking. Either the release
-value belongs to a project whose retention has been fully claimed back through
-applications, or the owed figure is wrong. The floor was hiding it; now it is
-part of the total and will pull it down slightly.
+WHAT YOU SHOULD STILL DO
+-------------------------
+Set the retention percentage in Project Details on J109. Every other calculation
+reads the project record, not the tracker row - the cash flow schedules releases
+from it, the WIP figures use it, and the application certificates take it from
+there too. This fallback fixes the column you were looking at; it does not make
+the rest of the system agree.
+
+If several projects show a Ret % with £0.00 owed, they all have the same gap.
