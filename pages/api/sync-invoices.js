@@ -105,8 +105,16 @@ async function fetchAllSalesCreditNotes(at, tid, fromDate) {
       if (full.Type !== 'ACCRECCREDIT') continue
       if (full.Status === 'DELETED' || full.Status === 'VOIDED') continue
       let lineItems = full.LineItems
-      if (!Array.isArray(lineItems) || lineItems.length === 0) {
-        lineItems = await fetchCreditNoteLineItems(at, tid, full.CreditNoteID)
+      let allocations = full.Allocations
+      // Fetch the full record when EITHER is missing. Allocations are absent from the
+      // list response even when line items are present, so testing only for lines left
+      // every credit note unpaired.
+      if (!Array.isArray(lineItems) || lineItems.length === 0 || !Array.isArray(allocations)) {
+        const one = await fetchCreditNoteFull(at, tid, full.CreditNoteID)
+        if (one) {
+          if (!Array.isArray(lineItems) || lineItems.length === 0) lineItems = one.LineItems || []
+          if (!Array.isArray(allocations)) allocations = one.Allocations || []
+        }
       }
       const trackingNames = new Set()
       let sales200 = 0, retention612 = 0
@@ -132,7 +140,7 @@ async function fetchAllSalesCreditNotes(at, tid, fromDate) {
         // something already coded. With no tracking it fell to __UNASSIGNED__, and its
         // 612 movement never reached the project. That is the discrepancy on any job
         // where a credit note has been applied.
-        allocatedTo: (full.Allocations || [])
+        allocatedTo: (allocations || [])
           .map(al => al?.Invoice?.InvoiceID)
           .filter(Boolean),
       })
@@ -143,17 +151,22 @@ async function fetchAllSalesCreditNotes(at, tid, fromDate) {
   return out
 }
 
-async function fetchCreditNoteLineItems(at, tid, id) {
+// Returns the WHOLE credit note, not just its lines.
+//
+// Xero's /CreditNotes LIST omits both LineItems and ALLOCATIONS. The line items were
+// already being re-fetched here; allocations were not, so allocatedTo came back empty on
+// every credit note and nothing could ever be paired against the invoice it reverses.
+async function fetchCreditNoteFull(at, tid, id) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const r = await fetch(`https://api.xero.com/api.xro/2.0/CreditNotes/${id}`, {
       headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' }
     })
     if (r.status === 429) { await sleep(2000); continue }
-    if (!r.ok) return []
+    if (!r.ok) return null
     const d = await r.json()
-    return (d.CreditNotes || [])[0]?.LineItems || []
+    return (d.CreditNotes || [])[0] || null
   }
-  return []
+  return null
 }
 
 // Re-fetch one invoice's line items, retrying on 429 so it's never dropped.

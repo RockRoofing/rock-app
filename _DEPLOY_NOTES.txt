@@ -1,61 +1,45 @@
-pkg789 - Retention Owed is the source of truth, and everything ties to it
-=========================================================================
+pkg790 - Why the netting never fired
+=====================================
 
-DEPLOY OVER pkg788 (contains pkg788). Fourteen files.
+DEPLOY OVER pkg789 (contains pkg789). Fourteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
+  pages/api/sync-invoices.js        (changed here)
   pages/api/dashboard.js            (changed here)
-  pages/retention.js                (changed here)
-  everything else as pkg788
+  everything else as pkg789
 
-THE PROOF, ON J147
-------------------
-  Retention Owed  22,363.79 x 5%        = 1,118.19
-  612 Deducted    gross 1,760.38, netted  1,118.18
-  612 Released    gross 1,760.39, netted  1,118.19
-  Halves          559.09 each, both released = 1,118.19
+THE CAUSE
+---------
+Xero's /CreditNotes LIST endpoint omits Allocations - the same reason it omits
+LineItems, which the sync was already re-fetching one credit note at a time.
 
-Everything ties to the penny, and the penny is in Xero's own export.
+I only tested for missing line items. Allocations are absent even when the lines
+ARE present, so allocatedTo came back empty on every credit note and there was
+never anything to pair against. The netting in pkg789 was correct and simply
+never ran.
 
-1. CREDIT NOTE REVERSALS ARE NETTED
-------------------------------------
-App 2 was raised in Feb 2024, credited out in full in Nov 2025 and re-raised the
-same day. Both postings were counted, inflating each column by 642.20. The
-account still nets to zero, so nothing looked wrong until you compared against
-Retention Owed.
+TWO FIXES, SO IT WORKS EITHER WAY
+----------------------------------
+1. The sync now fetches the whole credit note when EITHER lines or allocations
+   are missing, and keeps the allocations.
 
-A credit note is now cancelled against the invoice it reverses, matched through
-Xero's Allocations (captured in pkg788). Only the overlapping amount and only
-where the signs oppose, so a partial credit leaves the remainder and a credit
-note that reinforces a deduction is left alone.
+2. The dashboard falls back to matching on REFERENCE where a stored line has no
+   allocation - a credit note reversing an application carries that
+   application's reference, and it must also be an exact equal-and-opposite 612
+   amount. Two coincidences at once is not a coincidence.
 
-2. THE HALVES ARE CALCULATED
------------------------------
-J147 carried 289.03 a half - half of the App 1 deduction of 578.05, the only
-application that existed when the old spreadsheet was built. Nothing
-recalculated them, and an imported value beat the computed one because
-release1Value was never in the merge's override list.
+The second means lines already in the store net correctly without waiting for a
+re-sync. Tested against J147 with allocations stripped out entirely:
 
-Each half is now Retention Owed / 2, so the two always sum to what is owed.
-J147: 559.09 each. As agreed, this overwrites the imported values.
+  deducted 1,118.18   released 1,118.19   Retention Owed 1,118.19
 
-3. THE TICK COLUMN NOW READS YOUR MARKS
-----------------------------------------
-It compared 612 Released against 612 Deducted and printed "both halves" when
-they matched - the language of the release cells, for a test that never looked
-at them. That is why unticking a release changed nothing.
+WHAT TO DO
+----------
+Deploy, then hard refresh. The reference fallback should correct J147
+immediately without a re-sync.
 
-Two comparisons now, with Retention Owed as the source of truth:
-
-  Retention Owed   vs  612 Deducted
-  Marked released  vs  612 Released
-
-Labels: ties / deducted out / released out / both out, with the larger gap shown
-underneath and both comparisons spelled out in the hover.
-
-RE-SYNC FIRST
--------------
-The netting reads allocatedTo, which only exists on lines synced with pkg788.
-Run Sync Invoices at 48 months before judging the figures.
+Then run Sync Invoices at 48 months when convenient - that picks up the real
+allocations, which are more reliable than reference matching for anything where
+the reference was edited or a credit note covers more than one invoice.

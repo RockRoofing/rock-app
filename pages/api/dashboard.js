@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612Netted === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612NettedV2 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -205,8 +205,19 @@ export default async function handler(req, res) {
         const cancelled = new Set()
         for (const cn of invoiceLines) {
           if (!cn.creditNote || !(cn.retention612 || 0)) continue
-          for (const invId of (cn.allocatedTo || [])) {
-            const inv = invoiceLines.find(l => !l.creditNote && String(l.xeroInvoiceId) === String(invId))
+          // Allocation first. Where a line was stored before allocations were synced,
+          // fall back to an invoice with the SAME REFERENCE and an equal-and-opposite 612
+          // amount - a credit note reversing an application carries that application's
+          // reference, and an exact opposite is not a coincidence.
+          const byAlloc = (cn.allocatedTo || [])
+            .map(id => invoiceLines.find(l => !l.creditNote && String(l.xeroInvoiceId) === String(id)))
+            .filter(Boolean)
+          const byRef = byAlloc.length ? [] : invoiceLines.filter(l => !l.creditNote
+            && (l.retention612 || 0)
+            && String(l.reference || '').trim().toLowerCase() === String(cn.reference || '').trim().toLowerCase()
+            && Math.abs((l.retention612 || 0) + (cn.retention612 || 0)) < 0.01)
+          for (const inv of [...byAlloc, ...byRef]) {
+            const invId = inv.xeroInvoiceId
             if (!inv || !(inv.retention612 || 0)) continue
             // Opposite signs only - a credit note reinforcing a deduction is not a reversal.
             if (Math.sign(inv.retention612) === Math.sign(cn.retention612)) continue
@@ -689,6 +700,7 @@ export default async function handler(req, res) {
         retentionHalfOnFinal: true,
         // Bumped again: 612 now nets credit note reversals.
         ret612Netted: true,
+        ret612NettedV2: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,
