@@ -1,50 +1,49 @@
-pkg786 - HOTFIX: the retention fallback was reading the wrong field
-====================================================================
+pkg787 - Retention Owed = Applied for x Ret %. Nothing else.
+=============================================================
 
-DEPLOY OVER pkg785. Thirteen files. Contains pkg785.
+DEPLOY OVER pkg786. Thirteen files. Contains pkg786.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/retention.js                (the fix)
-  everything else as pkg785
+  everything else as pkg786
 
-WHY pkg785 DID NOT FIX IT
---------------------------
-My fallback read e.retentionPct - the percentage saved on the TRACKER ROW.
+WHY THE LAST TWO ATTEMPTS FAILED
+---------------------------------
+A row is built in TWO places:
 
-But the Ret % column resolves `e.retentionPct || x.retentionPct`. So where the
-PROJECT carries the percentage and the row does not, the column still shows 5%
-while my fallback saw nothing and returned zero. Exactly the fault I was fixing,
-one field along.
+  line 433  project-derived rows      retentionOwed from p.totalRetention
+  line 558  saved entries merged      retentionOwed from x.retentionOwed
 
-Same for Applied for, which is a typed value on the row OR the figure from the
-latest application.
+Both took it from the dashboard. I patched the SECOND one twice. J109 is built
+by the FIRST, so nothing I did could ever have reached it. You were right that
+it should not have been difficult - I was fixing a path the row does not use.
 
-THE FIX
--------
-Retention Owed is now computed from precisely what the two columns beside it
-display, using the same resolution:
+NOW
+---
+One function, calcRetentionOwed(entry), and it is exactly what you said:
 
-  Ret %        e.retentionPct || x.retentionPct
-  Applied for  typed on the row, else from the latest application
+    Applied for  x  Ret %
 
-  pct on the ROW only        £5,613.19
-  pct on the PROJECT only    £5,613.19
-  applied-for typed on row   £5,613.19
-  neither                        £0.00
-  dashboard already right    unchanged
+Nothing external. Both figures are already resolved and already on screen by the
+time the row renders, so the three cells can be read straight across.
 
-J109 should read £5,613.19 - £112,263.79 at 5%.
+Used by all four consumers - the cell, the sort, the outstanding card and the
+totals row - so neither construction path matters any more and they cannot
+disagree.
 
-The card and the totals row both read this merged value, so they follow without
-further change.
+  J109   £112,263.79 x 5%   =   £5,613.19
 
-THE UNDERLYING POINT
---------------------
-Three columns sat side by side and were computed from three different places.
-Reading across them could not make sense. They now come from one resolution.
+Handles whole numbers (5) and fractions (0.05), and returns zero only when one
+of the two columns is genuinely empty.
 
-Setting the retention percentage in Project Details on J109 is still worth
-doing - the cash flow, WIP and the application certificates all read the project
-record, not the tracker row.
+WHAT THIS CHANGES ELSEWHERE
+----------------------------
+The retentionClaimed deduction is gone from this column - it was part of the old
+dashboard figure. Retention Owed is now the gross retention on what has been
+applied for. Halves already released are still deducted in the CARD, which is
+where you asked for them.
+
+The tooltip now reads: "Applied for x Ret % - exactly the two columns to the
+left. Nothing else feeds it."

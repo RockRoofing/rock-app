@@ -72,6 +72,23 @@ function calcTotalDue(entry) {
 //
 // What is left to CLAIM is measured against what has been applied for. Falls back to
 // invoiced only where there is no application - the same rule the retention figures use.
+// RETENTION OWED = APPLIED FOR x RET %.
+//
+// Exactly the two columns beside it, and nothing else. It was being built in two
+// different places - once for project-derived rows and once when a saved entry is merged
+// with live data - each from its own set of external fields, and neither agreed with what
+// was on screen. J109 read 5% and £112,263.79 in two columns and £0.00 in the third.
+//
+// Both figures are already resolved by the time a row is rendered. Deriving from them
+// means the three cells can be read across, and there is one rule instead of two.
+export function calcRetentionOwed(entry) {
+  const pct = parseFloat(entry.retentionPct || 0) || 0
+  const base = parseFloat(entry.appliedFor || 0) || 0
+  if (pct <= 0 || base <= 0) return 0
+  // Whole numbers on tracker rows (5), fractions on project records (0.05).
+  return base * (pct > 1 ? pct / 100 : pct)
+}
+
 function calcAccountRemaining(entry) {
   const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
   const applied = parseFloat(entry.appliedForLatest || 0) || 0
@@ -410,6 +427,9 @@ export default function RetentionPage() {
           // Still HELD: retention on the invoiced value, less anything already claimed
           // back through an application's Retention section. Without the deduction the
           // register keeps chasing money that has been applied for.
+          // Derived by calcRetentionOwed from appliedFor x retentionPct once the row is
+          // assembled - see the note on that function. Kept here only as a fallback for
+          // rows that never get a percentage or an applied-for figure.
           retentionOwed: Math.max(0, (p.totalRetention || 0) - (p.retentionClaimed || 0)),
           retentionClaimed: p.retentionClaimed || 0,
           // From the retention section on the project's latest application - this is
@@ -541,41 +561,6 @@ export default function RetentionPage() {
         ...e,
         inXero: x.inXero !== false,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
-        // RETENTION OWED, WITH A FALLBACK TO THE ROW'S OWN RET %.
-        //
-        // x.retentionOwed is computed in the dashboard from settings.retentionPct - the
-        // PROJECT's percentage. But the Ret % COLUMN shows e.retentionPct, the value
-        // saved on this tracker row, and that wins on display (line below).
-        //
-        // So a project with no retention % in its details, edited on the tracker instead,
-        // showed 5% in one column and £0.00 in the next. J109 Sheffield: £112,263.79
-        // applied for, 5% on screen, nothing owed.
-        //
-        // Where the dashboard has nothing, fall back to the row's own percentage against
-        // its applied-for figure. The column then agrees with the Ret % beside it. The
-        // proper fix is still to set the percentage in Project Details, which is what
-        // every other calculation reads.
-        retentionOwed: (() => {
-          const fromProject = parseFloat(x.retentionOwed || 0) || 0
-          if (fromProject > 0) return fromProject
-          // READ EXACTLY WHAT THE TWO COLUMNS BESIDE IT SHOW.
-          //
-          // My first attempt read e.retentionPct only. But the Ret % column resolves
-          // `e.retentionPct || x.retentionPct`, so a project carrying the percentage and
-          // a row that does not still displays 5% - and the fallback saw nothing and
-          // returned zero again. Same for Applied for, which is a typed value on the row
-          // OR the figure from the latest application.
-          //
-          // Whatever those two cells display is what this cell is computed from. That is
-          // the only way the three can be read across and make sense.
-          const pctRow = parseFloat(e.retentionPct || x.retentionPct || 0) || 0
-          if (pctRow <= 0) return fromProject
-          const base = parseFloat((e.appliedFor != null && e.appliedFor !== '') ? e.appliedFor : (x.appliedForLatest || 0)) || 0
-          if (base <= 0) return fromProject
-          // Row percentages are held as whole numbers (5), project ones as fractions.
-          const frac = pctRow > 1 ? pctRow / 100 : pctRow
-          return Math.max(0, (base * frac) - (parseFloat(x.retentionClaimed || 0) || 0))
-        })(),
         retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
         // Live Xero figures - must be layered on like the rest, or an edited row shows
         // blanks where an untouched one shows the numbers.
@@ -628,7 +613,7 @@ export default function RetentionPage() {
       case 'finalAccount': return parseFloat(e.finalAccount || 0) || 0
       case 'appliedFor': return parseFloat(e.appliedFor || 0) || 0
       case 'invoiced': return parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0
-      case 'retentionOwed': return parseFloat(e.retentionOwed || 0) || 0
+      case 'retentionOwed': return calcRetentionOwed(e)
       case 'r612': return parseFloat(e.retention612Allocated || 0) || 0
       case 'r612ded': return parseFloat(e.retention612Deducted || 0) || 0
       case 'r612rel': return parseFloat(e.retention612Released || 0) || 0
@@ -730,7 +715,7 @@ export default function RetentionPage() {
     // check against the totals row is worth more than one that quietly absorbs an odd
     // row, and where the releases are right the two agree by definition.
     outstanding: allEntries.reduce((s, e) => {
-      const owed = parseFloat(e.retentionOwed || 0) || 0
+      const owed = calcRetentionOwed(e)
       const rel = (released1(e) ? (parseFloat(e.release1Value || 0) || 0) : 0)
         + (released2(e) ? (parseFloat(e.release2Value || 0) || 0) : 0)
       return s + (owed - rel)
@@ -982,7 +967,7 @@ export default function RetentionPage() {
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Applied for. What is still to be CLAIMED against the final account. Falls back to invoiced only where a project has no application.', null],
-                        ['Retention Owed', 'right', 'Retention still held: APPLIED FOR, gross less MCD with retention included, \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
+                        ['Retention Owed', 'right', 'Applied for \u00d7 Ret % - exactly the two columns to the left. Nothing else feeds it.', 'retentionOwed'],
                         ['612 Deducted', 'right', 'Retention withheld on invoices under account code 612 - the GROSS figure, before any release. Sum of the negative 612 lines. NOTE: the old "612 Allocated" column was the NET (deducted less released), which is a different number.', 'r612ded'],
                         ['612 Released', 'right', 'Retention invoiced back out - the POSITIVE account 612 lines. WARNING: a release posted as a plain sales invoice with no 612 line does not appear here, which is common on older projects. A dash means no 612 movement was found at all, which is NOT the same as nothing released.', 'r612rel'],
                         ['\u2713', 'center', 'Reconciliation: retention is released in halves, so 612 Released should be NOTHING, HALF of 612 Deducted, or ALL of it. Green on any of those three, with which one shown underneath. Red flag on anything else, with how far out it is - usually a part-release, or a deduction still growing because the job is not fully invoiced. A dash means no 612 lines at all.', null],
@@ -1176,7 +1161,7 @@ export default function RetentionPage() {
                             {/* Account Remaining */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{entry.retentionOwed ? fmt(parseFloat(entry.retentionOwed)) : fmt(0)}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{fmt(calcRetentionOwed(entry))}</td>
                             {/* 612 Allocated (gross deducted) and 612 Released. A dash
                                 rather than a zero where no 612 movement exists at all -
                                 "no evidence" and "nothing released" are different
@@ -1345,7 +1330,7 @@ export default function RetentionPage() {
                           <td style={tdT}>{fmtC(sum((e) => parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0))}</td>
                           <td style={tdT} />
                           <td style={tdT}>{fmtC(sum(calcAccountRemaining))}</td>
-                          <td style={tdT}>{fmtC(n('retentionOwed'))}</td>
+                          <td style={tdT}>{fmtC(sum(calcRetentionOwed))}</td>
                           <td style={tdT}>{fmtC(n('retention612Deducted'))}</td>
                           <td style={tdT}>{fmtC(n('retention612Released'))}</td>
                           <td style={tdT} />
