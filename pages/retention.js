@@ -431,10 +431,15 @@ export default function RetentionPage() {
           detailsMissing: p.detailsMissing || [],
           pcDateTBC: !!p.pcDateTBC,
           defectsDateTBC: !!p.defectsDateTBC,
-          release1Value: (p.totalRetention || 0) / 2 || 0,
+          // HALF THE RETENTION ON THE FINAL ACCOUNT, not half of what has accrued so far.
+          // A release is contractual - half at practical completion, half at the end of
+          // defects, both measured against the final account. This read totalRetention,
+          // which is retention on work APPLIED FOR to date, so on a part-complete job it
+          // showed less than the application certificate actually releases.
+          release1Value: (p.retentionHalf != null ? p.retentionHalf : (p.totalRetention || 0) / 2) || 0,
           release1Date: '',
           release1Received: false,
-          release2Value: (p.totalRetention || 0) / 2 || 0,
+          release2Value: (p.retentionHalf != null ? p.retentionHalf : (p.totalRetention || 0) / 2) || 0,
           release2Date: '',
           release2Received: false,
           manual: false,
@@ -667,17 +672,25 @@ export default function RetentionPage() {
     // It also reads the same retentionOwed the column shows, so the card and the column
     // it sits above cannot disagree. calcBalance was a second calculation of the same
     // thing, which is how the two came to differ in the first place.
-    // LESS WHAT HAS ALREADY COME BACK THROUGH 612.
+    // OWED, LESS EVERY HALF ALREADY RELEASED.
     //
-    // Retention Owed is what the applications say is held. Account 612 is where a release
-    // actually lands when it is paid. A half that has been released and received is no
-    // longer outstanding, so carrying it here overstates what is still to chase.
+    // Total Retention Owed across ALL projects, minus the 1st and 2nd Value of any half
+    // marked released - whether that was a click on the cell or a half ticked in an
+    // application's retention section. released1/released2 already answer that, and they
+    // are the same functions the cell colours use, so the card and the row agree.
     //
-    // Owed minus 612 released, live and defects only.
-    outstanding: allEntries
-      .filter((e) => { const st = retStatusOf(e); return st === 'live' || st === 'defects' })
-      .reduce((s, e) => s + Math.max(0,
-        (parseFloat(e.retentionOwed || 0) || 0) - (parseFloat(e.retention612Released || 0) || 0)), 0),
+    // Not filtered by status: a completed project with an unreleased half is still money
+    // being held, and dropping it hides exactly the sort of forgotten retention this
+    // register exists to catch.
+    //
+    // Floored per project so a release larger than the owed figure cannot pull the total
+    // down - that is a data problem on one row, not a credit against the others.
+    outstanding: allEntries.reduce((s, e) => {
+      const owed = parseFloat(e.retentionOwed || 0) || 0
+      const rel = (released1(e) ? (parseFloat(e.release1Value || 0) || 0) : 0)
+        + (released2(e) ? (parseFloat(e.release2Value || 0) || 0) : 0)
+      return s + Math.max(0, owed - rel)
+    }, 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
     //
     // It was Total Due minus Total Paid - inc VAT, and measuring what had been RECEIVED
@@ -766,10 +779,10 @@ export default function RetentionPage() {
               on its own line rather than being lost with the rest. */}
           {embed && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}
-              title="Total Retention Owed less total 612 Released, for Live and Defects Liability projects only.">
+              title="Total Retention Owed across all projects, less any half marked released.">
               <span style={{ fontSize: 11, color: '#888' }}>Retention outstanding</span>
               <span style={{ fontSize: 20, fontWeight: 700, color: totals.outstanding > 1 ? '#dc2626' : '#16a34a' }}>{fmtC(totals.outstanding)}</span>
-              <span style={{ fontSize: 11, color: '#aaa' }}>Owed less 612 released, Live and Defects only</span>
+              <span style={{ fontSize: 11, color: '#aaa' }}>Owed less halves already released</span>
             </div>
           )}
 
@@ -778,7 +791,7 @@ export default function RetentionPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
                 { label: 'Retention Outstanding', value: fmtC(totals.outstanding), color: totals.outstanding > 1 ? '#dc2626' : '#16a34a',
-                  tip: 'Total Retention Owed less total 612 Released, for Live and Defects Liability projects only. Retention Owed is what the applications say is held; 612 is where a release lands when it is actually paid, so a half already received is not still outstanding.' },
+                  tip: 'Total Retention Owed across all projects, less any 1st or 2nd Value marked released - by clicking the cell or by a half ticked on an application. What is still being held.' },
                 { label: 'Remaining to Claim', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a',
                   tip: 'Final Account minus Applied for, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
                 { label: 'In Defects Liability', value: totals.defects, raw: true, color: '#ca8a04',
@@ -932,9 +945,9 @@ export default function RetentionPage() {
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from Edit Project Details. Blank means none has been set on that project.', 'qs'],
-                        ['1st Value \u2013 click to release', 'right', 'First retention release. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
+                        ['1st Value \u2013 click to release', 'right', 'First retention release - half of the retention on the FINAL ACCOUNT (Gross AFA less MCD x retention %), which is what the contract holds and what an application certificate releases. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
                         ['1st Date', 'left', 'Due date of the first retention release (manual).', 'r1date'],
-                        ['2nd Value \u2013 click to release', 'right', 'Second retention release. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
+                        ['2nd Value \u2013 click to release', 'right', 'Second retention release - half of the retention on the FINAL ACCOUNT (Gross AFA less MCD x retention %), which is what the contract holds and what an application certificate releases. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
                         ['2nd Date', 'left', 'Due date of the second retention release (manual).', 'r2date'],
                         ['VAT', 'right', 'VAT on the Final Account = Final Account × VAT-type rate. Reverse charge / 0% = £0.', null],
                         ['VAT Type', 'left', 'VAT treatment from Xero: reverse charge, 5%, 20%, zero-rated, etc.', null],
@@ -1261,6 +1274,55 @@ export default function RetentionPage() {
                         </>
                       )
                     })}
+                    {/* TOTALS. Sums the rows CURRENTLY SHOWN, so it answers the filter you
+                        have applied rather than always reporting the whole register - and
+                        the count says how many rows are behind it, so a filtered total
+                        cannot be mistaken for the lot.
+
+                        Sticky at the foot, because a total you have to scroll 200 rows to
+                        reach is a total nobody reads. */}
+                    {sortedEntries.length > 0 && (() => {
+                      const sum = (fn) => sortedEntries.reduce((t, e) => t + (Number(fn(e)) || 0), 0)
+                      const n = (k) => sum((e) => parseFloat(e[k] || 0) || 0)
+                      const relSum = (which) => sum((e) => (which === 1 ? released1(e) : released2(e))
+                        ? (parseFloat(e[which === 1 ? 'release1Value' : 'release2Value'] || 0) || 0) : 0)
+                      const tdT = { padding: '9px 10px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap',
+                        position: 'sticky', bottom: 0, zIndex: 2, background: '#f1f5f9', borderTop: '2px solid #cbd5e1' }
+                      const tdL = { ...tdT, textAlign: 'left' }
+                      return (
+                        <tr>
+                          <td style={tdL}>Totals</td>
+                          <td style={tdL} />
+                          <td style={tdL}>{sortedEntries.length} shown</td>
+                          <td style={tdT}>{fmtC(n('afaGross'))}</td>
+                          <td style={tdT}>{fmtC(n('mcdValue'))}</td>
+                          <td style={tdT}>{fmtC(sum((e) => parseFloat(e.finalAccount || e.projectValue || 0) || 0))}</td>
+                          <td style={tdT}>{fmtC(n('appliedFor'))}</td>
+                          <td style={tdT}>{fmtC(sum((e) => parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0))}</td>
+                          <td style={tdT} />
+                          <td style={tdT}>{fmtC(sum(calcAccountRemaining))}</td>
+                          <td style={tdT}>{fmtC(n('retentionOwed'))}</td>
+                          <td style={tdT}>{fmtC(n('retention612Deducted'))}</td>
+                          <td style={tdT}>{fmtC(n('retention612Released'))}</td>
+                          <td style={tdT} />
+                          <td style={tdT} />
+                          <td style={tdL} />
+                          <td style={tdL} />
+                          {/* Only the halves actually RELEASED, matching the card. */}
+                          <td style={tdT}>{fmtC(relSum(1))}</td>
+                          <td style={tdL} />
+                          <td style={tdT}>{fmtC(relSum(2))}</td>
+                          <td style={tdL} />
+                          <td style={tdT}>{fmtC(sum(calcVat))}</td>
+                          <td style={tdL} />
+                          <td style={tdT}>{fmtC(sum(calcTotalDue))}</td>
+                          <td style={tdT}>{fmtC(n('paid'))}</td>
+                          <td style={tdT}>{fmtC(sum(calcTotalRemaining))}</td>
+                          <td style={tdL} />
+                          <td style={tdL} />
+                        </tr>
+                      )
+                    })()}
                   </tbody>
                 </table>
               </div>

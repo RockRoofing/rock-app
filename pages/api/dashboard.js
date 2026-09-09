@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].appliedForNetOfMcd === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].retentionHalfOnFinal === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -394,6 +394,23 @@ export default async function handler(req, res) {
         ? appliedForLatest
         : (invoicedSales200 > 0 ? invoicedSales200 : (retPct > 0 ? invoicedExVat / (1 - retPct) : 0))
       const totalRetention = retentionBase * retPct
+
+      // RETENTION ON THE FINAL ACCOUNT, and each contractual half.
+      //
+      // Separate from totalRetention, which is retention ACCRUED on what has been applied
+      // for so far. The two answer different questions and the register needs both.
+      //
+      // A release is contractual: half the pot at practical completion, half at the end
+      // of defects, both measured against the final account. A half falling due at 70%
+      // applied for is still half of the WHOLE retention - which is what the application
+      // certificate releases, and the tracker was showing half of retention-to-date
+      // instead. On a 580k account at 5% MCD and 3% retention that was 6,227 a half
+      // against the 8,265 the application actually claims.
+      //
+      // `afa` here is Gross AFA less MCD - the Final Account column on the register, and
+      // the same base retention is charged on everywhere else.
+      const retentionOnFinalAccount = afa * retPct
+      const retentionHalf = retentionOnFinalAccount / 2
       const retentionBasis = appliedForLatest > 0 ? 'applied for' : 'invoiced'
       const now = new Date()
       const pc1 = settings.pcDate ? new Date(settings.pcDate) : null
@@ -568,6 +585,8 @@ export default async function handler(req, res) {
         contractValue,
         afa,
         afaGross: afaBeforeMcd,
+        retentionOnFinalAccount,
+        retentionHalf,
         afaSource,
         afaOverrideIgnored,
         mcdPct,
@@ -627,6 +646,8 @@ export default async function handler(req, res) {
         // cache written by the old code keeps serving the old figures for four hours,
         // and the fix looks like it did not deploy.
         appliedForNetOfMcd: true,
+        // Bumped again: the release halves moved to the final-account basis.
+        retentionHalfOnFinal: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

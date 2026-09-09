@@ -1,55 +1,51 @@
-pkg781 - Retention: applied-for basis, descriptions, 612 netting
-=================================================================
+pkg783 - Retention card rebased, and a totals row
+==================================================
 
-DEPLOY OVER pkg780 (contains pkg780). Thirteen files.
+DEPLOY OVER pkg782 (contains pkg782). Thirteen files.
 
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 REPLACE:
   pages/retention.js                (changed here)
-  everything else as pkg780
+  everything else as pkg782
 
-1. DESCRIPTIONS NOW SAY APPLICATION, NOT INVOICED
---------------------------------------------------
-Retention Owed hover:
-  "Retention still held: APPLIED FOR, gross less MCD with retention included,
-   x retention %, LESS any half already claimed back through an application's
-   Retention section. Falls back to invoiced only where a project has no
-   application."
+1. THE CARD
+-----------
+Now: total Retention Owed across ALL projects, less the 1st or 2nd Value of any
+half marked released.
 
-2. ACCOUNT REMAINING WORKS OFF THE APPLICATION
------------------------------------------------
-It was Final Account minus INVOICED, which answers a different question.
-Invoicing lags the application by weeks, so a project that had applied for
-everything still read as having value left to claim purely because the invoice
-had not gone out.
+Two changes from pkg782:
+  - it no longer nets off 612, it nets off the RELEASED HALVES
+  - it is no longer limited to Live and Defects
 
-Now Final Account minus APPLIED FOR, falling back to invoiced only where there
-is no application - the same rule the retention figures use. Both the column
-header and the "Remaining to Claim" card tooltip updated to match.
+Dropping the status filter is deliberate. A completed project with an unreleased
+half is still money being held, and hiding it is how retention gets forgotten -
+which is what this register exists to prevent.
 
-3. THE OUTSTANDING CARD NETS OFF 612
--------------------------------------
-Retention Owed is what the applications say is held. Account 612 is where a
-release lands when it is actually paid. A half already received is not still
-outstanding.
+"Released" means released1/released2 - a click on the cell OR a half ticked in
+an application's retention section. Those are the same functions that colour the
+cells, so the card and the rows cannot disagree.
 
-Card is now: total Retention Owed less total 612 Released, Live and Defects
-Liability only. Floored at zero per project, so a row where 612 exceeds owed
-cannot pull the total down.
+  J244 live       owed 12,455   released      0  -> 12,455
+  J197 defects    owed 16,530   released  8,265  ->  8,265
+  J147 complete   owed 16,530   released 16,530  ->      0
+  card                                              20,720
 
-  J244 Waungron   live      owed 12,455   612     0  -> 12,455
-  J197 Hollis     defects   owed  8,200   612 4,100  ->  4,100
-  J147 Lancaster  defects   owed  3,400   612 3,400  ->      0
-  J092 Old job    complete  excluded from both
-  card                      was 24,055    now 16,555
+Floored per project, so a release larger than its owed figure cannot pull the
+total down - that is a data problem on one row, not a credit against the others.
 
-4. BOOKKEEPING SHOWS IT
-------------------------
-Bookkeeping embeds this register with ?embed=1, and the embed hides the whole
-tile row - four cards eat the height the table needs inside a frame. That is
-still right for the other three, but the outstanding total is the figure
-Bookkeeping is there for.
+2. TOTALS ROW
+-------------
+At the foot of the table, sticky, so it stays visible however far you scroll.
 
-It now appears on its own line above the register in the embed, with the same
-number and the same basis as the Commercial card.
+Totals: Gross AFA, MCD, Final Account, Applied for, Invoiced, Account Remaining,
+Retention Owed, 612 Deducted, 612 Released, VAT, Total Due, Total Paid, Total
+Remaining - and the 1st / 2nd Value columns showing only the halves actually
+RELEASED, matching the card.
+
+It sums the rows CURRENTLY SHOWN, so it answers the filter you have applied. The
+row count sits beside the label - "43 shown" - so a filtered total cannot be
+mistaken for the whole register.
+
+Cell count checked against the header: 28 and 28, so nothing sits under the
+wrong column.
