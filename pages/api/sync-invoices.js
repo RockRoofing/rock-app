@@ -125,6 +125,16 @@ async function fetchAllSalesCreditNotes(at, tid, fromDate) {
         amountPaid: 0, amountDue: 0,
         status: full.Status || '', trackingNames: [...trackingNames],
         creditNote: true,
+        // WHICH INVOICES THIS NOTE WAS ALLOCATED TO.
+        //
+        // A credit note raised against an invoice in Xero usually carries no tracking
+        // category of its own - there is nothing to code, it just reverses part of
+        // something already coded. With no tracking it fell to __UNASSIGNED__, and its
+        // 612 movement never reached the project. That is the discrepancy on any job
+        // where a credit note has been applied.
+        allocatedTo: (full.Allocations || [])
+          .map(al => al?.Invoice?.InvoiceID)
+          .filter(Boolean),
       })
     }
     if (notes.length < 100) break
@@ -234,13 +244,33 @@ export default async function handler(req, res) {
     // Group per project by tracking-name match; unmatched -> __UNASSIGNED__.
     const byProject = new Map()   // pid -> invoices[]
     let matchedInv = 0, unassignedInv = 0
-    for (const inv of all) {
-      let pid = null
-      for (const tn of inv.trackingNames) { if (nameToId.has(tn)) { pid = nameToId.get(tn); break } }
+    const place = (inv, pid) => {
       const key = pid || '__UNASSIGNED__'
       if (!byProject.has(key)) byProject.set(key, [])
       byProject.get(key).push(inv)
       if (pid) matchedInv++; else unassignedInv++
+    }
+    const pidOf = (inv) => {
+      for (const tn of inv.trackingNames) { if (nameToId.has(tn)) return nameToId.get(tn) }
+      return null
+    }
+
+    // INVOICES FIRST, so a credit note can be resolved through the invoice it credits.
+    const invoiceToPid = new Map()
+    const deferred = []
+    for (const inv of all) {
+      const pid = pidOf(inv)
+      if (inv.creditNote && !pid && (inv.allocatedTo || []).length) { deferred.push(inv); continue }
+      if (!inv.creditNote && inv.xeroInvoiceId && pid) invoiceToPid.set(String(inv.xeroInvoiceId), pid)
+      place(inv, pid)
+    }
+    // Then the untracked credit notes, against whatever their allocation points at.
+    let creditByAllocation = 0
+    for (const cn of deferred) {
+      let pid = null
+      for (const invId of cn.allocatedTo) { const p = invoiceToPid.get(String(invId)); if (p) { pid = p; break } }
+      if (pid) creditByAllocation++
+      place(cn, pid)
     }
     // Seed empty buckets for any project that already has stored invoice lines, so a
     // project whose ONLY invoice was deleted still gets reconciled (its stale in-window
@@ -284,7 +314,7 @@ export default async function handler(req, res) {
 
     await redis.del('dashboard:cache')
     await redis.set('sync-invoices:at', new Date().toISOString())
-    res.json({ ok: true, months, invoicesFetched: all.length, invoicesMatched: matchedInv, invoicesUnassigned: unassignedInv, projectsTouched: byProject.size })
+    res.json({ ok: true, months, invoicesFetched: all.length, invoicesMatched: matchedInv, invoicesUnassigned: unassignedInv, creditNotesMatchedByAllocation: creditByAllocation, projectsTouched: byProject.size })
   } catch (e) {
     console.error('sync-invoices error:', e)
     res.status(500).json({ error: e.message })
