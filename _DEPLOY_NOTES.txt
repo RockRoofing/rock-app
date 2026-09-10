@@ -1,11 +1,11 @@
-pkg799 - Why Gross AFA can disagree with the project's final account. Supersedes pkg798.
-=========================================================================================
+pkg800 - Gross AFA now reads the figure the application printed. Supersedes pkg799.
+=====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-798. It contains all of them. Five files.
+DEPLOY THIS INSTEAD OF pkg795-799. It contains all of them. Five files.
 
   pages/api/dashboard.js
   pages/retention.js
-  pages/project/[id].js              (NEW in this package)
+  pages/project/[id].js
   pages/api/business-financials.js   (build marker only)
   lib/applications.js
 
@@ -14,106 +14,94 @@ pkg794 first if not already deployed - that carries the other ten files.
 FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 
-YOUR QUESTION: IS IT BECAUSE THE PROJECT WAS ADDED VIA EDIT PROJECT DETAILS?
-=============================================================================
-Close, but the mechanism is not "how it was added" - it is that the two figures are
-built from two entirely separate sets of numbers, and nothing keeps them in step.
+YOU WERE RIGHT - STOP REBUILDING IT
+====================================
+The highlighted cell on your screenshot, Proj. Final Account / Application Total,
+is 140,274.20. That number already exists as a stored figure.
 
-    Gross AFA (application)  = measuredContractSum + variationsFinal
-                               BOTH taken from the APPLICATION - its own contract
-                               works schedule, and its own variations list, FROZEN
-                               at the moment it was sent (applications.js line 344)
+When an application is sent, applyAfaOverrideFromApp() in pages/api/applications.js
+writes its Anticipated Final Account straight onto the project:
 
-    Final account (project)  = contractValue + instructed variations
-                               from Edit Project Details
+    project.afaOverride       = sum.anticipatedFinalAccount
+    project.afaOverrideAt     = Date.now()
+    project.afaOverrideAppSeq = app.seq
 
-They agree only if the schedule on the application adds up to the contract value AND
-no variation has been instructed since the last application went out.
+That is the printed figure, saved at the moment it was issued.
 
-So on a project set up in Edit Project Details first, the application's contract
-works schedule was typed separately. If it was only partly populated - the items
-being claimed rather than the whole contract - measuredContractSum comes in below
-contractValue and Gross AFA reads low. The application always wins, so that is the
-figure you see.
+The register was ignoring it and REBUILDING the same number from the stored
+application - measuredContractSum + variationsFinal. A rebuild only matches if the
+stored record is identical to what the page had in hand when the total was produced,
+and the applications page computes its summary from workApp, the live edit state
+(pages/applications.js line 685), not from the saved record. So the rebuild could
+drift, and no amount of correcting the formula fixes that - the formula was never
+the right approach.
 
-The other common cause is a variation instructed AFTER the last application was
-sent. It is in project details and not in the frozen application, so Gross AFA is
-behind by exactly that variation.
-
-Rather than tell you which one it is on your project, the drill-down now shows it.
+Gross AFA now reads the stamped figure. No formula.
 
 
-1. NEW: GROSS AFA DECOMPOSITION IN THE DRILL-DOWN
---------------------------------------------------
-Click the Applied for cell on the row that is wrong. A second table now shows both
-sides of the sum:
+ORDER OF PREFERENCE
+--------------------
+  1. afaOverride stamped BY the latest sent application  <- as issued, no arithmetic
+  2. rebuilt from the stored application                 <- only where nothing was
+                                                            stamped, i.e. applications
+                                                            sent before this existed
+  3. a manual override
+  4. project details
 
-    Measured contract sum (app)          the schedule ON the application
-    Variations at final value (app)      with instructed / total counts
-    = Gross AFA from the application
+Step 1 is only taken when afaOverrideAppSeq matches the latest sent application. A
+stamp left by an OLDER application is not the current figure, so it drops to step 2
+and is treated as an override, not as the application's number.
 
-    Contract value (project details)
-    Instructed variations (project)      with instructed / total counts
-    = Gross AFA from project details
-    Stored override
+The stamp can land on either settings record - project:{id} or project:{jobNo}, the
+same duality that hid the applications themselves in pkg797 - so both are read and
+the most recent stamp wins.
 
-Where the two disagree by more than a pound, a banner says by how much and
-attributes it to whichever component accounts for most of the gap - the measured
-contract sum, or the variations. Verified against both shapes:
-
-    schedule short of contract value  -> blamed on measured contract sum
-    variation instructed after send   -> blamed on variations
-
-
-2. FIXED: SEVEN PLACES STILL USED THE OLD INSTRUCTED TEST
------------------------------------------------------------
-This can also make the project-details side wrong on its own.
-
-pkg766 established isInstructed() as the single rule, because the field is a boolean
-on records written by the current UI and the STRING 'yes'/'no' on older ones:
-
-    v.instructed !== false   counts a MISSING flag as instructed
-    !!v.instructed           counts the STRING 'no' as instructed
-
-pkg766 fixed applicationPdf.js and applications.js. It did not fix the dashboard or
-the project page, which between them had seven copies of `filter(v => v.instructed)`
-- the second form. So a variation recorded as 'no' on an older project was counted
-as instructed in:
-
-    dashboard.js   project-details AFA, labour budget, materials budget
-    project/[id].js  AFA, labour budget, materials budget, the edit-form preview
-
-All seven now call isInstructed(). If your mismatched project is an older one with
-variations marked 'no', this alone may close the gap - and the drill-down will show
-it, because the instructed/total counts are on both lines.
-
-Also hoisted contractValue and instructedVars above the applications block so the
-diagnostic decomposes against the same figures the column uses, rather than a second
-copy of the rule.
+Verified:
+    stamped by latest sent app    -> 140,274.20  (as issued)
+    stamped by an older app       -> rebuilt, flagged as an override
+    no stamp at all               -> rebuilt from the application
+    no stamp, no application      -> project details
 
 
-WORTH KNOWING - not changed
-----------------------------
-anticipatedFinalAccount is measuredContractSum + variationsFinal. It does NOT
-include materialsFinal. Materials on site are a temporary claim rather than account
-value, so excluding them is right - but if your gap is exactly the materials figure,
-that is why.
+DRILL-DOWN
+-----------
+The Gross AFA section now shows "Figure stamped by the application" and says which
+of the four routes was used on that row - including, where the stamp is not from the
+latest sent application, which application did leave it. The measured / variations
+decomposition from pkg799 stays underneath, because it is still the thing that
+explains a gap where no stamp exists.
+
+
+ONE CONSEQUENCE WORTH KNOWING
+------------------------------
+Because the stamp is written at SEND, editing a sent application without re-sending
+it will not move Gross AFA. That is deliberate - the register should show what went
+to the customer - but it does mean re-sending is what republishes the figure.
+
+
+ALSO IN THIS PACKAGE (pkg799)
+------------------------------
+Seven copies of the old `filter(v => v.instructed)` test replaced with
+isInstructed(). The field is a boolean on new records and the STRING 'yes'/'no' on
+older ones, and the truthy form counts 'no' as instructed. pkg766 fixed this in
+applicationPdf.js and applications.js and missed the dashboard AFA and both budget
+figures, plus the project page AFA, both budgets and the edit-form preview.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg799
-  612 drill-down header                 -> v799
-  Applied for / Certified drill-down    -> v799
+  13-week cash flow build marker        -> pkg800
+  612 drill-down header                 -> v800
+  Applied for / Certified drill-down    -> v800
 
-Cache marker afaDecomp_v1. Hard refresh after deploying.
+Cache marker afaAsIssued_v1. Hard refresh after deploying.
 
 
 STILL OPEN, ON YOUR WORD
 -------------------------
   - Release halves are on the Applied-for base, not the Final Account base their own
-    tooltip and the certificate use (pkg798 notes, item 3). One line.
-  - MCD placement flags default TRUE in lib/applications.js and FALSE in
-    pages/api/applications.js (pkg797 notes). Changing it moves issued certificates.
+    tooltip and the certificate use (pkg798 notes). One line.
+  - MCD placement flags default TRUE in lib/applications.js, FALSE in
+    pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.

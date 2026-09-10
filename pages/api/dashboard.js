@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -355,6 +355,8 @@ export default async function handler(req, res) {
       let certifiedGross = 0, certifiedFromApp = ''
       let certifiedSetOnApp = false
       let appliedForDetail = null
+      // Set inside the applications block, read by the AFA preference below.
+      let latestSentSeqForAfa = null, latestSentAppNoForAfa = null
       let afaFromApplication = null
       let finalAccountFromApplication = null
       let mcdOnVarsApp = null, mcdOnMosApp = null
@@ -467,6 +469,10 @@ export default async function handler(req, res) {
           // Account and the retention calculated on it. A draft is a working document;
           // it is not a figure that has been put to the customer.
           //
+          if (latestSent) {
+            latestSentSeqForAfa = latestSent.seq != null ? latestSent.seq : null
+            latestSentAppNoForAfa = latestSent.appNumber != null ? latestSent.appNumber : null
+          }
           if (latestSent && sentSum) {
             // CERTIFIED = THE "PREVIOUSLY CERTIFIED (GROSS)" BOX ON THE LATEST SENT
             // APPLICATION. The typed figure, nothing derived.
@@ -547,7 +553,6 @@ export default async function handler(req, res) {
             afaSettingsVariations: r2(instructedVars),
             settingsVarCount: Array.isArray(settings.variations) ? settings.variations.length : 0,
             settingsVarInstructed: Array.isArray(settings.variations) ? settings.variations.filter(v => isInstructed(v)).length : 0,
-            afaOverride: (settings.afaOverride != null && isFinite(settings.afaOverride)) ? r2(Number(settings.afaOverride)) : null,
           }
         }
       } catch {}
@@ -573,13 +578,43 @@ export default async function handler(req, res) {
       // The override is kept as a fallback for projects with no sent application - which
       // is the case it was added for - and the row still says when one is in use.
       const afaFromSettings = contractValue + instructedVars
-      const hasOverride = settings.afaOverride != null && isFinite(settings.afaOverride)
+
+      // TAKE THE FIGURE THE APPLICATION ALREADY PRINTED. DO NOT REBUILD IT.
+      //
+      // When an application is sent, applyAfaOverrideFromApp() writes its Anticipated
+      // Final Account straight onto the project as afaOverride, with afaOverrideAppSeq
+      // recording which application it came from. That IS the number in the Proj. Final
+      // Account / Application Total cell on the certificate.
+      //
+      // We were recomputing it instead - measuredContractSum + variationsFinal from the
+      // stored application - and a recomputation can drift from what was printed for all
+      // the usual reasons: the schedule or the variations array on the stored record are
+      // not identical to what the page had in hand when the total was produced. Reading
+      // the stamped figure removes the whole class of problem. No formula, no drift.
+      //
+      // The stamp can land on either settings record (project:{id} or project:{jobNo}),
+      // so both are checked and the most recent stamp wins.
+      const stampCandidates = [allSettings[id], allSettings[cp.jobNo]]
+        .filter(r => r && r.afaOverride != null && isFinite(r.afaOverride))
+        .sort((a, b) => (b.afaOverrideAt || 0) - (a.afaOverrideAt || 0))
+      const stamp = stampCandidates[0] || null
+      // Only trust it as THE application figure if it was stamped BY the application we
+      // are reading. Otherwise it is a manual override and ranks below a live application.
+      const stampIsFromLatestSent = !!(stamp && latestSentSeqForAfa != null
+        && stamp.afaOverrideAppSeq != null
+        && String(stamp.afaOverrideAppSeq) === String(latestSentSeqForAfa))
+
+      const hasOverride = !!stamp
       let afaBeforeMcd
-      if (afaFromApplication != null) {
+      if (stampIsFromLatestSent) {
+        afaBeforeMcd = Number(stamp.afaOverride)
+        afaSource = `application ${latestSentAppNoForAfa || latestSentSeqForAfa} (sent, as issued)`
+        afaFromApplication = afaBeforeMcd
+      } else if (afaFromApplication != null) {
         afaBeforeMcd = afaFromApplication
         // afaSource already names the application
       } else if (hasOverride) {
-        afaBeforeMcd = Number(settings.afaOverride)
+        afaBeforeMcd = Number(stamp.afaOverride)
         afaSource = 'manual override'
       } else {
         afaBeforeMcd = afaFromSettings
@@ -785,6 +820,9 @@ export default async function handler(req, res) {
         appliedForDetail,
         mcdBasis,
         finalAccountFromApplication,
+        afaStamped: stamp ? Number(stamp.afaOverride) : null,
+        afaStampedFromApp: stampIsFromLatestSent,
+        afaStampedAppSeq: stamp ? (stamp.afaOverrideAppSeq != null ? String(stamp.afaOverrideAppSeq) : null) : null,
         // Whether BOTH account columns came from a sent application. The tracker uses
         // this to stop a typed value overriding one.
         afaFromApp: afaFromApplication != null,
@@ -946,6 +984,7 @@ export default async function handler(req, res) {
         finalAccountMcdPlacement_v1: true,
         accountBaseNetOfMcd_v1: true,
         afaDecomp_v1: true,
+        afaAsIssued_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
