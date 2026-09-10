@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -346,6 +346,7 @@ export default async function handler(req, res) {
       // Null when there are no applications - the caller then falls back to project
       // details. Zero would be indistinguishable from a real zero.
       let certifiedGross = 0, certifiedFromApp = ''
+      let appliedForDetail = null
       let afaFromApplication = null
       let afaSource = 'project details'
       try {
@@ -353,9 +354,28 @@ export default async function handler(req, res) {
         if (apps.length) {
           apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
           const latest = apps[apps.length - 1]
-          let prevGross = 0
-          for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
-          const sum = computeApplicationSummary(latest, prevGross)
+          // A missing status counts as draft, which is how application-send.js and
+          // applications.js both treat it.
+          const sentApps = apps.filter(a => a && a.status === 'sent')
+          const latestSent = sentApps.length ? sentApps[sentApps.length - 1] : null
+
+          // ONE RULE FOR PREVIOUSLY-CERTIFIED, USED BY EVERY CONSUMER.
+          //
+          // The application's OWN stored prevCertGross first - that is what the
+          // certificate prints and what somebody typed where a job was part-certified
+          // before it came into the app. Only where it is absent do we recompute from
+          // the preceding application. This was written twice with two different rules;
+          // now it is written once.
+          const prevGrossFor = (app) => {
+            if (!app) return 0
+            if (app.prevCertGross != null) return Number(app.prevCertGross) || 0
+            let g = 0
+            for (const a of apps) { if ((a.seq || 0) < (app.seq || 0)) g = computeApplicationSummary(a, 0).grossCurrent || 0 }
+            return g
+          }
+
+          const sum = computeApplicationSummary(latest, prevGrossFor(latest))
+          const sentSum = latestSent ? computeApplicationSummary(latestSent, prevGrossFor(latestSent)) : null
           // APPLIED FOR = GROSS, LESS MCD, INCLUDING RETENTION.
           //
           // This read grossCurrent, which is the account BEFORE main contractor's
@@ -367,7 +387,18 @@ export default async function handler(req, res) {
           // to, retention still inside it. It is the number the certificate itself shows
           // on the line above the retention deduction, so the tracker and the application
           // now agree.
-          appliedForLatest = (sum.current && sum.current.netBeforeRet) || 0
+          // APPLIED FOR COMES FROM THE LATEST *SENT* APPLICATION.
+          //
+          // It read `latest` - the latest application of ANY status - so a draft that
+          // somebody had started but never issued silently superseded the sent one, and
+          // the tracker showed a figure that appears on no certificate. That is the
+          // "Applied for does not match on some rows" case: it only shows up on projects
+          // where a draft exists, which is why it looked intermittent.
+          //
+          // The column tooltip has claimed "the sent application wins" since pkg792.
+          // The code did not do it. Certified was already sent-only, so the two columns
+          // were being sourced from two different applications.
+          appliedForLatest = sentSum ? ((sentSum.current && sentSum.current.netBeforeRet) || 0) : 0
           // The PERIOD END of the latest application. The 13-week cash flow uses this to
           // drop project forecasts for periods already applied for - that money is now a
           // real invoice, and counting the forecast as well double-counts it.
@@ -392,29 +423,15 @@ export default async function handler(req, res) {
           // Account and the retention calculated on it. A draft is a working document;
           // it is not a figure that has been put to the customer.
           //
-          // A missing status counts as draft, which is how application-send.js and
-          // applications.js both treat it.
-          const sentApps = apps.filter(a => a && a.status === 'sent')
-          const latestSent = sentApps.length ? sentApps[sentApps.length - 1] : null
-          if (latestSent) {
-            // PREVIOUSLY CERTIFIED: the application's OWN stored figure first.
+          if (latestSent && sentSum) {
+            // CERTIFIED = PREVIOUSLY CERTIFIED (GROSS) on the latest sent application.
             //
-            // prevCertGross is what the certificate prints and what somebody typed when
-            // the job was part-certified before it came into the app. Recomputing from
-            // the preceding application ignores that and gets a different number - which
-            // is why Certified did not match the certificate.
-            //
-            // pages/applications.js does exactly this: prevCertGross if set, otherwise
-            // the previous application's grossCurrent. Same rule here.
-            const prevApp = apps.filter(a => (a.seq || 0) < (latestSent.seq || 0)).pop() || null
-            const isFirstSent = !prevApp
-            const prevSentGross = latestSent.prevCertGross != null
-              ? Number(latestSent.prevCertGross) || 0
-              : (isFirstSent ? 0 : (computeApplicationSummary(prevApp, 0).grossCurrent || 0))
-            const sentSum = computeApplicationSummary(latestSent, prevSentGross)
-            // PREVIOUSLY CERTIFIED (GROSS) from the latest sent application - what the
-            // customer has certified before this one. The tracker's Certified column
-            // takes this and it always wins over a typed value.
+            // NOTE this is what has been certified BEFORE the latest application, so on
+            // a project whose only sent application is App 1 it is legitimately zero and
+            // the column reads blank. If what is wanted is the cumulative gross certified
+            // INCLUDING the latest sent application, that is sentSum.current.gross - both
+            // figures are carried in appliedForDetail below so the drill-down can show
+            // them side by side and the right one can be chosen on the evidence.
             certifiedGross = (sentSum.previously && sentSum.previously.gross) || 0
             certifiedFromApp = latestSent.appNumber || latestSent.seq || ''
             const afaApp = sentSum.anticipatedFinalAccount
@@ -422,6 +439,31 @@ export default async function handler(req, res) {
               afaFromApplication = afaApp
               afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
             }
+          }
+
+          // ALWAYS-ON WORKING FOR THE APPLIED-FOR AND CERTIFIED COLUMNS.
+          //
+          // Four attempts at the 612 figures were made by inference and all four failed.
+          // The pattern that worked was showing the stored values. Same shape here: every
+          // candidate figure for this project, so a wrong number can be read rather than
+          // guessed at. Carried whether or not anything looks wrong.
+          const r2 = (n) => (n == null || !isFinite(n)) ? null : Math.round(n * 100) / 100
+          appliedForDetail = {
+            appCount: apps.length,
+            sentCount: sentApps.length,
+            latestApp: String(latest.appNumber || latest.seq || ''),
+            latestStatus: String(latest.status || 'draft'),
+            sentApp: latestSent ? String(latestSent.appNumber || latestSent.seq || '') : '',
+            draftSupersedes: !!(latestSent && latest !== latestSent),
+            // From the SENT application - what the columns now use.
+            sentNetBeforeRet: sentSum ? r2(sentSum.current && sentSum.current.netBeforeRet) : null,
+            sentGross: sentSum ? r2(sentSum.current && sentSum.current.gross) : null,
+            sentPrevGross: sentSum ? r2(sentSum.previously && sentSum.previously.gross) : null,
+            // The typed previously-certified on the application, if there is one.
+            prevCertTyped: (latestSent && latestSent.prevCertGross != null) ? r2(Number(latestSent.prevCertGross)) : null,
+            // What the LATEST application of any status would have given - the old
+            // behaviour, kept so a changed figure can be explained.
+            anyNetBeforeRet: r2(sum.current && sum.current.netBeforeRet),
           }
         }
       } catch {}
@@ -630,6 +672,7 @@ export default async function handler(req, res) {
         appliedForLatest,
         certifiedGross,
         certifiedFromApp,
+        appliedForDetail,
         latestAppEnd,
         retentionClaimed,
         appRelease1,
@@ -782,6 +825,7 @@ export default async function handler(req, res) {
         ret612Detail_v1: true,
         certifiedGross_v1: true,
         certifiedPrevCert_v2: true,
+        appliedForSent_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

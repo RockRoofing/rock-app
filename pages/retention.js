@@ -34,6 +34,57 @@ const EMPTY_ENTRY = {
 
 // Parse a numeric VAT rate from a VAT-type label. Reverse charge / zero-rated /
 // exempt / no-VAT all = 0. "20%" -> 0.20, "5%" -> 0.05.
+// INLINE EDITABLE NUMBER CELL.
+//
+// Defined at MODULE scope on purpose. A component declared inside another component
+// is a new type on every render, so React unmounts and remounts the subtree - which
+// is the classic "input loses focus after one keystroke" bug.
+//
+// Local state while typing, committed on blur or Enter, abandoned on Escape. The value
+// only goes through the page's existing saveEntry path, so a Xero-derived row still
+// becomes a manual override in the normal way rather than taking a second code path.
+function InlineNumberCell({ value, onCommit, disabled, note, title }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const start = () => {
+    if (disabled) return
+    setDraft(value == null || value === '' ? '' : String(value))
+    setEditing(true)
+  }
+  const commit = () => {
+    setEditing(false)
+    const before = value == null || value === '' ? '' : String(value)
+    if (draft === before) return
+    onCommit(draft === '' ? '' : String(parseFloat(draft) || 0))
+  }
+  if (editing) {
+    return (
+      <td style={{ padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+        <input
+          type="number" autoFocus value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+            if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
+          }}
+          style={{ width: 100, padding: '3px 5px', fontSize: 12, textAlign: 'right', border: '1px solid #1c704f', borderRadius: 4 }}
+        />
+      </td>
+    )
+  }
+  return (
+    <td onClick={start}
+      title={title || (disabled ? '' : 'Click to edit. Enter saves, Escape cancels.')}
+      style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'text' }}>
+      <span style={{ color: '#555', borderBottom: disabled ? 'none' : '1px dashed #d1d5db' }}>
+        {value != null && value !== '' ? fmt(parseFloat(value)) : '\u2014'}
+      </span>
+      {note ? <div style={{ fontSize: 9, color: '#bbb' }}>{note}</div> : null}
+    </td>
+  )
+}
+
 function vatRateFromLabel(label) {
   const s = (label || '').toLowerCase()
   if (s.includes('reverse charge') || s.includes('zero') || s.includes('exempt') || s.includes('no vat')) return 0
@@ -224,6 +275,15 @@ export default function RetentionPage() {
   const [hiddenIds, setHiddenIds] = useState([])
   const [loading, setLoading] = useState(true)
   const [ret612For, setRet612For] = useState(null)
+  const [appliedForFor, setAppliedForFor] = useState(null)
+  // Modals close on the x and Escape only, never a backdrop click. Neither modal on
+  // this page had an Escape handler at all.
+  useEffect(() => {
+    if (!ret612For && !appliedForFor) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') { setRet612For(null); setAppliedForFor(null) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ret612For, appliedForFor])
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_ENTRY)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -607,6 +667,7 @@ export default function RetentionPage() {
         // anything typed, and a typed value fills the gap where there is no application.
         certified: x.certifiedGross ? String(x.certifiedGross) : (e.certified || ''),
         certifiedFromApp: x.certifiedFromApp || '',
+        appliedForDetail: x.appliedForDetail || null,
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
         // markedComplete is a manual saved flag on `e` — keep it.
       }
@@ -793,6 +854,79 @@ export default function RetentionPage() {
         // the host page do the scrolling.
         ? { minHeight: '100vh', background: '#f0f2f5' }
         : { height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f0f2f5' }}>
+        {appliedForFor && (() => {
+          const d = appliedForFor.appliedForDetail || null
+          const th3 = { padding: '6px 8px', textAlign: 'left', fontSize: 10.5, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4, borderBottom: '1px solid #e5e7eb' }
+          const td3 = { padding: '6px 8px', fontSize: 12, borderBottom: '1px solid #f3f4f6' }
+          const row = (label, value, hint) => (
+            <tr>
+              <td style={td3}>{label}</td>
+              <td style={{ ...td3, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{value}</td>
+              <td style={{ ...td3, color: '#94a3b8', fontSize: 11 }}>{hint || ''}</td>
+            </tr>
+          )
+          return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v795</span></span>
+                  <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
+                </div>
+                <div style={{ overflow: 'auto', padding: '10px 16px' }}>
+                  {!d ? (
+                    <div style={{ fontSize: 12, color: '#555' }}>
+                      No application data for this project. Applied for is showing whatever was typed
+                      on the row, and Certified will be blank unless it was typed too.
+                    </div>
+                  ) : (
+                    <>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr><th style={th3}>What</th><th style={{ ...th3, textAlign: 'right' }}>Value</th><th style={th3}>Where it comes from</th></tr></thead>
+                        <tbody>
+                          {row('Applications on this project', String(d.appCount), `${d.sentCount} sent, ${d.appCount - d.sentCount} draft`)}
+                          {row('Latest application', d.latestApp ? `app ${d.latestApp}` : '-', d.latestStatus)}
+                          {row('Latest SENT application', d.sentApp ? `app ${d.sentApp}` : 'none', 'both columns read this one')}
+                          {row('Applied for (shown)', d.sentNetBeforeRet == null ? '-' : fmtC(d.sentNetBeforeRet), 'sent app: gross less MCD, retention still in')}
+                          {row('Certified (shown)', d.sentPrevGross == null ? '-' : fmtC(d.sentPrevGross), 'sent app: previously certified, gross')}
+                          {row('Gross on the sent application', d.sentGross == null ? '-' : fmtC(d.sentGross), 'cumulative gross INCLUDING this application')}
+                          {row('Typed previously-certified', d.prevCertTyped == null ? 'not set' : fmtC(d.prevCertTyped), 'prevCertGross on the application')}
+                          {row('Typed on this row', appliedForFor.certified ? fmtC(parseFloat(appliedForFor.certified)) : 'not set', 'only used where there is no sent application')}
+                        </tbody>
+                      </table>
+                      {d.draftSupersedes ? (
+                        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12, color: '#7c2d12' }}>
+                          There is a later DRAFT application (app {d.latestApp}). It is ignored - both
+                          columns read the sent one. Before pkg795 the draft set Applied for, which
+                          is why this row did not match its certificate. The draft would have shown{' '}
+                          {d.anyNetBeforeRet == null ? '-' : fmtC(d.anyNetBeforeRet)}.
+                        </div>
+                      ) : null}
+                      {d.sentCount === 0 ? (
+                        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12, color: '#7c2d12' }}>
+                          No SENT application on this project - every application here is still a
+                          draft. Both columns fall back to whatever is typed on the row.
+                        </div>
+                      ) : null}
+                      {d.sentCount > 0 && !d.sentPrevGross ? (
+                        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12, color: '#1e3a5f' }}>
+                          Certified is blank because nothing was certified BEFORE app {d.sentApp}.
+                          Certified currently means previously-certified, so it is zero on the first
+                          application. If it should instead be the gross certified to date INCLUDING
+                          this application, that figure is {d.sentGross == null ? '-' : fmtC(d.sentGross)}.
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', fontSize: 12, color: '#555' }}>
+                  Certified is editable inline on the row - click the value, Enter saves, Escape cancels.
+                  The next application sent overwrites it.
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         {ret612For && (() => {
           const rows = ret612For.ret612Detail || []
           const d = rows.filter(r => r.side === 'deducted').reduce((t, r) => t + Math.abs(r.used), 0)
@@ -803,7 +937,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v794</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v795</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1245,12 +1379,16 @@ export default function RetentionPage() {
                               {faBelowInvoiced && <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 600 }}>⚠ FA lower than invoiced</div>}
                             </td>
                             {/* Applied for (manual override) */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>
-                              {entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}
-                              {/* Applied for should equal Certified once the customer has
-                                  certified the application. A gap means the latest one is
-                                  applied for but not yet certified - worth seeing without
-                                  reading across two columns. */}
+                            {/* Click to see WHERE this number came from - which
+                                application, its status, and every candidate figure. */}
+                            <td onClick={() => setAppliedForFor(entry)}
+                              title="Click to see which application this came from."
+                              style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555', cursor: 'pointer' }}>
+                              <span style={{ borderBottom: '1px dashed #d1d5db' }}>
+                                {entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '\u2014'}
+                              </span>
+                              {entry.appliedForDetail && entry.appliedForDetail.sentApp
+                                ? <div style={{ fontSize: 9, color: '#bbb' }}>app {entry.appliedForDetail.sentApp}</div> : null}
                               {(() => {
                                 const a = parseFloat(entry.appliedFor || 0) || 0
                                 const c = parseFloat(entry.certified || 0) || 0
@@ -1259,11 +1397,12 @@ export default function RetentionPage() {
                                   style={{ marginLeft: 5, color: '#b45309', fontSize: 12 }}>&#9888;</span>
                               })()}
                             </td>
-                            {/* Certified - editable, overwritten by the next sent application */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <span style={{ color: '#555' }}>{entry.certified != null && entry.certified !== '' ? fmt(parseFloat(entry.certified)) : '\u2014'}</span>
-                              {entry.certifiedFromApp ? <div style={{ fontSize: 9, color: '#bbb' }}>app {entry.certifiedFromApp}</div> : null}
-                            </td>
+                            {/* Certified - inline editable, overwritten by the next sent application */}
+                            <InlineNumberCell
+                              value={entry.certified}
+                              note={entry.certifiedFromApp ? `app ${entry.certifiedFromApp}` : ''}
+                              onCommit={(v) => { const { appliedForDetail, ...rest } = entry; saveEntry({ ...rest, certified: v }) }}
+                            />
                             {/* Invoiced Net */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
                             {/* Applied-for vs Invoiced match (right of Invoiced) */}

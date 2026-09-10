@@ -1,116 +1,106 @@
-pkg794 - MERGE. pkg793 plus the J147 612 netting fix.
-=====================================================
+pkg795 - Applied for was reading a DRAFT. Certified now inline editable.
+=========================================================================
 
-DEPLOY THIS INSTEAD OF pkg793. Do not deploy pkg793 as well - this contains it.
+DEPLOY OVER pkg794. Three files, all already exist. Overwrite in place.
 
-Fourteen files, all already exist. Overwrite in place. No new files to create.
+  pages/api/dashboard.js
+  pages/retention.js
+  pages/api/business-financials.js   (build marker only)
 
-
-WHY THIS PACKAGE EXISTS
------------------------
-Two chats both built a package numbered 792 from the same pkg791 base, and both
-touched pages/api/dashboard.js and pages/retention.js:
-
-  - This chat's pkg792  : J147 account-612 credit note netting
-  - The other chat's 792/793 : Applied for precedence, Certified column, prevCertGross
-
-Deploying either one on its own silently reverts the other. I checked: pkg793 as
-issued still contains the pkg791 version of the 612 netting code, so deploying it
-would have undone the 612 fix without any visible sign.
-
-pkg794 is both, merged. The two change sets do not overlap - pkg793 touches the
-Applied-for/Certified merge and the tracker columns, the 612 fix touches the
-netting block and the drill-down modal - so this is a clean merge, not a
-reconciliation of conflicting edits.
+If you have not yet deployed pkg794, deploy that first - it carries the other
+eleven files.
 
 
-WHAT IS IN IT
--------------
-Everything in pkg793, byte-identical on twelve of the fourteen files:
+1. APPLIED FOR NOT MATCHING ON SOME ROWS - FOUND
+------------------------------------------------
+dashboard.js had two different applications feeding the two columns:
 
-  lib/applicationPdf.js            lib/crmEmailSync.js
-  lib/applications.js              pages/api/business-financials.js
-  lib/crmDailyActivityEmail.js     pages/api/sync-invoices.js
-  pages/business-financials/cashflow.js
-  pages/business-financials/export.js
-  pages/business-financials/forecast-balance-sheet.js
-  pages/business-financials/invoice-finance.js
-  pages/crm.js                     pages/project/[id].js
+    const latest = apps[apps.length - 1]              <- ANY status
+    appliedForLatest = sum.current.netBeforeRet       <- from `latest`
 
-Plus, on the remaining two:
+    const latestSent = sentApps[sentApps.length - 1]  <- SENT only
+    certifiedGross  = sentSum.previously.gross        <- from `latestSent`
 
-pages/api/dashboard.js
-  - KEEPS pkg793's certifiedGross / prevCertGross work in full
-  - ADDS the 612 fix: allocation matching and reference matching BOTH always run
-  - ADDS one key function (lineKey) for a document throughout
-  - Cache guard now requires certifiedPrevCert_v2 AND ret612Match_v1
+So Applied for read the latest application of any status. A draft somebody had
+started but never issued silently superseded the sent one, and the tracker showed a
+figure that appears on no certificate.
 
-pages/retention.js
-  - KEEPS pkg793's Certified column, warning triangle, tick change, CSV import
-  - ADDS the Match column to the 612 drill-down
-  - Drill-down header reads v794
+That is why it looked intermittent: it only goes wrong on projects where a draft
+exists. Everywhere else `latest` and `latestSent` are the same application.
 
-pages/api/business-financials.js
-  - Build marker bumped to pkg794. This is the marker on the 13-week cash flow
-    page. pkg793 shipped it reading 'pkg793'; if it still says that after
-    deploying, the file did not take.
+The column tooltip has promised "the sent application wins" since pkg792. The code
+never did it. Both columns now read the latest SENT application.
+
+Also hoisted: previously-certified was computed by two different rules in the same
+file. There is now one prevGrossFor() and both consumers use it - prevCertGross
+first, the preceding application's grossCurrent only where it is absent.
 
 
-TWO MARKERS, AND WHAT EACH ONE PROVES
--------------------------------------
-  13-week cash flow build marker  -> which PACKAGE is live      (should read pkg794)
-  612 drill-down header           -> which retention.js is live (should read v794)
+2. CERTIFIED NOT PULLING THROUGH - LIKELY A DEFINITION, NOT A BUG
+------------------------------------------------------------------
+Certified is sourced from PREVIOUSLY CERTIFIED on the latest sent application -
+what the customer certified BEFORE that application. On a project whose only sent
+application is App 1 that is legitimately zero, so the column reads blank. It will
+also read blank wherever prevCertGross was never typed and there is no earlier
+application to recompute from.
 
-Both must move. If only one does, one of the two files did not save in the GitHub
-web editor - which has happened before on large files.
+I have not changed the meaning, because there are two defensible ones and picking
+the wrong one silently is worse than asking. Both figures are now carried and shown
+side by side in the new drill-down:
 
+  Certified (shown)              = previously certified, EXCLUDES the latest app
+  Gross on the sent application  = cumulative gross, INCLUDES the latest app
 
-THE 612 FAULT, FOR THE RECORD
------------------------------
-The App 2 credit note carries one Xero allocation. It resolves to a document that
-cannot be the reversal - its 612 line is the same way up as the credit note's. The
-pairing code read:
-
-    const byRef = byAlloc.length ? [] : (...)
-
-so the moment the allocation resolved to ANYTHING, the reference fallback was
-switched off - even though the allocation candidate was rejected two lines later by
-the sign guard. Nothing was cancelled and both columns stayed 642.20 high.
-
-pkg790's fallback was never wrong. It never ran.
-
-Reproduced on J147's real ten lines before the fix was written: with the fallback
-suppressed it returns exactly 1,760.38 / 1,760.39; with it always running,
-1,118.18 / 1,118.19.
+Open the drill-down on a row where Certified is blank and tell me which of those
+two is the number you want. It is a one-line change once decided.
 
 
-EXPECTED AFTER DEPLOY
----------------------
-J147 Lancaster Moor:
-  612 Deducted   1,118.18   (was 1,760.38)
-  612 Released   1,118.19   (was 1,760.39)
-  Retention Owed 1,118.19 - ties, and matches Vinay exactly.
+3. NEW: APPLIED FOR / CERTIFIED DRILL-DOWN
+-------------------------------------------
+Click the Applied for cell on any row. Same shape as the 612 drill-down: it shows
+how many applications exist and how many are sent, which application each column
+read, its status, and every candidate figure - so a wrong number can be read rather
+than guessed at. Always on, whether or not anything looks wrong.
 
-  In the drill-down, the two 642.20 lines show Used 0.00 and
-  Match "ref -> Lancaster Moor - App 2". Header reads v794.
-
-Certified column populating from the latest sent application, per pkg793.
-
-Hard refresh after deploying - the cache marker has moved, so the old cache will
-not be served, but the browser may still hold the page.
+Three banners fire on their own conditions:
+  - a later DRAFT exists, with what it would have shown before this package
+  - no SENT application at all, so both columns fall back to typed values
+  - Certified blank because nothing was certified before the first application
 
 
-NOT A BUG IN THE APP, BUT WORTH RAISING WITH VINAY
---------------------------------------------------
-The Feb-2024 App 2 invoice holds a POSITIVE 612 line in Xero (+642.20). A retention
-deduction should be negative. Xero recorded App 2's retention the wrong way up,
-which is almost certainly why it was credited out and re-raised in Nov 2025 at
--33.80. The app nets it away correctly either way now, but account 612 itself still
-reads wrong for that entry.
+4. CERTIFIED NOW EDITABLE INLINE
+---------------------------------
+Click the value in the cell. Enter or clicking away saves, Escape cancels.
+
+Built as a MODULE-SCOPE component. A component declared inside another component is
+a new type on every render, so React remounts the subtree - the classic "input loses
+focus after one keystroke" bug. It saves through the existing saveEntry path, so a
+Xero-derived row still becomes a manual override in the normal way. The diagnostic
+blob is stripped before saving so it does not get written into Redis.
+
+Still true, and by design: the next application sent overwrites a typed value.
 
 
-STILL OPEN (from the other chat's handover, not addressed here)
----------------------------------------------------------------
-  - Applied for still not matching on some rows - needs a drill-down on the
-    Applied-for cell before anyone guesses again
-  - Certified not editable inline - it is in the row edit form, not the cell
+5. ALSO
+--------
+Neither modal on this page had an Escape handler. Both now close on Escape and the
+x, never a backdrop click.
+
+
+MARKERS - ALL THREE MUST MOVE
+------------------------------
+  13-week cash flow build marker        -> pkg795
+  612 drill-down header                 -> v795
+  Applied for / Certified drill-down    -> v795
+
+Cache marker bumped to appliedForSent_v1, so the old cache will not be served. Hard
+refresh after deploying.
+
+
+WHAT I DELIBERATELY DID NOT CHANGE
+-----------------------------------
+latestAppEnd, retentionClaimed and appRelease1/2 still read the latest application
+of ANY status. The same argument applies to all three, but latestAppEnd moves the
+13-week cash flow and appRelease1/2 tick the retention halves. Those are behaviour
+changes you have not asked for and I am not making them silently. Say the word and
+they go the same way in one line each.
