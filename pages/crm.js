@@ -2157,12 +2157,31 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
           </SideBox>
           <SideBox title="Organization" collapsed={collapsed.organization} onToggle={() => toggle('organization')}>
             <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
-            {groupFields('organization').map((f) => (
-              <div key={f.key + f.label} style={sideRow}>
-                <span style={sideKey}>{f.label}</span>
-                <EditableField field={f} value={orgVal(f.key)} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
-              </div>
-            ))}
+            {groupFields('organization').map((f) => {
+              // The button sits UNDER the field, not beside it. sideRow is a
+              // space-between pair; a third child would push the value into the middle
+              // of the row on every other field in the panel.
+              const site = f.key === 'org_website' ? websiteUrl(orgVal(f.key)) : '';
+              return (
+                <div key={f.key + f.label}>
+                  <div style={sideRow}>
+                    <span style={sideKey}>{f.label}</span>
+                    <EditableField field={f} value={orgVal(f.key)} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
+                  </div>
+                  {site ? (
+                    <div style={{ textAlign: 'right', marginTop: -4, paddingBottom: 4 }}>
+                      {/* noopener - the opened page must not get a handle on this one. */}
+                      <a href={site} target="_blank" rel="noopener noreferrer" title={site}
+                        style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: C.link,
+                                 textDecoration: 'none', border: `1px solid ${C.line}`, borderRadius: 6,
+                                 padding: '3px 8px', background: '#fff' }}>
+                        Open website &#8599;
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
             {dealOrg && <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>Blank fields filled from the company record.</div>}
           </SideBox>
           <button onClick={onManageFields} style={{ ...ghostBtn, width: '100%', marginTop: 4 }}>⚙ Customise fields</button>
@@ -4527,6 +4546,22 @@ const primaryBtn = { background: C.link, color: '#fff', border: 'none', borderRa
 const ghostBtn = { background: '#fff', color: C.text, border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const miniBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 const miniInput = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 9px', fontSize: 13, color: C.text, outline: 'none', background: '#fff', fontFamily: 'inherit' };
+// A WEBSITE TYPED INTO A CRM IS RARELY A URL.
+//
+// "rockroofing.co.uk", "www.example.com", sometimes with a trailing comma. Without a
+// scheme the browser reads it as a relative path and you land on
+// app.rockroofing.co.uk/rockroofing.co.uk rather than the company site.
+//
+// Returns '' for anything that is plainly not a domain - "n/a", "TBC", a phone number
+// in the wrong box - so the button never offers a link to nowhere.
+function websiteUrl(raw) {
+  const v = String(raw == null ? '' : raw).trim().replace(/[,;.]+$/, '');
+  if (!v || v === '-') return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  if (!/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(v)) return '';
+  return `https://${v}`;
+}
+
 const sideRow = { display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', fontSize: 12, alignItems: 'flex-start' };
 const sideKey = { color: C.dim, flexShrink: 0, maxWidth: 130, paddingTop: 4 };
 const sideVal = { color: C.text, textAlign: 'right', wordBreak: 'break-word', paddingTop: 4 };
@@ -4798,7 +4833,8 @@ function ContactPanel({ deal, schema = [], orgsData = [], contactsData = [] }) {
       <div key={k} style={sideRow}>
         <span style={sideKey}>{k}</span>
         <span style={{ textAlign: 'right', wordBreak: 'break-word', fontWeight: 600, color: C.text }}>
-          {href ? <a href={href} style={{ color: C.link, textDecoration: 'none' }}>{v}</a> : String(v)}
+          {href ? <a href={href} style={{ color: C.link, textDecoration: 'none' }}
+            {...(/^https?:/i.test(href) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{v}</a> : String(v)}
         </span>
       </div>
     );
@@ -4818,7 +4854,8 @@ function ContactPanel({ deal, schema = [], orgsData = [], contactsData = [] }) {
       // Phone and email are one click - the panel is open because somebody is about to
       // make contact.
       const href = /phone/i.test(fl.key) && v ? `tel:${String(v).replace(/\s+/g, '')}`
-        : /email/i.test(fl.key) && v ? `mailto:${v}` : null;
+        : /email/i.test(fl.key) && v ? `mailto:${v}`
+        : /website/i.test(fl.key) ? (websiteUrl(v) || null) : null;
       return line(fl.label, v, href);
     })
     .filter(Boolean);

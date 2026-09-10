@@ -1,80 +1,75 @@
-pkg809 - Tag yourself and you get the email. Includes pkg807 and pkg808.
-==========================================================================
+pkg810 - Open website button on the deal's Organization panel. Includes pkg807-809.
+=====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-808. It contains all of them. Eight files.
+DEPLOY THIS INSTEAD OF pkg795-809. It contains all of them. Nine files.
 
   lib/applications.js
   lib/crmMentions.js
   pages/api/dashboard.js
   pages/api/business-financials.js            (build marker only)
   pages/api/project/[id].js
-  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807/808 not deployed ***
+  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807-809 not deployed ***
+  pages/crm.js                                (NEW in this package)
   pages/project/[id].js
   pages/retention.js
 
 If cost-comments.js already exists you are overwriting it. If not, create it by
-hand - LITERAL square brackets, in the folder that already holds comment.js and
-report.js.
+hand - LITERAL square brackets, in the folder that already holds comment.js.
 
 
-THE CHANGE
+THE BUTTON
 ===========
-A tag is a tag. Whoever is named gets the email, including you when you tag
-yourself.
+An "Open website" button in the Organization panel on a deal, directly under the
+Website field. Opens in a new tab.
 
-The rule that suppressed it came over from the CRM, where the reasoning was that
-nobody needs an email telling them what they just typed. That holds for a running
-note on a deal. It does not hold here - tagging yourself on a mis-coded cost is a
-deliberate act, usually to put it in your own inbox to come back to, and dropping
-it silently is just surprising.
-
-Verified:
-
-  cost comment, tag self          -> James McVeigh
-  cost comment, tag self + other  -> James McVeigh, Dori Balog
-  cost comment, tag other         -> Dori Balog
-
-The composer footer now says so: "Tag yourself and you get one too."
+It only appears when the field holds something that could actually be a website. A
+button that opens a blank tab because somebody typed "TBC" is worse than no button.
 
 
-THE CRM IS DELIBERATELY UNCHANGED
------------------------------------
-notifyMentions() takes notifyAuthor, defaulting to true. The CRM's
-sendMentionEmails() passes false, so CRM notes behave exactly as they always have.
+WHY IT IS NOT JUST target="_blank"
+------------------------------------
+A website typed into a CRM is rarely a URL. "rockroofing.co.uk" with no scheme is a
+RELATIVE path to a browser, so a plain link lands you on
 
-Verified: CRM note, tag self -> nobody emailed.
+    app.rockroofing.co.uk/rockroofing.co.uk
 
-I have not changed the CRM because you asked about cost comments and the CRM rule
-was put there on purpose. If you want it to match - tag yourself in a CRM note and
-get the email - it is one word, deleting `notifyAuthor: false`. Say so and it goes
-in the next package.
+which is a 404 inside the portal, not the company site. The value is normalised
+first: a scheme is added where missing, trailing punctuation is stripped, and
+anything that is not shaped like a domain returns nothing and the button stays
+hidden.
+
+Verified against what people actually type:
+
+    rockroofing.co.uk           -> https://rockroofing.co.uk
+    www.example.com             -> https://www.example.com
+    https://example.com/about   -> unchanged
+    example.com,                -> https://example.com   (trailing comma dropped)
+    "  example.co.uk/contact  " -> https://example.co.uk/contact
+    -  /  n/a  /  TBC           -> no button
+    01234 567890                -> no button  (phone number in the wrong box)
+    ask Roman                   -> no button
+
+Opened with rel="noopener noreferrer", so the company's site gets no handle on the
+portal tab it was opened from.
 
 
-IF IT STILL DOES NOT ARRIVE
------------------------------
-The comment will now tell you which case you are in rather than saying "Saved."
-(pkg808). The ones to watch for:
+TWO SMALL THINGS THAT CAME WITH IT
+------------------------------------
+The button sits UNDER the Website field rather than beside it. Every row in that
+panel is a space-between pair of label and value; adding a third child would have
+pushed the value into the middle of the row and knocked the whole panel out of
+line.
 
-  "Email is not configured on the server (RESEND_API_KEY is not set)"
-      -> nothing will ever send until that env var is set in Vercel
-
-  "did not send" followed by Resend's own words
-      -> almost always an unverified sending domain. FORMS_FROM_EMAIL defaults to
-         onboarding@resend.dev, which Resend will only deliver to the account
-         owner's address
-
-  "Nobody is taggable here"
-      -> the portal user records have no email address, or no post-contract /
-         management / admin role. Fixed in user admin, not in code
-
-And check junk - the from address is whatever FORMS_FROM_EMAIL is set to.
+The Website line in the read-only Organisation section of the Make contact panel is
+now a link too, using the same rule. Phone and email were already one click there
+and the website was the odd one out.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg809
-  612 drill-down header                 -> v809
-  Applied for / Certified drill-down    -> v809
+  13-week cash flow build marker        -> pkg810
+  612 drill-down header                 -> v810
+  Applied for / Certified drill-down    -> v810
 
 No new dashboard cache marker. Hard refresh after deploying.
 
@@ -88,3 +83,5 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
+  - Whether CRM notes should also email you when you tag yourself. Cost comments do
+    now; the CRM deliberately still does not.
