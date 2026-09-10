@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].ret612Detail_v1 === true && cached[0].ret612Match_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedGross_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -202,81 +202,43 @@ export default async function handler(req, res) {
         //
         // Matched through allocatedTo, which the sync keeps from Xero's Allocations. Only
         // the overlapping amount is cancelled, so a partial credit leaves the remainder.
-        // ONE KEY FOR A DOCUMENT, EVERYWHERE.
-        //
-        // The cancel set keyed on `xeroInvoiceId || invoiceNumber` while the offset map
-        // keyed on `String(xeroInvoiceId)` alone. Where an id is null those are 'null'
-        // for EVERY such line, so one cancellation could reduce an unrelated invoice.
-        const lineKey = (l) => String(l.xeroInvoiceId || l.invoiceNumber || `${l.date || ''}#${l.retention612 || 0}`)
-
-        const adj = new Map()          // document key -> amount of 612 already cancelled
-        const cancelled = new Set()    // credit notes fully absorbed
-        const matchNote = new Map()    // document key -> how it was paired, or why it was not
-
+        const adj = new Map()   // xeroInvoiceId -> amount of 612 already cancelled
+        const cancelled = new Set()
         for (const cn of invoiceLines) {
           if (!cn.creditNote || !(cn.retention612 || 0)) continue
-          const cnKey = lineKey(cn)
-
-          // TWO WAYS TO FIND THE INVOICE A CREDIT NOTE REVERSES, AND BOTH ALWAYS RUN.
-          //
-          // Xero's own allocation is the better evidence, so it is tried first. But an
-          // allocation can resolve to a document that CANNOT be the reversal - one with
-          // no 612 line of its own, or a 612 line the same way up as the credit note.
-          // Until now a resolved-but-unusable allocation suppressed the reference
-          // fallback entirely (`byAlloc.length ? [] : ...`), so the pair was left
-          // uncancelled and both columns stayed inflated by the same amount.
-          //
-          // J147 is exactly that: the App 2 note carries one allocation, it points at a
-          // document that is not the invoice it reverses, and the reference match that
-          // would have paired it never got the chance to run.
+          // Allocation first. Where a line was stored before allocations were synced,
+          // fall back to an invoice with the SAME REFERENCE and an equal-and-opposite 612
+          // amount - a credit note reversing an application carries that application's
+          // reference, and an exact opposite is not a coincidence.
           const byAlloc = (cn.allocatedTo || [])
-            .map(id => invoiceLines.find(l => !l.creditNote && l.xeroInvoiceId && String(l.xeroInvoiceId) === String(id)))
+            .map(id => invoiceLines.find(l => !l.creditNote && String(l.xeroInvoiceId) === String(id)))
             .filter(Boolean)
-          // Same reference and an exact equal-and-opposite 612 amount. A credit note
-          // reversing an application carries that application's reference, and an exact
-          // opposite to the penny is not a coincidence.
-          const byRef = invoiceLines.filter(l => !l.creditNote
+          const byRef = byAlloc.length ? [] : invoiceLines.filter(l => !l.creditNote
             && (l.retention612 || 0)
             && String(l.reference || '').trim().toLowerCase() === String(cn.reference || '').trim().toLowerCase()
             && Math.abs((l.retention612 || 0) + (cn.retention612 || 0)) < 0.01)
-
-          const allocKeys = new Set(byAlloc.map(lineKey))
-          const seen = new Set()
-          const candidates = [...byAlloc, ...byRef].filter(l => {
-            const k = lineKey(l)
-            if (seen.has(k)) return false
-            seen.add(k)
-            return true
-          })
-
-          let why = candidates.length ? '' : 'no candidate found'
-          for (const inv of candidates) {
-            const invKey = lineKey(inv)
-            const via = allocKeys.has(invKey) ? 'alloc' : 'ref'
-            if (!(inv.retention612 || 0)) { why = why || `${via}: candidate carries no 612 line`; continue }
+          for (const inv of [...byAlloc, ...byRef]) {
+            const invId = inv.xeroInvoiceId
+            if (!inv || !(inv.retention612 || 0)) continue
             // Opposite signs only - a credit note reinforcing a deduction is not a reversal.
-            if (Math.sign(inv.retention612) === Math.sign(cn.retention612)) { why = why || `${via}: candidate 612 same sign`; continue }
-            const already = adj.get(invKey) || 0
+            if (Math.sign(inv.retention612) === Math.sign(cn.retention612)) continue
+            const already = adj.get(String(invId)) || 0
             const room = Math.abs(inv.retention612) - already
             const take = Math.min(room, Math.abs(cn.retention612))
-            if (take <= 0) { why = why || `${via}: candidate already fully cancelled`; continue }
-            adj.set(invKey, already + take)
-            cancelled.add(cnKey)
-            matchNote.set(invKey, `reversed by ${cn.reference || cn.invoiceNumber || 'credit note'}`)
-            why = `${via} -> ${inv.reference || inv.invoiceNumber || inv.date || 'invoice'}`
+            if (take <= 0) continue
+            adj.set(String(invId), already + take)
+            cancelled.add(cn.xeroInvoiceId || cn.invoiceNumber)
             break
           }
-          matchNote.set(cnKey, why)
         }
 
         for (const l of invoiceLines) {
-          const key = lineKey(l)
           let v = l.retention612 || 0
           // A fully cancelled credit note contributes nothing, and the invoice it
           // reversed is reduced by the same amount.
-          if (l.creditNote && cancelled.has(key)) v = 0
-          else if (!l.creditNote && adj.has(key)) {
-            const off = adj.get(key)
+          if (l.creditNote && cancelled.has(l.xeroInvoiceId || l.invoiceNumber)) v = 0
+          else if (!l.creditNote && adj.has(String(l.xeroInvoiceId))) {
+            const off = adj.get(String(l.xeroInvoiceId))
             v = v > 0 ? Math.max(0, v - off) : Math.min(0, v + off)
           }
           if (v < 0) retention612Deducted += -v
@@ -294,9 +256,6 @@ export default async function handler(req, res) {
             netted: Math.abs((l.retention612 || 0) - v) > 0.005,
             allocs: (l.allocatedTo || []).length,
             side: v < 0 ? 'deducted' : v > 0 ? 'released' : '-',
-            // ALWAYS-ON WORKING. A diagnostic that only renders on failure cannot tell
-            // 'nothing wrong' from 'not running', so every line carries how it paired.
-            match: matchNote.get(key) || '',
           })
           if (v !== 0) {
             ret612Lines += 1
@@ -345,6 +304,7 @@ export default async function handler(req, res) {
       //
       // Null when there are no applications - the caller then falls back to project
       // details. Zero would be indistinguishable from a real zero.
+      let certifiedGross = 0, certifiedFromApp = ''
       let afaFromApplication = null
       let afaSource = 'project details'
       try {
@@ -398,7 +358,13 @@ export default async function handler(req, res) {
           if (latestSent) {
             let prevSentGross = 0
             for (const a of apps) { if ((a.seq || 0) < (latestSent.seq || 0)) prevSentGross = computeApplicationSummary(a, 0).grossCurrent }
-            const afaApp = computeApplicationSummary(latestSent, prevSentGross).anticipatedFinalAccount
+            const sentSum = computeApplicationSummary(latestSent, prevSentGross)
+            // PREVIOUSLY CERTIFIED (GROSS) from the latest sent application - what the
+            // customer has certified before this one. The tracker's Certified column
+            // takes this and it always wins over a typed value.
+            certifiedGross = (sentSum.previously && sentSum.previously.gross) || 0
+            certifiedFromApp = latestSent.appNumber || latestSent.seq || ''
+            const afaApp = sentSum.anticipatedFinalAccount
             if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
               afaFromApplication = afaApp
               afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
@@ -609,6 +575,8 @@ export default async function handler(req, res) {
         estimatorResolved: true,
         qsResolved: true,
         appliedForLatest,
+        certifiedGross,
+        certifiedFromApp,
         latestAppEnd,
         retentionClaimed,
         appRelease1,
@@ -759,7 +727,7 @@ export default async function handler(req, res) {
         ret612Netted: true,
         ret612NettedV2: true,
         ret612Detail_v1: true,
-        ret612Match_v1: true,
+        certifiedGross_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

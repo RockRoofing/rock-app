@@ -1,43 +1,65 @@
-pkg792 - J147 612: a dead-end allocation was suppressing the reference fallback
+pkg792 - Certified column, and the application now wins
+========================================================
 
-FILES (both already exist - overwrite in place, no new files)
-  pages/api/dashboard.js
-  pages/retention.js
+DEPLOY OVER pkg791 (contains pkg791). Fourteen files.
 
-WHAT WAS WRONG
-  The App 2 credit note carries ONE Xero allocation. That allocation resolves to a
-  document that cannot be the reversal - its 612 line is the same way up as the credit
-  note's. The pairing code was written as:
+FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
-      const byRef = byAlloc.length ? [] : (...)
+REPLACE:
+  pages/api/dashboard.js            (changed here)
+  pages/retention.js                (changed here)
+  everything else as pkg791
 
-  so as soon as the allocation resolved to ANYTHING, the reference fallback was switched
-  off - even though the allocation candidate was then rejected two lines later. The pair
-  was never cancelled and both columns stayed inflated by 642.20.
+1. WHY SOME ROWS DID NOT MATCH THEIR LATEST APPLICATION
+--------------------------------------------------------
+A typed Applied-for value BEAT the application:
 
-  This is why pkg790's fallback appeared not to work: it was correct, and it never ran.
+    e.appliedFor !== '' ? e.appliedFor : x.appliedForLatest
 
-WHAT CHANGED
-  1. Allocation matching and reference matching BOTH always run. Allocation is still
-     tried first; reference is the fallback, deduped against it.
-  2. One key function (lineKey) for a document everywhere. The cancel set keyed on
-     `xeroInvoiceId || invoiceNumber`, the offset map on `String(xeroInvoiceId)` alone -
-     where an id is null those collide as 'null' across unrelated lines.
-  3. New MATCH column in the 612 drill-down showing how each credit note paired, or why
-     it did not. Always on, whether or not anything is wrong.
-  4. Cache marker bumped to ret612Match_v1 - the old cache will not be served.
+So an override entered once sat there for good and every later application was
+ignored. That is the mismatch you spotted.
 
-EXPECTED ON J147 AFTER DEPLOY
-  Deducted  1,118.18   (was 1,760.38)
-  Released  1,118.19   (was 1,760.39)
-  Retention Owed 1,118.19 - ties, and matches Vinay's figures exactly.
-  The two 642.20 lines show Used 0.00 and Match "ref -> Lancaster Moor - App 2".
+Reversed. The latest SENT application always wins; a typed figure is only used
+where a project has no sent application.
 
-  The drill-down header now reads v792 - confirms the new build is serving.
+The formula was already right - current.netBeforeRet, which is gross measured
+works less MCD plus variations, the certificate sub-total. It just was not being
+reached.
 
-STILL WORTH KNOWING (not a bug in the app)
-  The Feb-2024 App 2 invoice holds a POSITIVE 612 line in Xero (+642.20). A deduction
-  should be negative. So Xero itself recorded App 2's retention the wrong way up, which
-  is almost certainly why it was credited out and re-raised in Nov 2025 at -33.80. The
-  app now nets it away correctly either way, but the original entry is still wrong in
-  Xero if you want the account itself to read properly.
+2. NEW COLUMN: CERTIFIED
+-------------------------
+Sits between Applied for and Invoiced.
+
+Populated from Previously Certified (gross) on the latest sent application, with
+the application number shown underneath. Editable through the row edit form -
+the pencil - and the next application sent overwrites whatever was typed, same
+rule as Applied for.
+
+Included in the totals row and in the CSV import (column "Certified").
+
+3. THE TICK NOW COMPARES CERTIFIED TO INVOICED
+-----------------------------------------------
+It compared Applied for against Invoiced. Certified against Invoiced is the
+question worth asking - what has been certified but not billed, or billed but
+not certified.
+
+4. WARNING ON APPLIED FOR
+--------------------------
+A small amber triangle appears beside Applied for when it does not agree with
+Certified, with the gap in the hover. Usually it means the latest application is
+applied for but not yet certified, which is normal - but it is worth seeing
+without reading across two columns.
+
+CHECKED
+-------
+Header, body and totals all grew by exactly one column against pkg791, so
+nothing has shifted under the wrong heading.
+
+NOTE ON MANUAL OVERRIDES
+------------------------
+The application now always wins where one exists, which is a blunt reading of
+"the next application sent should override the manual input". A typed value on a
+project WITH applications will be replaced on the next dashboard rebuild rather
+than surviving until the next application arrives. If you want an override to
+hold until a genuinely new application is sent, say so - it needs the
+application number stamped against the override, which is a small extra field.

@@ -25,6 +25,7 @@ const EMPTY_ENTRY = {
   ourRef: '', customerName: '', projectName: '', projectValue: '', finalAccount: '',
   retentionPct: '', completionDate: '', pcType: '',
   qsName: '', qsEmail: '',
+  certified: '',
   release1Value: '', release1Date: '', release1Received: false,
   release2Value: '', release2Date: '', release2Received: false,
   comments: '',
@@ -313,6 +314,7 @@ export default function RetentionPage() {
           afaGross: num(pick(r, 'Gross AFA', 'afaGross')),
           projectValue: num(pick(r, 'Gross AFA', 'Final Account')),
           appliedFor: num(pick(r, 'Applied for')),
+          certified: num(pick(r, 'Certified')),
           invoicedNet: num(pick(r, 'Invoiced', 'invoicedNet')),
           invoiced: num(pick(r, 'Invoiced', 'invoicedNet')),
           retentionPct: pct(pick(r, 'Ret %', 'retentionPct')),
@@ -439,6 +441,8 @@ export default function RetentionPage() {
           paid: p.paid || 0,
           appliedFor: p.appliedForLatest ? String(p.appliedForLatest) : '',
           appliedForLatest: p.appliedForLatest || 0,
+          certified: p.certifiedGross ? String(p.certifiedGross) : '',
+          certifiedFromApp: p.certifiedFromApp || '',
           // Still HELD: retention on the invoiced value, less anything already claimed
           // back through an application's Retention section. Without the deduction the
           // register keeps chasing money that has been applied for.
@@ -592,7 +596,17 @@ export default function RetentionPage() {
         qsName: e.qsName || x.qsName,
         // Applied-for auto-populates from the latest application; a manually typed
         // value on the saved entry still wins.
-        appliedFor: (e.appliedFor != null && e.appliedFor !== '') ? e.appliedFor : (x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || '')),
+        // THE SENT APPLICATION WINS.
+        //
+        // A typed value used to beat it, so an override entered once sat there for good
+        // and every later application was ignored - which is why some rows did not match
+        // their latest certificate. A manual figure is now only used where there is no
+        // sent application to take it from.
+        appliedFor: x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || ''),
+        // Same rule: previously certified (gross) from the latest sent application beats
+        // anything typed, and a typed value fills the gap where there is no application.
+        certified: x.certifiedGross ? String(x.certifiedGross) : (e.certified || ''),
+        certifiedFromApp: x.certifiedFromApp || '',
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
         // markedComplete is a manual saved flag on `e` — keep it.
       }
@@ -789,15 +803,13 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v792</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref}</span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
                   Every account-612 line the app holds for this project. <strong>Raw</strong> is what came from Xero;
                   <strong> Used</strong> is after a credit note has been cancelled against the invoice it reverses.
                   Read it straight against your Xero account-transactions export.
-                  <strong> Match</strong> shows how each credit note was paired to the invoice it
-                  reverses, or why it could not be - so a pair left uncancelled says why on the row.
                 </div>
                 <div style={{ overflow: 'auto', padding: '0 16px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -806,10 +818,9 @@ export default function RetentionPage() {
                       <th style={{ ...th2, textAlign: 'right' }}>Raw</th>
                       <th style={{ ...th2, textAlign: 'right' }}>Used</th>
                       <th style={th2}>Side</th><th style={th2}>Netted</th><th style={th2}>Allocs</th>
-                      <th style={th2}>Match</th>
                     </tr></thead>
                     <tbody>
-                      {rows.length === 0 && <tr><td style={td2} colSpan={9}>No 612 lines stored. If Xero shows some, they are not reaching this project - check the tracking category on those invoices.</td></tr>}
+                      {rows.length === 0 && <tr><td style={td2} colSpan={8}>No 612 lines stored. If Xero shows some, they are not reaching this project - check the tracking category on those invoices.</td></tr>}
                       {rows.map((r, i) => (
                         <tr key={i} style={{ background: r.netted ? '#fffbeb' : undefined }}>
                           <td style={td2}>{r.date || '-'}</td>
@@ -820,13 +831,12 @@ export default function RetentionPage() {
                           <td style={{ ...td2, color: r.side === 'deducted' ? '#dc2626' : r.side === 'released' ? '#16a34a' : '#bbb' }}>{r.side}</td>
                           <td style={td2}>{r.netted ? 'cancelled' : ''}</td>
                           <td style={td2}>{r.allocs || ''}</td>
-                          <td style={{ ...td2, whiteSpace: 'normal', fontSize: 11, color: r.netted ? '#16a34a' : '#94a3b8' }}>{r.match || ''}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot><tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                       <td style={td2} colSpan={4}>Totals from these lines</td>
-                      <td style={{ ...td2, textAlign: 'right' }} colSpan={5}>
+                      <td style={{ ...td2, textAlign: 'right' }} colSpan={4}>
                         deducted {fmt(d)} &nbsp;&middot;&nbsp; released {fmt(rl)}
                       </td>
                     </tr></tfoot>
@@ -1040,7 +1050,8 @@ export default function RetentionPage() {
                         ['Gross AFA', 'right', 'Final account BEFORE Main Contractor\u2019s Discount. Taken from the latest application (measured contract sum + variations at final value). Falls back to Edit Project Details when the project has no applications.', 'afaGross'],
                         ['MCD', 'right', 'Main Contractor\u2019s Discount deducted from the gross. Set on the IHM and editable in Edit Project Details.', 'mcdValue'],
                         ['Final Account', 'right', 'Gross AFA less MCD. This is the figure retention is calculated on, matching how every application works: gross \u2192 less MCD \u2192 retention on the sub-total.', 'finalAccount'],
-                        ['Applied for', 'right', 'Auto-populates from the latest application on this project. You can still type a value to override it.', 'appliedFor'],
+                        ['Applied for', 'right', 'The sub-total on the latest SENT application: gross measured works less MCD, plus variations. The application always wins - a typed value is only used where a project has no sent application. A warning triangle means it does not agree with Certified.', 'appliedFor'],
+                        ['Certified', 'right', 'Previously Certified (gross) on the latest SENT application - what the customer has certified to date. Editable inline, but the next application sent overwrites it.', 'certified'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Applied for. What is still to be CLAIMED against the final account. Falls back to invoiced only where a project has no application.', null],
@@ -1230,11 +1241,29 @@ export default function RetentionPage() {
                               {faBelowInvoiced && <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 600 }}>⚠ FA lower than invoiced</div>}
                             </td>
                             {/* Applied for (manual override) */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>
+                              {entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}
+                              {/* Applied for should equal Certified once the customer has
+                                  certified the application. A gap means the latest one is
+                                  applied for but not yet certified - worth seeing without
+                                  reading across two columns. */}
+                              {(() => {
+                                const a = parseFloat(entry.appliedFor || 0) || 0
+                                const c = parseFloat(entry.certified || 0) || 0
+                                if (!a || !c || Math.abs(a - c) < 1) return null
+                                return <span title={`Applied for ${fmtC(a)} does not match Certified ${fmtC(c)} - out by ${fmtC(a - c)}. Usually the latest application is not yet certified.`}
+                                  style={{ marginLeft: 5, color: '#b45309', fontSize: 12 }}>&#9888;</span>
+                              })()}
+                            </td>
+                            {/* Certified - editable, overwritten by the next sent application */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <span style={{ color: '#555' }}>{entry.certified != null && entry.certified !== '' ? fmt(parseFloat(entry.certified)) : '\u2014'}</span>
+                              {entry.certifiedFromApp ? <div style={{ fontSize: 9, color: '#bbb' }}>app {entry.certifiedFromApp}</div> : null}
+                            </td>
                             {/* Invoiced Net */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
                             {/* Applied-for vs Invoiced match (right of Invoiced) */}
-                            {matchCell(entry.appliedFor, invNet, entry.appliedFor != null && entry.appliedFor !== '' && invNet != null, 'Mismatch, applied for and invoiced differ')}
+                            {matchCell(entry.certified, invNet, entry.certified != null && entry.certified !== '' && invNet != null, 'Mismatch - certified and invoiced differ. Either something certified has not been invoiced, or an invoice has gone out for something not certified.')}
                             {/* Account Remaining */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
@@ -1420,6 +1449,7 @@ export default function RetentionPage() {
                           <td style={tdT}>{fmtC(n('mcdValue'))}</td>
                           <td style={tdT}>{fmtC(sum((e) => parseFloat(e.finalAccount || e.projectValue || 0) || 0))}</td>
                           <td style={tdT}>{fmtC(n('appliedFor'))}</td>
+                          <td style={tdT}>{fmtC(n('certified'))}</td>
                           <td style={tdT}>{fmtC(sum((e) => parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0))}</td>
                           <td style={tdT} />
                           <td style={tdT}>{fmtC(sum(calcAccountRemaining))}</td>
@@ -1570,8 +1600,12 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(manual for now)</span></div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(sent application wins)</span></div>
           <input type="number" value={form.appliedFor || ''} onChange={f('appliedFor')} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Certified £ <span style={{ color: '#bbb' }}>(next application overwrites)</span></div>
+          <input type="number" value={form.certified || ''} onChange={f('certified')} style={inputStyle} />
         </div>
         <div>
           <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Invoiced Net £ <span style={{ color: '#bbb' }}>(ex-VAT)</span></div>
