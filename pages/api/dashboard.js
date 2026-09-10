@@ -1,5 +1,5 @@
 import { getAllProjectSettings, getOpsProjects } from '../../lib/db'
-import { computeApplicationSummary } from '../../lib/applications'
+import { computeApplicationSummary, isInstructed } from '../../lib/applications'
 import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
 import { syncRegistry, ghostsFromRegistry } from '../../lib/projectRegistry'
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -345,6 +345,13 @@ export default async function handler(req, res) {
       //
       // Null when there are no applications - the caller then falls back to project
       // details. Zero would be indistinguishable from a real zero.
+      // Project-details side of the final account. Hoisted above the applications
+      // block so the AFA diagnostic can decompose the application against it without
+      // writing the rule a second time.
+      const contractValue = parseFloat(settings.contractValue || 0)
+      const instructedVars = (settings.variations || [])
+        .filter(v => isInstructed(v))
+        .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
       let certifiedGross = 0, certifiedFromApp = ''
       let certifiedSetOnApp = false
       let appliedForDetail = null
@@ -519,6 +526,28 @@ export default async function handler(req, res) {
             // What the LATEST application of any status would have given - the old
             // behaviour, kept so a changed figure can be explained.
             anyNetBeforeRet: r2(sum.current && sum.current.netBeforeRet),
+            // WHY GROSS AFA MAY NOT MATCH THE PROJECT'S OWN FINAL ACCOUNT.
+            //
+            // The application's AFA is measuredContractSum + variationsFinal, both taken
+            // from the APPLICATION - its own contract-works schedule and its variations,
+            // frozen at the moment it was sent. Project details holds a separate contract
+            // value and a separate variations list. The two only agree if the schedule on
+            // the application adds up to the contract value AND no variation has been
+            // instructed since the last application went out.
+            //
+            // Decomposed here so the gap can be read rather than guessed at.
+            afaApp: sentSum ? r2(sentSum.anticipatedFinalAccount) : null,
+            afaAppMeasured: sentSum ? r2(sentSum.measuredContractSum) : null,
+            afaAppVariations: sentSum ? r2(sentSum.variationsFinal) : null,
+            appVarCount: latestSent && Array.isArray(latestSent.variations) ? latestSent.variations.length : 0,
+            appVarInstructed: latestSent && Array.isArray(latestSent.variations) ? latestSent.variations.filter(v => isInstructed(v)).length : 0,
+            // The project-details side of the same sum.
+            afaSettings: r2(contractValue + instructedVars),
+            afaSettingsContract: r2(contractValue),
+            afaSettingsVariations: r2(instructedVars),
+            settingsVarCount: Array.isArray(settings.variations) ? settings.variations.length : 0,
+            settingsVarInstructed: Array.isArray(settings.variations) ? settings.variations.filter(v => isInstructed(v)).length : 0,
+            afaOverride: (settings.afaOverride != null && isFinite(settings.afaOverride)) ? r2(Number(settings.afaOverride)) : null,
           }
         }
       } catch {}
@@ -534,10 +563,6 @@ export default async function handler(req, res) {
       })
 
       // ── Contract / AFA ────────────────────────────────────────────────────
-      const contractValue = parseFloat(settings.contractValue || 0)
-      const instructedVars = (settings.variations || [])
-        .filter(v => v.instructed)
-        .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
       // ORDER OF PREFERENCE: latest SENT application -> manual override -> project details.
       //
       // The override used to win over everything, so a figure typed once could sit on top
@@ -690,9 +715,9 @@ export default async function handler(req, res) {
 
       // ── Budgets (inc. instructed variations) ─────────────────────────────
       const labourBudget = parseFloat(settings.labourBudget || 0) +
-        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
+        (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
       const materialsBudget = parseFloat(settings.materialsBudget || 0) +
-        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
+        (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
       const totalBudget = labourBudget + materialsBudget
 
       // ── Comment ───────────────────────────────────────────────────────────
@@ -920,6 +945,7 @@ export default async function handler(req, res) {
         appsBothRecords_v1: true,
         finalAccountMcdPlacement_v1: true,
         accountBaseNetOfMcd_v1: true,
+        afaDecomp_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

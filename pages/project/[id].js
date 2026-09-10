@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
-import { computeApplicationSummary } from '../../lib/applications'
+import { computeApplicationSummary, isInstructed } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { missingProjectFields } from '../../lib/projectComplete'
 import ReportImprovementLink from '../../components/ReportImprovementLink'
@@ -41,7 +41,7 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
   const retention = retPct > 0 ? invoicedToDate * retPct : 0
   const grossInvoiced = invoicedToDate
   const contractValue = parseFloat(settings.contractValue || 0)
-  const instructedVars = (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
+  const instructedVars = (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
 
   // ANTICIPATED FINAL ACCOUNT, on the SAME rule as the Retention Tracker.
   //
@@ -82,8 +82,8 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
   // certified. Measured against what has been applied for, not what has been invoiced.
   const remainingToApply = afa - appliedForGross
   const remainingToInvoice = afa - invoicedToDate
-  const totalLabourBudget = parseFloat(settings.labourBudget || 0) + (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
-  const totalMaterialsBudget = parseFloat(settings.materialsBudget || 0) + (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
+  const totalLabourBudget = parseFloat(settings.labourBudget || 0) + (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
+  const totalMaterialsBudget = parseFloat(settings.materialsBudget || 0) + (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
   const totalBudget = totalLabourBudget + totalMaterialsBudget
   return { costsToDate, labourToDate, materialsToDate, invoicedToDate, grossInvoiced, retention, afa, afaSource, appliedForGross, margin, remainingToApply, remainingToInvoice, totalBudget, totalLabourBudget, totalMaterialsBudget }
 }
@@ -302,7 +302,7 @@ export default function ProjectPage() {
     setForm({ ...form, variations: vars })
   }
 
-  const afa = (parseFloat(form.contractValue) || 0) + (form.variations || []).filter(v => v.instructed).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
+  const afa = (parseFloat(form.contractValue) || 0) + (form.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading...</div>
   if (!project) return <div style={{ padding: 40 }}>Project not found.</div>

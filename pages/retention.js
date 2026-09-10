@@ -944,7 +944,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v798</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v799</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -971,6 +971,34 @@ export default function RetentionPage() {
                           {row('Typed on this row', appliedForFor.certified ? fmtC(parseFloat(appliedForFor.certified)) : 'not set', 'only used where there is no sent application')}
                         </tbody>
                       </table>
+                      <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.4 }}>Gross AFA - where it comes from</div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
+                        <tbody>
+                          {row('Measured contract sum (app)', d.afaAppMeasured == null ? '-' : fmtC(d.afaAppMeasured), 'the contract works schedule ON the application')}
+                          {row('Variations at final value (app)', d.afaAppVariations == null ? '-' : fmtC(d.afaAppVariations), `${d.appVarInstructed} instructed of ${d.appVarCount} on the application`)}
+                          {row('= Gross AFA from the application', d.afaApp == null ? '-' : fmtC(d.afaApp), 'frozen when the application was sent')}
+                          {row('Contract value (project details)', d.afaSettingsContract == null ? '-' : fmtC(d.afaSettingsContract), '')}
+                          {row('Instructed variations (project details)', d.afaSettingsVariations == null ? '-' : fmtC(d.afaSettingsVariations), `${d.settingsVarInstructed} instructed of ${d.settingsVarCount} on the project`)}
+                          {row('= Gross AFA from project details', d.afaSettings == null ? '-' : fmtC(d.afaSettings), 'used only where there is no sent application')}
+                          {row('Stored override', d.afaOverride == null ? 'none' : fmtC(d.afaOverride), 'stamped when an application is sent')}
+                        </tbody>
+                      </table>
+                      {(() => {
+                        if (d.afaApp == null || d.afaSettings == null) return null
+                        const gap = d.afaApp - d.afaSettings
+                        if (Math.abs(gap) < 1) return null
+                        const measGap = (d.afaAppMeasured || 0) - (d.afaSettingsContract || 0)
+                        const varGap = (d.afaAppVariations || 0) - (d.afaSettingsVariations || 0)
+                        const blame = Math.abs(measGap) >= Math.abs(varGap)
+                          ? `mostly the measured contract sum: the schedule on the application comes to ${fmtC(d.afaAppMeasured)} against a contract value of ${fmtC(d.afaSettingsContract)}, a difference of ${fmtC(measGap)}`
+                          : `mostly the variations: the application carries ${fmtC(d.afaAppVariations)} against ${fmtC(d.afaSettingsVariations)} on the project, a difference of ${fmtC(varGap)} - usually a variation instructed AFTER the last application went out`
+                        return (
+                          <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12, color: '#7c2d12' }}>
+                            Gross AFA is {fmtC(gap)} {gap > 0 ? 'above' : 'below'} the project-details final account. It is {blame}.
+                            The application always wins, so the figure shown is the application&apos;s.
+                          </div>
+                        )
+                      })()}
                       {d.draftSupersedes ? (
                         <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12, color: '#7c2d12' }}>
                           There is a later DRAFT application (app {d.latestApp}). It is ignored - both
@@ -1016,7 +1044,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v798</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v799</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>

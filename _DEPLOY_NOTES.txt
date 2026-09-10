@@ -1,122 +1,119 @@
-pkg798 - Retention tracker MCD audit. Supersedes pkg797.
-=========================================================
+pkg799 - Why Gross AFA can disagree with the project's final account. Supersedes pkg798.
+=========================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795 / 796 / 797. It contains all three. Four files.
+DEPLOY THIS INSTEAD OF pkg795-798. It contains all of them. Five files.
 
   pages/api/dashboard.js
   pages/retention.js
+  pages/project/[id].js              (NEW in this package)
   pages/api/business-financials.js   (build marker only)
   lib/applications.js
 
-pkg794 first if not already deployed - that carries the other eleven files.
+pkg794 first if not already deployed - that carries the other ten files.
+
+FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
 
 
-THE AUDIT - EVERY VALUE ON THE TRACKER, AGAINST MCD PLACEMENT
-==============================================================
+YOUR QUESTION: IS IT BECAUSE THE PROJECT WAS ADDED VIA EDIT PROJECT DETAILS?
+=============================================================================
+Close, but the mechanism is not "how it was added" - it is that the two figures are
+built from two entirely separate sets of numbers, and nothing keeps them in step.
 
-Test project throughout: 800,000 measured + 200,000 variations, MCD 2.5%,
-retention 5%, MCD set to come off MEASURED WORKS ONLY.
+    Gross AFA (application)  = measuredContractSum + variationsFinal
+                               BOTH taken from the APPLICATION - its own contract
+                               works schedule, and its own variations list, FROZEN
+                               at the moment it was sent (applications.js line 344)
 
+    Final account (project)  = contractValue + instructed variations
+                               from Edit Project Details
 
-ALREADY CORRECT - no change needed
------------------------------------
-Applied for        current.netBeforeRet in lib/applications.js. Builds mcdBaseCur
-                   and afterMcdCur from the placement flags, so both orderings you
-                   described are honoured. Instructed-only via isInstructed().
+They agree only if the schedule on the application adds up to the contract value AND
+no variation has been instructed since the last application went out.
 
-Retention Owed     Applied for x ret%. Inherits the placement through Applied for.
+So on a project set up in Edit Project Details first, the application's contract
+works schedule was typed separately. If it was only partly populated - the items
+being claimed rather than the whole contract - measuredContractSum comes in below
+contractValue and Gross AFA reads low. The application always wins, so that is the
+figure you see.
 
-MCD column         afaBeforeMcd - afa. Now the real discount, not a flat percentage
-                   of the whole account.
+The other common cause is a variation instructed AFTER the last application was
+sent. It is in project details and not in the frozen application, so Gross AFA is
+behind by exactly that variation.
 
-1st / 2nd Value    Half of Retention Owed, so MCD-correct. See the FLAGGED section -
-                   the BASE is a separate question.
-
-retentionOnFinal   afa x retPct, and afa is the placement-correct Final Account as
-                   of pkg797. Inherits it.
-
-
-FIXED HERE - genuinely wrong on MCD
-------------------------------------
-1. SIX FUNCTIONS SHARED A PRE-MCD FALLBACK
-
-   Each of these wrote the same expression:
-
-       const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
-
-   projectValue is p.contractValue on project-derived rows - the ORIGINAL contract
-   value, before MCD and before variations - and the imported "Gross AFA" column on
-   imported rows. Both are gross.
-
-   So wherever Final Account was blank, all six computed on the gross and came out
-   high by the whole discount:
-
-       calcVat                  VAT on the gross
-       calcTotalDue             Final Account + VAT, both on the gross
-       calcAccountRemaining     what is left to claim, on the gross
-       calcFinalBalance         final-account balance, on the gross
-       setRetStatus             the check that closes a retention, on the gross
-       the inline row cell      Account Remaining as rendered
-
-   Now one accountValue() function, used by all six. Final Account where there is
-   one; otherwise gross LESS the MCD actually recorded; only raw gross where no MCD
-   is known, in which case there is no discount to apply.
-
-   On the test project a row with no Final Account moves from 1,000,000.00 to
-   980,000.00.
+Rather than tell you which one it is on your project, the drill-down now shows it.
 
 
-2. ACCOUNT REMAINING WAS MEASURING AGAINST THE WRONG THING
+1. NEW: GROSS AFA DECOMPOSITION IN THE DRILL-DOWN
+--------------------------------------------------
+Click the Applied for cell on the row that is wrong. A second table now shows both
+sides of the sum:
 
-   calcAccountRemaining read entry.appliedForLatest. The merge never carries that
-   field onto a saved row - only project-derived rows have it - so on every saved
-   row it was undefined and the function fell through to INVOICED. That is the exact
-   thing its own comment says it must not do, because invoicing lags the application
-   by weeks.
+    Measured contract sum (app)          the schedule ON the application
+    Variations at final value (app)      with instructed / total counts
+    = Gross AFA from the application
 
-   It now reads entry.appliedFor, which is the value actually on screen. On the test
-   project: 392,000.00, where it had been showing 580,000.00.
+    Contract value (project details)
+    Instructed variations (project)      with instructed / total counts
+    = Gross AFA from project details
+    Stored override
 
+Where the two disagree by more than a pound, a banner says by how much and
+attributes it to whichever component accounts for most of the gap - the measured
+contract sum, or the variations. Verified against both shapes:
 
-FLAGGED, NOT CHANGED - your call
----------------------------------
-3. THE RELEASE HALVES ARE ON A DIFFERENT BASE FROM THE TOOLTIP
-
-   calcReleaseHalf returns half of retention on APPLIED FOR. Both release column
-   tooltips say "half of the retention on the FINAL ACCOUNT (Gross AFA less MCD x
-   retention %)", and lib/applications.js computes halfRetention from finalSubTotal,
-   which is what a certificate actually releases.
-
-   pkg782 set the final-account basis deliberately. pkg785-787 rebased Retention
-   Owed onto Applied for and this followed it - reverting that decision as a side
-   effect rather than as a choice.
-
-   This is NOT an MCD fault. Both bases honour the placement flags. It is a base
-   fault, and it only shows mid-contract - the two converge once the job is fully
-   applied for. On the test project at 60% applied:
-
-       half on applied for    14,700.00   (what shows now)
-       half on final account  24,500.00   (what the tooltip and certificate say)
-
-   entry.retentionOnFinalAccount is already on the row, so switching is one line.
-   Not done unasked - it moves the halves on every live project.
+    schedule short of contract value  -> blamed on measured contract sum
+    variation instructed after send   -> blamed on variations
 
 
-4. THE MCD PLACEMENT FLAGS DEFAULT DIFFERENTLY IN TWO PLACES
+2. FIXED: SEVEN PLACES STILL USED THE OLD INSTRUCTED TEST
+-----------------------------------------------------------
+This can also make the project-details side wrong on its own.
 
-   Carried forward from pkg797 and still true. lib/applications.js treats a missing
-   flag as TRUE (MCD applies to everything); pages/api/applications.js stamps
-   `project.mcdOnVariations === true`, so a missing project setting becomes FALSE.
+pkg766 established isInstructed() as the single rule, because the field is a boolean
+on records written by the current UI and the STRING 'yes'/'no' on older ones:
 
-   An application created before these flags existed therefore computes with MCD on
-   everything regardless of what Edit Project Details now says. Changing the default
-   would move certificates already issued, so it needs your word.
+    v.instructed !== false   counts a MISSING flag as instructed
+    !!v.instructed           counts the STRING 'no' as instructed
+
+pkg766 fixed applicationPdf.js and applications.js. It did not fix the dashboard or
+the project page, which between them had seven copies of `filter(v => v.instructed)`
+- the second form. So a variation recorded as 'no' on an older project was counted
+as instructed in:
+
+    dashboard.js   project-details AFA, labour budget, materials budget
+    project/[id].js  AFA, labour budget, materials budget, the edit-form preview
+
+All seven now call isInstructed(). If your mismatched project is an older one with
+variations marked 'no', this alone may close the gap - and the drill-down will show
+it, because the instructed/total counts are on both lines.
+
+Also hoisted contractValue and instructedVars above the applications block so the
+diagnostic decomposes against the same figures the column uses, rather than a second
+copy of the rule.
+
+
+WORTH KNOWING - not changed
+----------------------------
+anticipatedFinalAccount is measuredContractSum + variationsFinal. It does NOT
+include materialsFinal. Materials on site are a temporary claim rather than account
+value, so excluding them is right - but if your gap is exactly the materials figure,
+that is why.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg798
-  612 drill-down header                 -> v798
-  Applied for / Certified drill-down    -> v798
+  13-week cash flow build marker        -> pkg799
+  612 drill-down header                 -> v799
+  Applied for / Certified drill-down    -> v799
 
-Cache marker accountBaseNetOfMcd_v1. Hard refresh after deploying.
+Cache marker afaDecomp_v1. Hard refresh after deploying.
+
+
+STILL OPEN, ON YOUR WORD
+-------------------------
+  - Release halves are on the Applied-for base, not the Final Account base their own
+    tooltip and the certificate use (pkg798 notes, item 3). One line.
+  - MCD placement flags default TRUE in lib/applications.js and FALSE in
+    pages/api/applications.js (pkg797 notes). Changing it moves issued certificates.
+  - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
+    application of ANY status.
