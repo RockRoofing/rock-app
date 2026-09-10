@@ -85,7 +85,7 @@ function InlineNumberCell({ value, onCommit, disabled, note, title }) {
       title={title || (disabled ? '' : 'Click to edit. Enter saves, Escape cancels.')}
       style={{ padding: '5px 6px', textAlign: 'right', whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer' }}>
       {disabled ? (
-        <span style={{ color: '#555' }}>{empty ? '\u2014' : fmt(parseFloat(value))}</span>
+        <span style={{ color: '#555' }} >{empty ? '\u2014' : fmt(parseFloat(value))}</span>
       ) : (
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end',
@@ -134,6 +134,9 @@ function dashFields(p) {
     appliedForLatest: p.appliedForLatest || 0,
     certifiedGross: p.certifiedGross,
     certifiedSetOnApp: !!p.certifiedSetOnApp,
+    // The application only OWNS this cell when its box holds a real figure. A first
+    // application carries 0, which tells you nothing and must not lock the cell.
+    certifiedLocked: !!(p.certifiedSetOnApp && Number(p.certifiedGross)),
     certifiedFromApp: p.certifiedFromApp || '',
     appliedForDetail: p.appliedForDetail || null,
     afaGross: p.afaGross != null ? p.afaGross : null,
@@ -599,8 +602,9 @@ export default function RetentionPage() {
           paid: p.paid || 0,
           ...dashFields(p),
           appliedFor: p.appliedForLatest ? String(p.appliedForLatest) : '',
-          // Same test as the merge: SET, not truthy. A first application carries 0.
-          certified: p.certifiedSetOnApp ? String(p.certifiedGross) : '',
+          // A real figure from the application wins. A zero does not - see the merge.
+          certified: (p.certifiedSetOnApp && Number(p.certifiedGross)) ? String(p.certifiedGross)
+            : (p.certifiedSetOnApp ? '0' : ''),
           // Still HELD: retention on the invoiced value, less anything already claimed
           // back through an application's Retention section. Without the deduction the
           // register keeps chasing money that has been applied for.
@@ -767,7 +771,17 @@ export default function RetentionPage() {
         // application. Tested on certifiedSetOnApp, not on the value being truthy: a
         // first application legitimately holds 0 and must show 0.00 rather than falling
         // through to whatever was typed on this row.
-        certified: x.certifiedSetOnApp ? String(x.certifiedGross) : (e.certified || ''),
+        // A TYPED VALUE BEATS AN APPLICATION ZERO.
+        //
+        // certifiedSetOnApp is true on a first application, where prevCertGross is
+        // legitimately 0. Because the application always won, anything typed into the
+        // cell was thrown away and the zero put straight back - you pressed Enter and
+        // watched your number turn into 0. On any project whose latest sent application
+        // is App 1, Certified was simply not editable, however editable it looked.
+        //
+        // A real figure from the application still wins. A zero does not.
+        certified: (x.certifiedSetOnApp && Number(x.certifiedGross)) ? String(x.certifiedGross)
+          : ((e.certified != null && e.certified !== '') ? e.certified : (x.certifiedSetOnApp ? '0' : '')),
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
         // markedComplete is a manual saved flag on `e` — keep it.
       }
@@ -969,7 +983,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v805</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v806</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -1085,7 +1099,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v805</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v806</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1554,6 +1568,10 @@ export default function RetentionPage() {
                             <InlineNumberCell
                               value={entry.certified}
                               note={entry.certifiedFromApp ? `app ${entry.certifiedFromApp}` : ''}
+                              disabled={!!entry.certifiedLocked}
+                              title={entry.certifiedLocked
+                                ? `From the "Previously certified (gross)" box on application ${entry.certifiedFromApp}. Change it there, not here - a value typed on this row would be discarded.`
+                                : undefined}
                               onCommit={(v) => { const { appliedForDetail, ...rest } = entry; saveEntry({ ...rest, certified: v }) }}
                             />
                             {/* Invoiced Net */}
