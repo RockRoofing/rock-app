@@ -46,6 +46,7 @@ const EMPTY_ENTRY = {
 function InlineNumberCell({ value, onCommit, disabled, note, title }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [hover, setHover] = useState(false)
   const start = () => {
     if (disabled) return
     setDraft(value == null || value === '' ? '' : String(value))
@@ -73,14 +74,33 @@ function InlineNumberCell({ value, onCommit, disabled, note, title }) {
       </td>
     )
   }
+  const empty = value == null || value === ''
+  // The affordance has to read as editable WITHOUT being clicked. A dashed underline
+  // alone was too quiet - it looks like every other tooltip hint on the page. So:
+  // a boxed cell, a pencil that darkens on hover, and the word "Add" where it is empty.
   return (
     <td onClick={start}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       title={title || (disabled ? '' : 'Click to edit. Enter saves, Escape cancels.')}
-      style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'text' }}>
-      <span style={{ color: '#555', borderBottom: disabled ? 'none' : '1px dashed #d1d5db' }}>
-        {value != null && value !== '' ? fmt(parseFloat(value)) : '\u2014'}
-      </span>
-      {note ? <div style={{ fontSize: 9, color: '#bbb' }}>{note}</div> : null}
+      style={{ padding: '5px 6px', textAlign: 'right', whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer' }}>
+      {disabled ? (
+        <span style={{ color: '#555' }}>{empty ? '\u2014' : fmt(parseFloat(value))}</span>
+      ) : (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end',
+          minWidth: 92, padding: '3px 6px', borderRadius: 4,
+          border: `1px solid ${hover ? '#1c704f' : '#e2e8f0'}`,
+          background: hover ? '#f0fdf4' : '#fcfcfd',
+          transition: 'background .1s, border-color .1s',
+        }}>
+          <span style={{ color: empty ? '#9aa5b1' : '#555', fontStyle: empty ? 'italic' : 'normal' }}>
+            {empty ? 'Add' : fmt(parseFloat(value))}
+          </span>
+          <span aria-hidden="true" style={{ fontSize: 10, lineHeight: 1, color: hover ? '#1c704f' : '#c3cbd4' }}>&#9998;</span>
+        </span>
+      )}
+      {note ? <div style={{ fontSize: 9, color: '#bbb', paddingRight: 2 }}>{note}</div> : null}
     </td>
   )
 }
@@ -648,8 +668,16 @@ export default function RetentionPage() {
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
         ret612Detail: x.ret612Detail,
-        afaGross: x.afaGross, afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
-        finalAccount: e.finalAccount || x.finalAccount,
+        afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
+        mcdBasis: x.mcdBasis || '', afaFromApp: !!x.afaFromApp,
+        // THE APPLICATION WINS ON BOTH ACCOUNT COLUMNS.
+        //
+        // Final Account read `e.finalAccount || x.finalAccount`, so a figure typed once
+        // sat on top of a sent application for good and nothing moved when the
+        // application changed - the same fault Applied for had. A typed value is now
+        // only used where no sent application exists.
+        afaGross: x.afaFromApp ? x.afaGross : ((e.afaGross != null && e.afaGross !== '') ? e.afaGross : x.afaGross),
+        finalAccount: x.afaFromApp ? x.finalAccount : (e.finalAccount || x.finalAccount),
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
         completionDate: e.completionDate || x.completionDate,
@@ -872,7 +900,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v796</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v797</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -894,6 +922,8 @@ export default function RetentionPage() {
                           {row('Gross on the sent application', d.sentGross == null ? '-' : fmtC(d.sentGross), 'current - this is what THIS certificate applies for, cumulative')}
                           {row('This certificate', (d.sentGross == null || d.prevCertTyped == null) ? '-' : fmtC(d.sentGross - d.prevCertTyped), 'current less previously certified')}
                           {row('Certificate fallback if box empty', d.prevCertComputed == null ? '-' : fmtC(d.prevCertComputed), 'the preceding application - NOT used by this column')}
+                          {row('Final Account basis', appliedForFor.mcdBasis || '-', 'where MCD is taken off')}
+                          {row('Account columns source', appliedForFor.afaFromApp ? 'sent application' : (appliedForFor.afaSource || 'project details'), appliedForFor.afaFromApp ? 'a typed value cannot override this' : 'no sent application, so a typed value is used')}
                           {row('Typed on this row', appliedForFor.certified ? fmtC(parseFloat(appliedForFor.certified)) : 'not set', 'only used where there is no sent application')}
                         </tbody>
                       </table>
@@ -942,7 +972,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v796</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v797</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1190,9 +1220,9 @@ export default function RetentionPage() {
                         ['Ref', 'left', 'Project reference (job number) from project details.', 'ref'],
                         ['Customer', 'left', 'Customer name from project details.', 'customer'],
                         ['Project', 'left', 'Project name from project details.', 'project'],
-                        ['Gross AFA', 'right', 'Final account BEFORE Main Contractor\u2019s Discount. Taken from the latest application (measured contract sum + variations at final value). Falls back to Edit Project Details when the project has no applications.', 'afaGross'],
+                        ['Gross AFA', 'right', 'Final account BEFORE Main Contractor\u2019s Discount: measured contract sum + variations at final value. The latest SENT application always wins - a typed value or an override is only used where the project has no sent application.', 'afaGross'],
                         ['MCD', 'right', 'Main Contractor\u2019s Discount deducted from the gross. Set on the IHM and editable in Edit Project Details.', 'mcdValue'],
-                        ['Final Account', 'right', 'Gross AFA less MCD. This is the figure retention is calculated on, matching how every application works: gross \u2192 less MCD \u2192 retention on the sub-total.', 'finalAccount'],
+                        ['Final Account', 'right', 'Gross AFA less MCD, retention included. MCD comes off only what Edit Project Details says it comes off - measured works only, or measured plus variations and materials - so a project that excludes variations from MCD is no longer over-discounted. Taken from the latest SENT application, which has already done this arithmetic; a typed value is only used where there is no sent application. This is the figure retention is calculated on.', 'finalAccount'],
                         ['Applied for', 'right', 'The sub-total on the latest SENT application: gross measured works less MCD, plus variations. The application always wins - a typed value is only used where a project has no sent application. A warning triangle means it does not agree with Certified.', 'appliedFor'],
                         ['Certified', 'right', 'The "Previously certified (gross)" box on the latest SENT application - the typed figure, used as the Previously Cert. column on the certificate, where This Certificate = current less previously. Blank means the box has not been filled in. Editable inline, but the next application sent overwrites it.', 'certified'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],

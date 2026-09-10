@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -349,9 +349,45 @@ export default async function handler(req, res) {
       let certifiedSetOnApp = false
       let appliedForDetail = null
       let afaFromApplication = null
+      let finalAccountFromApplication = null
+      let mcdOnVarsApp = null, mcdOnMosApp = null
       let afaSource = 'project details'
       try {
-        const apps = Array.isArray(settings.applications) ? settings.applications.slice() : []
+        // APPLICATIONS LIVE ON EITHER SETTINGS RECORD, AND WE MUST READ BOTH.
+        //
+        // Project settings are keyed by tracking option id OR by job number, and two
+        // records can exist for one project. `settings` above resolves to whichever
+        // matched FIRST, so applications written against the job-number record are
+        // invisible whenever an id record also exists.
+        //
+        // That is the same fault as "V01 and V02 are not showing", which was fixed for
+        // variations lower down this file and never for applications. It explains why
+        // Certified was blank, why Applied for fell back to a typed value, and why the
+        // Final Account came from project details instead of the application - all on
+        // SOME projects only, which is exactly the pattern reported.
+        //
+        // Nothing was lost. We were reading the wrong record.
+        const apps = (() => {
+          const byId = Array.isArray(allSettings[id]?.applications) ? allSettings[id].applications : []
+          const byJob = Array.isArray(allSettings[cp.jobNo]?.applications) ? allSettings[cp.jobNo].applications : []
+          if (!byJob.length) return byId.slice()
+          if (!byId.length) return byJob.slice()
+          // Both hold applications: merge so neither is dropped. Keyed on the permanent
+          // appNumber where there is one, otherwise seq, otherwise id.
+          const seen = new Map()
+          for (const a of [...byJob, ...byId]) {
+            if (!a) continue
+            const k = String(a.appNumber != null ? `n${a.appNumber}` : (a.seq != null ? `s${a.seq}` : `i${a.id}`))
+            const prev = seen.get(k)
+            // A SENT application beats a draft of the same number - it is the one that
+            // went to the customer.
+            const better = !prev
+              || (a.status === 'sent' && prev.status !== 'sent')
+              || (a.status === prev.status && (a.contractWorks || []).length > (prev.contractWorks || []).length)
+            if (better) seen.set(k, a)
+          }
+          return [...seen.values()]
+        })()
         if (apps.length) {
           apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
           const latest = apps[apps.length - 1]
@@ -445,6 +481,14 @@ export default async function handler(req, res) {
             const afaApp = sentSum.anticipatedFinalAccount
             if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
               afaFromApplication = afaApp
+              // THE FINAL ACCOUNT AFTER MCD, taken from the application rather than
+              // recomputed. The application knows where MCD applies; the register was
+              // taking it off the whole account, which overstates the discount on any
+              // project where MCD excludes variations or materials.
+              finalAccountFromApplication = (sentSum.finalSubTotal != null && isFinite(sentSum.finalSubTotal))
+                ? sentSum.finalSubTotal : null
+              mcdOnVarsApp = sentSum.mcdOnVars
+              mcdOnMosApp = sentSum.mcdOnMos
               afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
             }
           }
@@ -529,8 +573,10 @@ export default async function handler(req, res) {
       // overstated - Account Remaining, Total Due and the final-account balance all read
       // high by the value of the discount.
       //
-      // Applied to the whole account including variations, because that is exactly what
-      // the applications do: mcd = (measured + variations + materials) x mcdPct.
+      // NOT applied to the whole account. MCD comes off only what Edit Project Details
+      // says it comes off - see the placement block below. The old comment here claimed
+      // the applications charge MCD on measured + variations + materials, which is only
+      // true when both placement flags are on.
       // DEFAULTS TO 0, deliberately.
       //
       // Nothing recorded means no discount, not "unknown". So the Final Account equals
@@ -545,8 +591,35 @@ export default async function handler(req, res) {
         : (resolvedPeople?.mcdPct != null ? resolvedPeople.mcdPct : null)
       const mcdPct = mcdRaw != null ? mcdRaw : 0
       const mcdRecorded = mcdRaw != null          // whether anyone actually set it
-      const mcdValue = afaBeforeMcd * (mcdPct / 100)
-      const afa = afaBeforeMcd - mcdValue
+      // FINAL ACCOUNT = GROSS AFA LESS MCD, WITH MCD WHERE PROJECT DETAILS PUTS IT.
+      //
+      // This read `afaBeforeMcd * mcdPct`, taking the discount off the WHOLE account
+      // including variations and materials. That is only correct where MCD applies to
+      // everything. Where Edit Project Details says MCD comes off measured works only,
+      // it overstated the discount and understated the Final Account - and with it
+      // Account Remaining, Total Due and the retention charged on the account.
+      //
+      // Preference, matching Gross AFA: the sent APPLICATION first. It has already done
+      // this arithmetic on its own basis, so taking its figure means the register and
+      // the certificate cannot drift. Only where there is no application do we compute
+      // it here, and then we use the placement flags from project details.
+      const mcdOnVarsSet = settings.mcdOnVariations === true
+      const mcdOnMosSet = settings.mcdOnMaterials === true
+      let afa, mcdValue, mcdBasis
+      if (finalAccountFromApplication != null) {
+        afa = finalAccountFromApplication
+        mcdValue = afaBeforeMcd - afa
+        mcdBasis = `application (MCD on ${mcdOnVarsApp ? 'variations' : 'measured only'}${mcdOnMosApp ? ' + materials' : ''})`
+      } else {
+        // No application. Split the account the same way the certificate would.
+        const varsPart = instructedVars
+        const basePart = Math.max(0, afaBeforeMcd - varsPart)
+        const mcdBase = basePart + (mcdOnVarsSet ? varsPart : 0)
+        const afterPart = mcdOnVarsSet ? 0 : varsPart
+        mcdValue = mcdBase * (mcdPct / 100)
+        afa = (mcdBase - mcdValue) + afterPart
+        mcdBasis = `project details (MCD on ${mcdOnVarsSet ? 'measured + variations' : 'measured only'})`
+      }
 
       // ── Invoiced value & retention ────────────────────────────────────────
       // invoicedSales200 = sum of account-code-200 (Sales) lines: NET of VAT and
@@ -685,6 +758,11 @@ export default async function handler(req, res) {
         certifiedSetOnApp,
         certifiedFromApp,
         appliedForDetail,
+        mcdBasis,
+        finalAccountFromApplication,
+        // Whether BOTH account columns came from a sent application. The tracker uses
+        // this to stop a typed value overriding one.
+        afaFromApp: afaFromApplication != null,
         latestAppEnd,
         retentionClaimed,
         appRelease1,
@@ -839,6 +917,8 @@ export default async function handler(req, res) {
         certifiedPrevCert_v2: true,
         appliedForSent_v1: true,
         certifiedTypedBox_v1: true,
+        appsBothRecords_v1: true,
+        finalAccountMcdPlacement_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

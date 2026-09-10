@@ -1,85 +1,134 @@
-pkg796 - Certified = the typed "Previously certified (gross)" box. Supersedes pkg795.
-======================================================================================
+pkg797 - Applications were invisible on half the projects. Supersedes pkg796.
+==============================================================================
 
-DEPLOY THIS INSTEAD OF pkg795. It contains pkg795 in full. Three files, all exist.
+DEPLOY THIS INSTEAD OF pkg795 / pkg796. It contains both. Four files, all exist.
 
   pages/api/dashboard.js
   pages/retention.js
   pages/api/business-financials.js   (build marker only)
+  lib/applications.js                (NEW in this package - exports finalSubTotal)
 
-pkg794 first if you have not deployed it - that carries the other eleven files.
-
-
-THE RULE, AS YOU SET IT
-------------------------
-Certified is the "Previously certified (gross)" box on the latest SENT application.
-The typed figure. Nothing derived.
-
-That box is stored as prevCertGross (pages/applications.js line 816): a number when
-filled in, 0 on a first application, null when never touched. It is what prints in
-the Previously Cert. column, and This Certificate = current less previously.
+pkg794 first if not already deployed - that carries the other eleven files.
 
 
-WHAT CHANGED FROM pkg795
--------------------------
-pkg795 read sentSum.previously.gross - the computed previous column, which falls
-back to recomputing from the preceding application where the box is empty. It now
-reads prevCertGross directly, with NO fallback.
+1. WHY CERTIFIED STILL WAS NOT PULLING THROUGH - ROOT CAUSE
+------------------------------------------------------------
+The dashboard read applications from ONE settings record:
 
-No fallback is deliberate. The certificate does fall back; this column should not.
-A blank here means "nobody has filled that box in", which is worth seeing and is
-fixable by typing it. Substituting a computed number hides it. The drill-down still
-reports what the certificate would have fallen back to, marked as not used.
+    const settings = allSettings[id] || allSettings[cp.jobNo] || {}
+    const apps = settings.applications || []
 
-Second change, and the one that would have bitten: the merge tested whether the
-value was TRUTHY. A first application legitimately carries 0, so 0 failed the test
-and the row fell through to whatever had been typed on the tracker - showing a stale
-figure on exactly the projects where nothing has been certified yet. It now tests
-whether the box is SET, so a first application shows 0.00.
+Project settings are keyed by tracking option id OR by job number, and TWO records
+can exist for one project. That line takes whichever matched first. Applications
+written against the job-number record are invisible whenever an id record also
+exists.
 
-Verified across the five cases that matter, including that one:
+This is the identical fault that produced "V01 and V02 are not showing". It was
+fixed for variations lower down the same file and never for applications.
 
-  App 3 sent, box typed 120000        -> 120,000.00
-  App 1 sent, box is 0 (first app)    -> 0.00        (pkg795 gave the typed row value)
-  App 4 sent, box never filled        -> typed row value
-  App 4 sent, box empty, nothing typed-> blank
-  no sent application at all          -> typed row value
+It explains all three symptoms at once, and explains why they were intermittent:
+
+  - Certified blank            (no latestSent found, so the box was never read)
+  - Applied for not matching    (fell back to whatever was typed on the row)
+  - Final Account from project details instead of the application
+
+Applications are now read from BOTH records and merged. Keyed on the permanent
+appNumber, then seq, then id. Where both records hold the same application the SENT
+one wins, then the one carrying more contract works. Nothing is dropped and nothing
+was lost - we were reading the wrong record.
+
+This is the fix I expect to close the Certified item. If any row is still blank
+after this, open the Applied for drill-down: it now reports how many applications
+were found and how many are sent.
 
 
-ALSO IN THIS PACKAGE (from pkg795)
------------------------------------
-1. APPLIED FOR was reading a DRAFT. dashboard.js had two different applications
-   feeding the two columns - `latest` (any status) for Applied for, `latestSent` for
-   Certified. A draft nobody issued silently superseded the sent one, which is why
-   it only went wrong on some rows. Both columns now read the latest sent
-   application. The tooltip has promised this since pkg792; the code never did it.
+2. FINAL ACCOUNT AND GROSS AFA NOW PRIORITISE THE APPLICATION
+--------------------------------------------------------------
+retention.js line 652 read:
 
-2. One prevGrossFor() rule, replacing two divergent copies in the same file.
+    finalAccount: e.finalAccount || x.finalAccount
 
-3. APPLIED FOR / CERTIFIED DRILL-DOWN. Click the Applied for cell on any row: how
-   many applications exist and how many are sent, which one each column read, its
-   status, the typed box, This Certificate, and the fallback the column does not
-   use. Always on. Banners for a superseding draft, no sent application, and an
-   empty box.
+so a figure typed once beat the application permanently - the same fault Applied
+for had in pkg792. Both account columns now take the sent application first, and a
+typed value is used only where there is no sent application.
 
-4. CERTIFIED EDITABLE INLINE. Click the value, Enter saves, Escape cancels. Module
-   scope component, so no remount-on-render focus loss. Saves through the existing
-   saveEntry path; the diagnostic blob is stripped before writing to Redis.
+  sent app exists, value typed on row -> application wins
+  no sent app, value typed            -> typed value
+  no sent app, nothing typed          -> project details
 
-5. Both modals now close on Escape as well as the x. Neither had an Escape handler.
+
+3. FINAL ACCOUNT - MCD NOW GOES WHERE PROJECT DETAILS PUTS IT
+---------------------------------------------------------------
+Your definition: Gross AFA including retention, less MCD, with MCD applied as set in
+Edit Project Details - before or after variations and materials.
+
+The register was doing:
+
+    mcdValue = afaBeforeMcd * (mcdPct / 100)      // the WHOLE account
+
+That is only right where MCD applies to everything. Where Edit Project Details says
+MCD comes off measured works only, it over-discounted, and everything computed from
+the Final Account came out low - Account Remaining, Total Due, and the retention
+charged on the account.
+
+On 800,000 measured + 200,000 variations at 2.5%:
+
+    MCD on measured + variations   ->  975,000.00   (unchanged)
+    MCD on measured only           ->  980,000.00   (was 975,000.00, out by 5,000)
+
+Where there is a sent application the Final Account is now taken straight from it
+(sentSum.finalSubTotal), so the register and the certificate cannot drift. lib/
+applications.js already computed this correctly and simply did not return it - it
+does now. Where there is no application, the same split is applied using the
+placement flags from project details.
+
+The drill-down shows which basis was used on every row.
+
+
+4. APPLIED FOR - LOGIC CHECKED, ALREADY CORRECT
+------------------------------------------------
+Your definition: gross measured works less MCD, plus instructed variations and
+materials - or gross measured works plus instructed variations and materials less
+MCD - depending on Edit Project Details.
+
+lib/applications.js implements exactly that:
+
+    mcdBaseCur  = measuredToDate + (mcdOnVars ? variationsToDate : 0) + (mcdOnMos ? materialsOnSite : 0)
+    afterMcdCur = (mcdOnVars ? 0 : variationsToDate) + (mcdOnMos ? 0 : materialsOnSite)
+    netBeforeRet = (mcdBase - mcd) + after
+
+and Applied for reads current.netBeforeRet. Instructed-only is enforced by
+isInstructed(). No change needed - it was only ever failing because the application
+itself was invisible, per item 1.
+
+ONE THING TO BE AWARE OF, not changed here. The placement flags default differently
+in two places: lib/applications.js treats a missing flag as TRUE (MCD applies),
+while pages/api/applications.js stamps `project.mcdOnVariations === true`, so a
+missing project setting becomes FALSE. An application created before these flags
+existed therefore computes with MCD on everything. Changing that default would move
+certificates that have already gone out, so I have left it - but if you have old
+projects where the MCD looks wrong, that is the reason and it is a one-line change.
+
+
+5. CERTIFIED - MUCH CLEARER THAT IT IS EDITABLE
+-------------------------------------------------
+The dashed underline was too quiet. The cell is now a bordered box with a pencil,
+turns green on hover, and reads "Add" in grey italic where it is empty. Click,
+Enter saves, Escape cancels. Unchanged underneath: module scope component, saves
+through saveEntry, diagnostic blob stripped before writing.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg796
-  612 drill-down header                 -> v796
-  Applied for / Certified drill-down    -> v796
+  13-week cash flow build marker        -> pkg797
+  612 drill-down header                 -> v797
+  Applied for / Certified drill-down    -> v797
 
-Cache marker certifiedTypedBox_v1. Hard refresh after deploying.
+Cache markers appsBothRecords_v1 + finalAccountMcdPlacement_v1. Hard refresh.
 
 
-NOT CHANGED, ON PURPOSE
-------------------------
+STILL NOT CHANGED, ON PURPOSE
+------------------------------
 latestAppEnd, retentionClaimed and appRelease1/2 still read the latest application
-of ANY status. Same argument as Applied for, but latestAppEnd moves the 13-week cash
-flow and appRelease1/2 tick the retention halves. One line each when you want them.
+of ANY status. latestAppEnd moves the 13-week cash flow, appRelease1/2 ticks the
+retention halves. One line each on your word.

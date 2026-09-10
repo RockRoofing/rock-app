@@ -1295,7 +1295,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg796',
+        build: 'pkg797',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,
