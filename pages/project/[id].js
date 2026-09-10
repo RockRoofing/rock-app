@@ -387,7 +387,7 @@ export default function ProjectPage() {
                 ))}
               </div>
               {tab === 'overview' && <OverviewTab p={p} settings={settings || {}} atDate={atDate} trendData={trendData} vDateLabel={vDateLabel} costLines={costLines} invoiceLines={invoiceLines} />}
-              {tab === 'costs' && <CostsTab costLines={costLines} atDate={atDate} settings={settings || {}} projectId={id} />}
+              {tab === 'costs' && <CostsTab costLines={costLines} atDate={atDate} settings={settings || {}} projectId={id} projectLabel={[p.jobNo, p.name].filter(Boolean).join(' - ')} />}
               {tab === 'income' && <IncomeTab invoiceLines={invoiceLines} atDate={atDate} />}
               {tab === 'wip' && <WipTab costLines={costLines} invoiceLines={invoiceLines} settings={settings || {}} pastVDates={pastVDates} selectedVDate={selectedVDate} id={id} onSettingsSaved={load} />}
               {tab === 'retention' && <RetentionTab p={p} settings={settings || {}} atDate={atDate} />}
@@ -743,7 +743,7 @@ function CommentPill({ count, onClick }) {
 //
 // Closes on the x and Escape only, never a backdrop click - a half-typed comment
 // should not vanish because somebody clicked past the edge of the box.
-function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onChanged }) {
+function CostCommentsModal({ projectId, projectLabel, invoice, list, users, me, onClose, onChanged }) {
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -787,7 +787,7 @@ function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onCha
       const res = await fetch(`/api/project/${encodeURIComponent(projectId)}/cost-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lineKey: invoice.key, body: text, label, amount: invoice.total }),
+        body: JSON.stringify({ lineKey: invoice.key, body: text, label, amount: invoice.total, projectLabel }),
       })
       const data = await res.json()
       if (!res.ok) { setErr(data.error || 'Could not save'); return }
@@ -903,7 +903,7 @@ function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onCha
   )
 }
 
-function CostsTab({ costLines, atDate, settings, projectId }) {
+function CostsTab({ costLines, atDate, settings, projectId, projectLabel }) {
   const twoYearsAgo = new Date()
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
   const [fromDate, setFromDate] = useState(twoYearsAgo.toISOString().split('T')[0])
@@ -1130,6 +1130,7 @@ function CostsTab({ costLines, atDate, settings, projectId }) {
       {commentFor && (
         <CostCommentsModal
           projectId={projectId}
+          projectLabel={projectLabel}
           invoice={commentFor}
           list={comments[commentFor.key] || []}
           users={mentionUsers}

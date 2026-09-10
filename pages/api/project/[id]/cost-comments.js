@@ -19,6 +19,27 @@ const MENTION_ROLES = ['post-contract', 'management', 'admin']
 
 const clean = (s, max) => String(s == null ? '' : s).slice(0, max)
 
+// THE EMAIL SHOULD NAME THE PROJECT, NOT ITS URL.
+//
+// `id` here is the Xero tracking option GUID out of the address bar, so the subject
+// read "... - project fdbb2ec3-1cb7-498e-864a-82b63b6cf71d", which tells the reader
+// nothing and looks like a broken link.
+//
+// The dashboard cache already holds jobNo and name against xeroId, so the real label
+// costs one read and is not taken on trust from the browser. A label passed up from
+// the page is only a fallback for when the cache has just been cleared.
+async function resolveProjectLabel(id, fallback) {
+  try {
+    const cache = await get('dashboard:cache')
+    if (Array.isArray(cache)) {
+      const p = cache.find((x) => x && (String(x.xeroId) === String(id) || String(x.id) === String(id)))
+      const label = p ? [p.jobNo, p.name].filter(Boolean).join(' - ') : ''
+      if (label) return label
+    }
+  } catch { /* fall through */ }
+  return fallback || `project ${id}`
+}
+
 export default async function handler(req, res) {
   // Costs are commercial. Same access as the rest of the Costs tab.
   const session = requireRole(req, res, ['post-contract', 'management', 'admin'])
@@ -72,12 +93,13 @@ export default async function handler(req, res) {
     try {
       const users = await getMentionableUsersForRoles(MENTION_ROLES)
       const baseUrl = process.env.PORTAL_BASE_URL || 'https://app.rockroofing.co.uk'
+      const projLabel = await resolveProjectLabel(id, clean(req.body?.projectLabel, 120))
       notified = await notifyMentions({
         body,
         author,
         users,
-        what: 'a comment on a cost',
-        context: comment.label ? `${comment.label} - project ${id}` : `project ${id}`,
+        what: 'a cost comment',
+        context: comment.label ? `${projLabel} - ${comment.label}` : projLabel,
         link: `${baseUrl}/project/${encodeURIComponent(id)}?tab=costs`,
         cta: 'Open the costs',
       })

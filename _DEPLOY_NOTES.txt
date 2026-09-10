@@ -1,75 +1,62 @@
-pkg810 - Open website button on the deal's Organization panel. Includes pkg807-809.
-=====================================================================================
+pkg811 - The mention email now names the project. Deploy on top of pkg810.
+=============================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-809. It contains all of them. Nine files.
+This is a REISSUED pkg811. The earlier one (the per-recipient delivery report) was
+scrapped once notifications started working, and has been reverted out of my working
+copy so nothing from it rides along here.
 
-  lib/applications.js
-  lib/crmMentions.js
-  pages/api/dashboard.js
-  pages/api/business-financials.js            (build marker only)
-  pages/api/project/[id].js
-  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807-809 not deployed ***
-  pages/crm.js                                (NEW in this package)
+FOUR FILES. All exist. Overwrite in place.
+
+  pages/api/project/[id]/cost-comments.js     (LITERAL square brackets)
   pages/project/[id].js
-  pages/retention.js
+  pages/retention.js                          (marker only)
+  pages/api/business-financials.js            (marker only)
 
-If cost-comments.js already exists you are overwriting it. If not, create it by
-hand - LITERAL square brackets, in the folder that already holds comment.js.
-
-
-THE BUTTON
-===========
-An "Open website" button in the Organization panel on a deal, directly under the
-Website field. Opens in a new tab.
-
-It only appears when the field holds something that could actually be a website. A
-button that opens a blank tab because somebody typed "TBC" is worse than no button.
+pkg810 first if you have not deployed it.
 
 
-WHY IT IS NOT JUST target="_blank"
-------------------------------------
-A website typed into a CRM is rarely a URL. "rockroofing.co.uk" with no scheme is a
-RELATIVE path to a browser, so a plain link lands you on
+THE FIX
+========
+The email read:
 
-    app.rockroofing.co.uk/rockroofing.co.uk
+    ... mentioned you in a comment on a cost on
+    Speedy Asset Services - 7307666662 - project fdbb2ec3-1cb7-498e-864a-82b63b6cf71d
 
-which is a 404 inside the portal, not the company site. The value is normalised
-first: a scheme is added where missing, trailing punctuation is stripped, and
-anything that is not shaped like a domain returns nothing and the button stays
-hidden.
+`id` in that endpoint is the Xero tracking option GUID out of the address bar. I
+used it as the project reference, which tells the reader nothing and reads like a
+broken link.
 
-Verified against what people actually type:
+It now says:
 
-    rockroofing.co.uk           -> https://rockroofing.co.uk
-    www.example.com             -> https://www.example.com
-    https://example.com/about   -> unchanged
-    example.com,                -> https://example.com   (trailing comma dropped)
-    "  example.co.uk/contact  " -> https://example.co.uk/contact
-    -  /  n/a  /  TBC           -> no button
-    01234 567890                -> no button  (phone number in the wrong box)
-    ask Roman                   -> no button
+    ... mentioned you in a cost comment on
+    J228 - Farmstead Drive - Speedy Asset Services - 7307666662
 
-Opened with rel="noopener noreferrer", so the company's site gets no handle on the
-portal tab it was opened from.
+Same change in the subject line.
 
 
-TWO SMALL THINGS THAT CAME WITH IT
-------------------------------------
-The button sits UNDER the Website field rather than beside it. Every row in that
-panel is a space-between pair of label and value; adding a third child would have
-pushed the value into the middle of the row and knocked the whole panel out of
-line.
+HOW THE NAME IS RESOLVED
+-------------------------
+Server-side, from the dashboard cache, which already holds jobNo and name against
+xeroId. One read, and the name is not taken on trust from the browser.
 
-The Website line in the read-only Organisation section of the Make contact panel is
-now a link too, using the same rule. Phone and email were already one click there
-and the website was the odd one out.
+The page also sends its own label as a FALLBACK, used only if the dashboard cache
+has just been cleared - a sync or a retention save empties it, and an email landing
+mid-rebuild should still name the job.
+
+    cache hit                       -> J228 - Farmstead Drive - Speedy Asset Services - 7307666662
+    cache empty, page label sent    -> J228 - Farmstead Drive - Speedy Asset Services - 7307666662
+    cache empty, no label at all    -> project <id> - Speedy Asset Services - 7307666662
+
+Only the last case can still show a GUID, and it needs the cache to be empty AND
+the page to have no job number, which in practice means a project that is not in
+Xero.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg810
-  612 drill-down header                 -> v810
-  Applied for / Certified drill-down    -> v810
+  13-week cash flow build marker        -> pkg811
+  612 drill-down header                 -> v811
+  Applied for / Certified drill-down    -> v811
 
 No new dashboard cache marker. Hard refresh after deploying.
 
@@ -83,5 +70,4 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
-  - Whether CRM notes should also email you when you tag yourself. Cost comments do
-    now; the CRM deliberately still does not.
+  - Whether CRM notes should email you when you tag yourself. Cost comments do now.
