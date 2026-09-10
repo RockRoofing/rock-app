@@ -143,6 +143,8 @@ function dashFields(p) {
     afaStamped: p.afaStamped != null ? p.afaStamped : null,
     afaStampedFromApp: !!p.afaStampedFromApp,
     afaStampedAppSeq: p.afaStampedAppSeq || null,
+    afaShown: p.afaShown != null ? p.afaShown : null,
+    afaUsedStamp: !!p.afaUsedStamp,
     afaFromApp: !!p.afaFromApp,
     mcdBasis: p.mcdBasis || '',
     mcdPct: p.mcdPct != null ? p.mcdPct : 0,
@@ -967,7 +969,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v804</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v805</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -1005,18 +1007,21 @@ export default function RetentionPage() {
                       <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.4 }}>Gross AFA - where it comes from</div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
                         <tbody>
+                          {row('SHOWN ON THE ROW', appliedForFor.afaShown == null ? '-' : fmtC(appliedForFor.afaShown), appliedForFor.afaSource || '')}
                           {row('Measured contract sum (app)', d.afaAppMeasured == null ? '-' : fmtC(d.afaAppMeasured), 'the contract works schedule ON the application')}
                           {row('Variations at final value (app)', d.afaAppVariations == null ? '-' : fmtC(d.afaAppVariations), `${d.appVarInstructed} instructed of ${d.appVarCount} on the application`)}
                           {row('= Gross AFA from the application', d.afaApp == null ? '-' : fmtC(d.afaApp), 'frozen when the application was sent')}
                           {row('Contract value (project details)', d.afaSettingsContract == null ? '-' : fmtC(d.afaSettingsContract), '')}
                           {row('Instructed variations (project details)', d.afaSettingsVariations == null ? '-' : fmtC(d.afaSettingsVariations), `${d.settingsVarInstructed} instructed of ${d.settingsVarCount} on the project`)}
                           {row('= Gross AFA from project details', d.afaSettings == null ? '-' : fmtC(d.afaSettings), 'used only where there is no sent application')}
-                          {row('Figure stamped by the application', appliedForFor.afaStamped == null ? 'none' : fmtC(appliedForFor.afaStamped),
-                            appliedForFor.afaStampedFromApp
-                              ? 'THIS is what Gross AFA shows - the number the certificate printed'
+                          {row('Figure saved when it was sent', appliedForFor.afaStamped == null ? 'none' : fmtC(appliedForFor.afaStamped),
+                            appliedForFor.afaUsedStamp
+                              ? 'used - the application could not be recomputed'
                               : (appliedForFor.afaStamped == null
-                                  ? 'nothing stamped - the application predates this, so it is rebuilt from the two lines above'
-                                  : `stamped by app ${appliedForFor.afaStampedAppSeq || '?'}, not the latest sent one, so treated as a manual override`))}
+                                  ? 'nothing saved - predates this, so the application is recomputed'
+                                  : (appliedForFor.afaStampStale
+                                      ? 'NOT used. Out of date - the application was edited after sending. Re-send to bring it back into line.'
+                                      : 'not used - the application is read directly')))}
                         </tbody>
                       </table>
                       {(() => {
@@ -1080,7 +1085,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v804</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v805</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>

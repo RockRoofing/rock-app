@@ -1,7 +1,7 @@
-pkg804 - The drill-down was blind. That is why the last three diagnoses were guesses.
-=======================================================================================
+pkg805 - The drill-down was captioning the wrong figure. Supersedes pkg804.
+=============================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-803. It contains all of them. Six files.
+DEPLOY THIS INSTEAD OF pkg795-804. It contains all of them. Six files.
 
   lib/applications.js
   pages/api/dashboard.js
@@ -13,84 +13,88 @@ DEPLOY THIS INSTEAD OF pkg795-803. It contains all of them. Six files.
 FOLDER NOTE: both [id].js paths use LITERAL square brackets. DIFFERENT files.
 
 
-WHAT YOU FOUND
-===============
-"When I click the applied for value ALL projects have the same message."
+WHAT YOUR SCREENSHOT SETTLES
+==============================
+Every input on J228 is correct and always was:
 
-That is the answer to why pkg800, 802 and 803 each fixed something real and none of
-them fixed your two projects. The diagnostic I built to settle this was returning
-nothing, on every row, and saying so in a way that read like a finding.
+    Measured contract sum (app)      75,262.78
+    Variations at final value (app)  65,011.42    15 of 16 instructed
+    = Gross AFA from the application 140,274.20
+    Contract value (project details) 75,262.78
+    Instructed variations (project)  65,011.42    15 of 16 instructed
+    = Gross AFA from project details 140,274.20
 
-A tracker row is built TWICE in pages/retention.js:
+The application and project details agree exactly. The instructed counts match, so
+there is no frozen-variation problem. There are no duplicate records.
 
-  ~line 549   from a project that has no saved entry
-  ~line 730   by merging a saved entry with live dashboard data
+The only figure that is not 140,274.20 is the one SAVED WHEN THE APPLICATION WAS
+SENT: 169,679.70. The application has been edited since it went out, so the saved
+figure is 29,405.50 out of date - which is what the "edited since sent" note on the
+row has been telling you.
 
-appliedForDetail, certifiedSetOnApp, mcdBasis, afaFromApp and all four stamp fields
-were added to the MERGE ONLY. Any row without a saved entry - which is most of them -
-received none of it. So the drill-down reported "No application data for this
-project" on projects with sent applications, and I read that as information.
+AND THE LINE UNDERNEATH IT WAS WRONG:
 
-Both builders now share one function, dashFields(), so a field added for one is
-present on the other. This is the same fault class as everything else this session:
-one rule written twice and left to drift.
+    Figure stamped by the application  169,679.70
+    "THIS is what Gross AFA shows - the number the certificate printed"
 
+It is not. pkg802 stopped using the stamp - the application is read directly now.
+That caption was written in pkg800, when the stamp WAS the source, and its condition
+was afaStampedFromApp, which only ever meant "a stamp exists for this application".
+It kept asserting the stamp was on screen after it had stopped being used.
 
-A SECOND, REAL BUG FALLS OUT OF THE SAME FIX
-----------------------------------------------
-The project-derived builder tested `p.certifiedGross ? ... : ''` - truthy, not set.
-pkg796 fixed that in the merge and not here. So on any project WITHOUT a saved
-entry whose latest sent application is its first, Certified was blank instead of
-0.00. Both paths now test certifiedSetOnApp.
+So the diagnostic was reporting a fault that had already been fixed, in a line
+confident enough to be believed. Verified against your exact figures:
 
-
-WHAT I HAVE NOT PROVEN
------------------------
-pkg803 changed the duplicate-application tiebreak to prefer the id record's copy.
-That is right on principle - it is the record the applications page reads - but I
-have NOT verified it is your projects' problem, and it did not move the figures.
-It stays in because it is defensible, not because it is confirmed.
-
-I am not going to offer a fifth theory. The next step is to read the drill-down now
-that it has data in it.
+    Gross AFA shown : 140,274.20
+    source          : application 2 (sent)
+    stamp           : 169,679.70
+    stamp used?     : false
+    stamp flagged   : true
 
 
-AFTER DEPLOYING - PLEASE SEND ONE SCREENSHOT
-----------------------------------------------
-Open the Applied for cell on J228 Farmstead Drive. The "Gross AFA - where it comes
-from" section will now be populated. The two lines that decide this:
+WHAT CHANGED
+-------------
+1. THE DRILL-DOWN NOW REPORTS THE FIGURE ON THE ROW, IT DOES NOT INFER IT.
 
-    Measured contract sum (app)        expected 75,262.78
-    Variations at final value (app)    expected 65,011.42, with instructed/total
+   A new first line in the Gross AFA section:
 
-and directly above them:
+       SHOWN ON THE ROW    140,274.20    application 2 (sent)
 
-    Where the records live             how many applications sit on each settings
-                                       record, and how many are held on BOTH
+   Read straight from the value the column renders, with the route beside it. No
+   caption anywhere else in that section can contradict it.
 
-Which of the two is out by 29,405.50 gives the answer outright:
+2. The stamp line is retitled "Figure saved when it was sent" and now keys off
+   whether the stamp was actually USED, not whether it exists. On J228 it will read
+   "NOT used. Out of date - the application was edited after sending. Re-send to
+   bring it back into line."
 
-  variations high, instructed count higher than the application page shows
-      -> a variation frozen onto the application as instructed that is not
-         instructed on the project - the V12-at-29,405.50 shape from pkg766
+3. "Where the records live" said "0 on id, 0 on job no" on a project with two
+   applications. The counters were only set on the merge path, so any project whose
+   applications sit on ONE record reported zero for both - a diagnostic saying
+   nothing while looking like it said something. Counted before the early returns
+   now. J228 should read "2 on id, 0 on job no".
 
-  measured contract sum high
-      -> the schedule the register reads really does hold more than the one the page
-         renders, and the "held on BOTH" count will say whether duplicate records
-         are behind it
 
-  both correct, yet Gross AFA still 169,679.70
-      -> the figure is not coming from that summary at all and the source label is
-         misreporting its own provenance. Different bug from anything fixed so far.
+SO WHAT ABOUT THE ROW ITSELF
+------------------------------
+If Gross AFA on the J228 row still reads 169,679.70 after this, that is a genuine
+disagreement with everything the resolver computes, and the new SHOWN ON THE ROW
+line will say which route produced it. My expectation is that it reads 140,274.20
+and has done since pkg802 - and that what has been wrong for the last two packages
+is the instrument, not the figure.
+
+To clear the "edited since sent" note on J228 and J247, re-send the application.
+That rewrites the saved figure to match. Nothing breaks if you leave it - the note
+exists precisely so it can be left alone safely.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg804
-  612 drill-down header                 -> v804
-  Applied for / Certified drill-down    -> v804
+  13-week cash flow build marker        -> pkg805
+  612 drill-down header                 -> v805
+  Applied for / Certified drill-down    -> v805
 
-Cache marker dashFields_v1. Hard refresh after deploying.
+Cache marker afaShown_v1. Hard refresh after deploying.
 
 
 STILL OPEN, ON YOUR WORD
@@ -101,6 +105,5 @@ STILL OPEN, ON YOUR WORD
     pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
-  - A one-off script listing every project holding settings under BOTH keys, and
-    what differs between the two copies. Four separate faults this session traced
-    back to duplicate records; this would turn that into a finite list.
+  - A script listing every project holding settings under BOTH keys. J228 turned out
+    clean, but the duplication is real elsewhere and worth enumerating once.

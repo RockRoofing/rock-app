@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true && cached[0].appsIdRecordWins_v1 === true && cached[0].dashFields_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true && cached[0].appsIdRecordWins_v1 === true && cached[0].dashFields_v1 === true && cached[0].afaShown_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -380,6 +380,11 @@ export default async function handler(req, res) {
         const apps = (() => {
           const byId = Array.isArray(allSettings[id]?.applications) ? allSettings[id].applications : []
           const byJob = Array.isArray(allSettings[cp.jobNo]?.applications) ? allSettings[cp.jobNo].applications : []
+          // Counted BEFORE the early returns. They were only set on the merge path, so a
+          // project with applications on one record reported "0 on id, 0 on job no" -
+          // a diagnostic saying nothing while looking like it said something.
+          appsFromIdCount = byId.length
+          appsFromJobCount = byJob.length
           if (!byJob.length) return byId.slice()
           if (!byId.length) return byJob.slice()
           // Both hold applications: merge so neither is dropped. Keyed on the permanent
@@ -406,8 +411,6 @@ export default async function handler(req, res) {
             seen.set(k, a)   // the id record always wins
           }
           appsDupCount = dupKeys.size
-          appsFromIdCount = byId.length
-          appsFromJobCount = byJob.length
           return [...seen.values()]
         })()
         if (apps.length) {
@@ -840,6 +843,12 @@ export default async function handler(req, res) {
         mcdBasis,
         finalAccountFromApplication,
         afaStampStale,
+        // THE FIGURE ON THE ROW, AND HOW IT GOT THERE. Reported, never inferred.
+        // The drill-down was captioning the stamp as "what Gross AFA shows" from a
+        // flag that only meant the stamp EXISTED, so it claimed a figure was on
+        // screen that had not been used since pkg802.
+        afaShown: Math.round(afaBeforeMcd * 100) / 100,
+        afaUsedStamp: afaSource.indexOf('stamped at send') >= 0,
         afaStamped: stamp ? Number(stamp.afaOverride) : null,
         afaStampedFromApp: stampIsFromLatestSent,
         afaStampedAppSeq: stamp ? (stamp.afaOverrideAppSeq != null ? String(stamp.afaOverrideAppSeq) : null) : null,
@@ -1009,6 +1018,7 @@ export default async function handler(req, res) {
         afaLiveNotStamp_v1: true,
         appsIdRecordWins_v1: true,
         dashFields_v1: true,
+        afaShown_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
