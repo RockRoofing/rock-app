@@ -803,13 +803,15 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v794</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
                   Every account-612 line the app holds for this project. <strong>Raw</strong> is what came from Xero;
                   <strong> Used</strong> is after a credit note has been cancelled against the invoice it reverses.
                   Read it straight against your Xero account-transactions export.
+                  <strong> Match</strong> shows how each credit note was paired to the invoice it
+                  reverses, or why it could not be - so a pair left uncancelled says why on the row.
                 </div>
                 <div style={{ overflow: 'auto', padding: '0 16px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -818,9 +820,10 @@ export default function RetentionPage() {
                       <th style={{ ...th2, textAlign: 'right' }}>Raw</th>
                       <th style={{ ...th2, textAlign: 'right' }}>Used</th>
                       <th style={th2}>Side</th><th style={th2}>Netted</th><th style={th2}>Allocs</th>
+                      <th style={th2}>Match</th>
                     </tr></thead>
                     <tbody>
-                      {rows.length === 0 && <tr><td style={td2} colSpan={8}>No 612 lines stored. If Xero shows some, they are not reaching this project - check the tracking category on those invoices.</td></tr>}
+                      {rows.length === 0 && <tr><td style={td2} colSpan={9}>No 612 lines stored. If Xero shows some, they are not reaching this project - check the tracking category on those invoices.</td></tr>}
                       {rows.map((r, i) => (
                         <tr key={i} style={{ background: r.netted ? '#fffbeb' : undefined }}>
                           <td style={td2}>{r.date || '-'}</td>
@@ -831,12 +834,13 @@ export default function RetentionPage() {
                           <td style={{ ...td2, color: r.side === 'deducted' ? '#dc2626' : r.side === 'released' ? '#16a34a' : '#bbb' }}>{r.side}</td>
                           <td style={td2}>{r.netted ? 'cancelled' : ''}</td>
                           <td style={td2}>{r.allocs || ''}</td>
+                          <td style={{ ...td2, whiteSpace: 'normal', fontSize: 11, color: r.netted ? '#16a34a' : '#94a3b8' }}>{r.match || ''}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot><tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                       <td style={td2} colSpan={4}>Totals from these lines</td>
-                      <td style={{ ...td2, textAlign: 'right' }} colSpan={4}>
+                      <td style={{ ...td2, textAlign: 'right' }} colSpan={5}>
                         deducted {fmt(d)} &nbsp;&middot;&nbsp; released {fmt(rl)}
                       </td>
                     </tr></tfoot>

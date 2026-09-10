@@ -1,65 +1,116 @@
-pkg792 - Certified column, and the application now wins
-========================================================
+pkg794 - MERGE. pkg793 plus the J147 612 netting fix.
+=====================================================
 
-DEPLOY OVER pkg791 (contains pkg791). Fourteen files.
+DEPLOY THIS INSTEAD OF pkg793. Do not deploy pkg793 as well - this contains it.
 
-FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
+Fourteen files, all already exist. Overwrite in place. No new files to create.
 
-REPLACE:
-  pages/api/dashboard.js            (changed here)
-  pages/retention.js                (changed here)
-  everything else as pkg791
 
-1. WHY SOME ROWS DID NOT MATCH THEIR LATEST APPLICATION
---------------------------------------------------------
-A typed Applied-for value BEAT the application:
+WHY THIS PACKAGE EXISTS
+-----------------------
+Two chats both built a package numbered 792 from the same pkg791 base, and both
+touched pages/api/dashboard.js and pages/retention.js:
 
-    e.appliedFor !== '' ? e.appliedFor : x.appliedForLatest
+  - This chat's pkg792  : J147 account-612 credit note netting
+  - The other chat's 792/793 : Applied for precedence, Certified column, prevCertGross
 
-So an override entered once sat there for good and every later application was
-ignored. That is the mismatch you spotted.
+Deploying either one on its own silently reverts the other. I checked: pkg793 as
+issued still contains the pkg791 version of the 612 netting code, so deploying it
+would have undone the 612 fix without any visible sign.
 
-Reversed. The latest SENT application always wins; a typed figure is only used
-where a project has no sent application.
+pkg794 is both, merged. The two change sets do not overlap - pkg793 touches the
+Applied-for/Certified merge and the tracker columns, the 612 fix touches the
+netting block and the drill-down modal - so this is a clean merge, not a
+reconciliation of conflicting edits.
 
-The formula was already right - current.netBeforeRet, which is gross measured
-works less MCD plus variations, the certificate sub-total. It just was not being
-reached.
 
-2. NEW COLUMN: CERTIFIED
--------------------------
-Sits between Applied for and Invoiced.
+WHAT IS IN IT
+-------------
+Everything in pkg793, byte-identical on twelve of the fourteen files:
 
-Populated from Previously Certified (gross) on the latest sent application, with
-the application number shown underneath. Editable through the row edit form -
-the pencil - and the next application sent overwrites whatever was typed, same
-rule as Applied for.
+  lib/applicationPdf.js            lib/crmEmailSync.js
+  lib/applications.js              pages/api/business-financials.js
+  lib/crmDailyActivityEmail.js     pages/api/sync-invoices.js
+  pages/business-financials/cashflow.js
+  pages/business-financials/export.js
+  pages/business-financials/forecast-balance-sheet.js
+  pages/business-financials/invoice-finance.js
+  pages/crm.js                     pages/project/[id].js
 
-Included in the totals row and in the CSV import (column "Certified").
+Plus, on the remaining two:
 
-3. THE TICK NOW COMPARES CERTIFIED TO INVOICED
------------------------------------------------
-It compared Applied for against Invoiced. Certified against Invoiced is the
-question worth asking - what has been certified but not billed, or billed but
-not certified.
+pages/api/dashboard.js
+  - KEEPS pkg793's certifiedGross / prevCertGross work in full
+  - ADDS the 612 fix: allocation matching and reference matching BOTH always run
+  - ADDS one key function (lineKey) for a document throughout
+  - Cache guard now requires certifiedPrevCert_v2 AND ret612Match_v1
 
-4. WARNING ON APPLIED FOR
---------------------------
-A small amber triangle appears beside Applied for when it does not agree with
-Certified, with the gap in the hover. Usually it means the latest application is
-applied for but not yet certified, which is normal - but it is worth seeing
-without reading across two columns.
+pages/retention.js
+  - KEEPS pkg793's Certified column, warning triangle, tick change, CSV import
+  - ADDS the Match column to the 612 drill-down
+  - Drill-down header reads v794
 
-CHECKED
--------
-Header, body and totals all grew by exactly one column against pkg791, so
-nothing has shifted under the wrong heading.
+pages/api/business-financials.js
+  - Build marker bumped to pkg794. This is the marker on the 13-week cash flow
+    page. pkg793 shipped it reading 'pkg793'; if it still says that after
+    deploying, the file did not take.
 
-NOTE ON MANUAL OVERRIDES
-------------------------
-The application now always wins where one exists, which is a blunt reading of
-"the next application sent should override the manual input". A typed value on a
-project WITH applications will be replaced on the next dashboard rebuild rather
-than surviving until the next application arrives. If you want an override to
-hold until a genuinely new application is sent, say so - it needs the
-application number stamped against the override, which is a small extra field.
+
+TWO MARKERS, AND WHAT EACH ONE PROVES
+-------------------------------------
+  13-week cash flow build marker  -> which PACKAGE is live      (should read pkg794)
+  612 drill-down header           -> which retention.js is live (should read v794)
+
+Both must move. If only one does, one of the two files did not save in the GitHub
+web editor - which has happened before on large files.
+
+
+THE 612 FAULT, FOR THE RECORD
+-----------------------------
+The App 2 credit note carries one Xero allocation. It resolves to a document that
+cannot be the reversal - its 612 line is the same way up as the credit note's. The
+pairing code read:
+
+    const byRef = byAlloc.length ? [] : (...)
+
+so the moment the allocation resolved to ANYTHING, the reference fallback was
+switched off - even though the allocation candidate was rejected two lines later by
+the sign guard. Nothing was cancelled and both columns stayed 642.20 high.
+
+pkg790's fallback was never wrong. It never ran.
+
+Reproduced on J147's real ten lines before the fix was written: with the fallback
+suppressed it returns exactly 1,760.38 / 1,760.39; with it always running,
+1,118.18 / 1,118.19.
+
+
+EXPECTED AFTER DEPLOY
+---------------------
+J147 Lancaster Moor:
+  612 Deducted   1,118.18   (was 1,760.38)
+  612 Released   1,118.19   (was 1,760.39)
+  Retention Owed 1,118.19 - ties, and matches Vinay exactly.
+
+  In the drill-down, the two 642.20 lines show Used 0.00 and
+  Match "ref -> Lancaster Moor - App 2". Header reads v794.
+
+Certified column populating from the latest sent application, per pkg793.
+
+Hard refresh after deploying - the cache marker has moved, so the old cache will
+not be served, but the browser may still hold the page.
+
+
+NOT A BUG IN THE APP, BUT WORTH RAISING WITH VINAY
+--------------------------------------------------
+The Feb-2024 App 2 invoice holds a POSITIVE 612 line in Xero (+642.20). A retention
+deduction should be negative. Xero recorded App 2's retention the wrong way up,
+which is almost certainly why it was credited out and re-raised in Nov 2025 at
+-33.80. The app nets it away correctly either way now, but account 612 itself still
+reads wrong for that entry.
+
+
+STILL OPEN (from the other chat's handover, not addressed here)
+---------------------------------------------------------------
+  - Applied for still not matching on some rows - needs a drill-down on the
+    Applied-for cell before anyone guesses again
+  - Certified not editable inline - it is in the row edit form, not the cell
