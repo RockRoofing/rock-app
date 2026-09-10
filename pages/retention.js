@@ -105,6 +105,27 @@ function InlineNumberCell({ value, onCommit, disabled, note, title }) {
   )
 }
 
+// ONE ACCOUNT BASE FOR EVERY DERIVED FIGURE ON THIS PAGE.
+//
+// Six functions each wrote `entry.finalAccount || entry.projectValue`, and that
+// fallback is a PRE-MCD figure: projectValue is p.contractValue on project-derived
+// rows - the original contract value, before MCD and before variations - and the
+// imported "Gross AFA" column on imported ones.
+//
+// So wherever Final Account was blank, VAT, Total Due, Account Remaining, the
+// final-account balance and the retention-closing check were all computed on the
+// gross and came out high by the whole discount.
+//
+// Falls back to gross LESS the MCD actually recorded, and only to the raw gross when
+// no MCD is known - in which case there is genuinely no discount to apply.
+function accountValue(entry) {
+  const fa = parseFloat(entry.finalAccount || 0) || 0
+  if (fa) return fa
+  const gross = parseFloat(entry.afaGross || entry.projectValue || 0) || 0
+  const mcd = parseFloat(entry.mcdValue || 0) || 0
+  return mcd ? gross - mcd : gross
+}
+
 function vatRateFromLabel(label) {
   const s = (label || '').toLowerCase()
   if (s.includes('reverse charge') || s.includes('zero') || s.includes('exempt') || s.includes('no vat')) return 0
@@ -128,12 +149,12 @@ function calcVat(entry) {
     return parseFloat(entry.vatManual)
   }
   if (vatIsMixed(entry)) return 0   // unknown until entered manually
-  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const fa = accountValue(entry)
   return fa * vatRateFromLabel(entry.vatRateLabel)
 }
 // Total Due = Final Account + VAT.
 function calcTotalDue(entry) {
-  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const fa = accountValue(entry)
   return fa + calcVat(entry)
 }
 // Account Remaining = Final Account - APPLIED FOR (ex-VAT).
@@ -171,13 +192,35 @@ export function calcRetentionOwed(entry) {
 //
 // Computed from the row now, so the two halves always sum to Retention Owed. J147 becomes
 // 559.09 each against 1,118.19 owed.
+// FLAGGED, NOT CHANGED - the basis here contradicts the column tooltip.
+//
+// This returns half of retention on APPLIED FOR (work certified to date). The tooltip
+// on both release columns says "half of the retention on the FINAL ACCOUNT", and
+// lib/applications.js computes halfRetention = finalSubTotal x ret% / 2, which is what
+// the certificate releases. pkg782 set the final-account basis deliberately; pkg785-787
+// rebased Retention Owed onto Applied for and this followed it, which reverted that
+// decision as a side effect rather than as a choice.
+//
+// Both are MCD-correct - Applied for and finalSubTotal each honour the placement flags -
+// so this is not an MCD fault. It is a base fault, and it only shows mid-contract: the
+// two converge once the job is fully applied for.
+//
+// The final-account figure is already on the row as entry.retentionOnFinalAccount, so
+// switching is one line. Not done unasked, because it moves the halves on every live
+// project.
 export function calcReleaseHalf(entry) {
   return calcRetentionOwed(entry) / 2
 }
 
 function calcAccountRemaining(entry) {
-  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
-  const applied = parseFloat(entry.appliedForLatest || 0) || 0
+  const fa = accountValue(entry)
+  // READ THE COLUMN, NOT A PARALLEL FIELD.
+  //
+  // This read entry.appliedForLatest, which the merge never carries onto a saved row -
+  // only project-derived rows had it. On every saved row it was undefined, so Account
+  // Remaining silently measured against INVOICED, which is the exact thing the comment
+  // above says it must not do. entry.appliedFor is the resolved value on screen.
+  const applied = parseFloat(entry.appliedFor || entry.appliedForLatest || 0) || 0
   const invNet = parseFloat(entry.invoicedNet != null ? entry.invoicedNet : entry.invoiced || 0) || 0
   return fa - (applied > 0 ? applied : invNet)
 }
@@ -231,7 +274,7 @@ function calcBalance(entry) {
 // Reaches £0 once the whole final account has been paid. VAT sits outside the
 // Final Account, so we compare paid ex-VAT (paid inc-VAT minus VAT charged).
 function calcFinalBalance(entry) {
-  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const fa = accountValue(entry)
   const paidIncVat = parseFloat(entry.paid || 0) || 0
   const vat = parseFloat(entry.vat || 0) || 0
   const paidExVat = paidIncVat - vat
@@ -609,7 +652,7 @@ export default function RetentionPage() {
   //  • defects -> complete: only from defects (can't skip the defects period).
   //  • re-open steps back one stage.
   async function setRetStatus(entry, next) {
-    const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+    const fa = accountValue(entry)
     const invNet = entry.invoicedNet != null ? parseFloat(entry.invoicedNet) : (entry.invoiced != null ? parseFloat(entry.invoiced) : null)
     const faMatches = fa > 0 && invNet != null && Math.abs(fa - (invNet || 0)) < 1
     if (next === 'defects') {
@@ -691,6 +734,7 @@ export default function RetentionPage() {
         // their latest certificate. A manual figure is now only used where there is no
         // sent application to take it from.
         appliedFor: x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || ''),
+        appliedForLatest: x.appliedForLatest || 0,
         // CERTIFIED = the "Previously certified (gross)" box on the latest SENT
         // application. Tested on certifiedSetOnApp, not on the value being truthy: a
         // first application legitimately holds 0 and must show 0.00 rather than falling
@@ -900,7 +944,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v797</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v798</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -972,7 +1016,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v797</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v798</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1278,7 +1322,7 @@ export default function RetentionPage() {
                       const noRetention = entry.retentionPct !== '' && entry.retentionPct != null
                         && parseFloat(entry.retentionPct) === 0
                       const rowBg = closed ? '#dcfce7' : (i % 2 === 0 ? '#fff' : '#fafafa')
-                      const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+                      const fa = accountValue(entry)
                       const invNet = entry.invoicedNet != null ? parseFloat(entry.invoicedNet) : (entry.invoiced != null ? parseFloat(entry.invoiced) : null)
                       const accRemaining = fa ? fa - (invNet || 0) : null
                       const vatVal = calcVat(entry)

@@ -1,134 +1,122 @@
-pkg797 - Applications were invisible on half the projects. Supersedes pkg796.
-==============================================================================
+pkg798 - Retention tracker MCD audit. Supersedes pkg797.
+=========================================================
 
-DEPLOY THIS INSTEAD OF pkg795 / pkg796. It contains both. Four files, all exist.
+DEPLOY THIS INSTEAD OF pkg795 / 796 / 797. It contains all three. Four files.
 
   pages/api/dashboard.js
   pages/retention.js
   pages/api/business-financials.js   (build marker only)
-  lib/applications.js                (NEW in this package - exports finalSubTotal)
+  lib/applications.js
 
 pkg794 first if not already deployed - that carries the other eleven files.
 
 
-1. WHY CERTIFIED STILL WAS NOT PULLING THROUGH - ROOT CAUSE
-------------------------------------------------------------
-The dashboard read applications from ONE settings record:
+THE AUDIT - EVERY VALUE ON THE TRACKER, AGAINST MCD PLACEMENT
+==============================================================
 
-    const settings = allSettings[id] || allSettings[cp.jobNo] || {}
-    const apps = settings.applications || []
-
-Project settings are keyed by tracking option id OR by job number, and TWO records
-can exist for one project. That line takes whichever matched first. Applications
-written against the job-number record are invisible whenever an id record also
-exists.
-
-This is the identical fault that produced "V01 and V02 are not showing". It was
-fixed for variations lower down the same file and never for applications.
-
-It explains all three symptoms at once, and explains why they were intermittent:
-
-  - Certified blank            (no latestSent found, so the box was never read)
-  - Applied for not matching    (fell back to whatever was typed on the row)
-  - Final Account from project details instead of the application
-
-Applications are now read from BOTH records and merged. Keyed on the permanent
-appNumber, then seq, then id. Where both records hold the same application the SENT
-one wins, then the one carrying more contract works. Nothing is dropped and nothing
-was lost - we were reading the wrong record.
-
-This is the fix I expect to close the Certified item. If any row is still blank
-after this, open the Applied for drill-down: it now reports how many applications
-were found and how many are sent.
+Test project throughout: 800,000 measured + 200,000 variations, MCD 2.5%,
+retention 5%, MCD set to come off MEASURED WORKS ONLY.
 
 
-2. FINAL ACCOUNT AND GROSS AFA NOW PRIORITISE THE APPLICATION
---------------------------------------------------------------
-retention.js line 652 read:
+ALREADY CORRECT - no change needed
+-----------------------------------
+Applied for        current.netBeforeRet in lib/applications.js. Builds mcdBaseCur
+                   and afterMcdCur from the placement flags, so both orderings you
+                   described are honoured. Instructed-only via isInstructed().
 
-    finalAccount: e.finalAccount || x.finalAccount
+Retention Owed     Applied for x ret%. Inherits the placement through Applied for.
 
-so a figure typed once beat the application permanently - the same fault Applied
-for had in pkg792. Both account columns now take the sent application first, and a
-typed value is used only where there is no sent application.
+MCD column         afaBeforeMcd - afa. Now the real discount, not a flat percentage
+                   of the whole account.
 
-  sent app exists, value typed on row -> application wins
-  no sent app, value typed            -> typed value
-  no sent app, nothing typed          -> project details
+1st / 2nd Value    Half of Retention Owed, so MCD-correct. See the FLAGGED section -
+                   the BASE is a separate question.
 
-
-3. FINAL ACCOUNT - MCD NOW GOES WHERE PROJECT DETAILS PUTS IT
----------------------------------------------------------------
-Your definition: Gross AFA including retention, less MCD, with MCD applied as set in
-Edit Project Details - before or after variations and materials.
-
-The register was doing:
-
-    mcdValue = afaBeforeMcd * (mcdPct / 100)      // the WHOLE account
-
-That is only right where MCD applies to everything. Where Edit Project Details says
-MCD comes off measured works only, it over-discounted, and everything computed from
-the Final Account came out low - Account Remaining, Total Due, and the retention
-charged on the account.
-
-On 800,000 measured + 200,000 variations at 2.5%:
-
-    MCD on measured + variations   ->  975,000.00   (unchanged)
-    MCD on measured only           ->  980,000.00   (was 975,000.00, out by 5,000)
-
-Where there is a sent application the Final Account is now taken straight from it
-(sentSum.finalSubTotal), so the register and the certificate cannot drift. lib/
-applications.js already computed this correctly and simply did not return it - it
-does now. Where there is no application, the same split is applied using the
-placement flags from project details.
-
-The drill-down shows which basis was used on every row.
+retentionOnFinal   afa x retPct, and afa is the placement-correct Final Account as
+                   of pkg797. Inherits it.
 
 
-4. APPLIED FOR - LOGIC CHECKED, ALREADY CORRECT
-------------------------------------------------
-Your definition: gross measured works less MCD, plus instructed variations and
-materials - or gross measured works plus instructed variations and materials less
-MCD - depending on Edit Project Details.
+FIXED HERE - genuinely wrong on MCD
+------------------------------------
+1. SIX FUNCTIONS SHARED A PRE-MCD FALLBACK
 
-lib/applications.js implements exactly that:
+   Each of these wrote the same expression:
 
-    mcdBaseCur  = measuredToDate + (mcdOnVars ? variationsToDate : 0) + (mcdOnMos ? materialsOnSite : 0)
-    afterMcdCur = (mcdOnVars ? 0 : variationsToDate) + (mcdOnMos ? 0 : materialsOnSite)
-    netBeforeRet = (mcdBase - mcd) + after
+       const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
 
-and Applied for reads current.netBeforeRet. Instructed-only is enforced by
-isInstructed(). No change needed - it was only ever failing because the application
-itself was invisible, per item 1.
+   projectValue is p.contractValue on project-derived rows - the ORIGINAL contract
+   value, before MCD and before variations - and the imported "Gross AFA" column on
+   imported rows. Both are gross.
 
-ONE THING TO BE AWARE OF, not changed here. The placement flags default differently
-in two places: lib/applications.js treats a missing flag as TRUE (MCD applies),
-while pages/api/applications.js stamps `project.mcdOnVariations === true`, so a
-missing project setting becomes FALSE. An application created before these flags
-existed therefore computes with MCD on everything. Changing that default would move
-certificates that have already gone out, so I have left it - but if you have old
-projects where the MCD looks wrong, that is the reason and it is a one-line change.
+   So wherever Final Account was blank, all six computed on the gross and came out
+   high by the whole discount:
+
+       calcVat                  VAT on the gross
+       calcTotalDue             Final Account + VAT, both on the gross
+       calcAccountRemaining     what is left to claim, on the gross
+       calcFinalBalance         final-account balance, on the gross
+       setRetStatus             the check that closes a retention, on the gross
+       the inline row cell      Account Remaining as rendered
+
+   Now one accountValue() function, used by all six. Final Account where there is
+   one; otherwise gross LESS the MCD actually recorded; only raw gross where no MCD
+   is known, in which case there is no discount to apply.
+
+   On the test project a row with no Final Account moves from 1,000,000.00 to
+   980,000.00.
 
 
-5. CERTIFIED - MUCH CLEARER THAT IT IS EDITABLE
--------------------------------------------------
-The dashed underline was too quiet. The cell is now a bordered box with a pencil,
-turns green on hover, and reads "Add" in grey italic where it is empty. Click,
-Enter saves, Escape cancels. Unchanged underneath: module scope component, saves
-through saveEntry, diagnostic blob stripped before writing.
+2. ACCOUNT REMAINING WAS MEASURING AGAINST THE WRONG THING
+
+   calcAccountRemaining read entry.appliedForLatest. The merge never carries that
+   field onto a saved row - only project-derived rows have it - so on every saved
+   row it was undefined and the function fell through to INVOICED. That is the exact
+   thing its own comment says it must not do, because invoicing lags the application
+   by weeks.
+
+   It now reads entry.appliedFor, which is the value actually on screen. On the test
+   project: 392,000.00, where it had been showing 580,000.00.
+
+
+FLAGGED, NOT CHANGED - your call
+---------------------------------
+3. THE RELEASE HALVES ARE ON A DIFFERENT BASE FROM THE TOOLTIP
+
+   calcReleaseHalf returns half of retention on APPLIED FOR. Both release column
+   tooltips say "half of the retention on the FINAL ACCOUNT (Gross AFA less MCD x
+   retention %)", and lib/applications.js computes halfRetention from finalSubTotal,
+   which is what a certificate actually releases.
+
+   pkg782 set the final-account basis deliberately. pkg785-787 rebased Retention
+   Owed onto Applied for and this followed it - reverting that decision as a side
+   effect rather than as a choice.
+
+   This is NOT an MCD fault. Both bases honour the placement flags. It is a base
+   fault, and it only shows mid-contract - the two converge once the job is fully
+   applied for. On the test project at 60% applied:
+
+       half on applied for    14,700.00   (what shows now)
+       half on final account  24,500.00   (what the tooltip and certificate say)
+
+   entry.retentionOnFinalAccount is already on the row, so switching is one line.
+   Not done unasked - it moves the halves on every live project.
+
+
+4. THE MCD PLACEMENT FLAGS DEFAULT DIFFERENTLY IN TWO PLACES
+
+   Carried forward from pkg797 and still true. lib/applications.js treats a missing
+   flag as TRUE (MCD applies to everything); pages/api/applications.js stamps
+   `project.mcdOnVariations === true`, so a missing project setting becomes FALSE.
+
+   An application created before these flags existed therefore computes with MCD on
+   everything regardless of what Edit Project Details now says. Changing the default
+   would move certificates already issued, so it needs your word.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg797
-  612 drill-down header                 -> v797
-  Applied for / Certified drill-down    -> v797
+  13-week cash flow build marker        -> pkg798
+  612 drill-down header                 -> v798
+  Applied for / Certified drill-down    -> v798
 
-Cache markers appsBothRecords_v1 + finalAccountMcdPlacement_v1. Hard refresh.
-
-
-STILL NOT CHANGED, ON PURPOSE
-------------------------------
-latestAppEnd, retentionClaimed and appRelease1/2 still read the latest application
-of ANY status. latestAppEnd moves the 13-week cash flow, appRelease1/2 ticks the
-retention halves. One line each on your word.
+Cache marker accountBaseNetOfMcd_v1. Hard refresh after deploying.
