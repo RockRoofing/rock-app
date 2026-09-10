@@ -1,4 +1,5 @@
 import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../lib/db'
+import { resolveGrossAfa, isInstructed } from '../../../lib/applications'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 
 async function getRedis() {
@@ -127,9 +128,19 @@ export default async function handler(req, res) {
     // Calculations
     const contractValue = parseFloat(settings.contractValue || 0)
     const instructedVars = (settings.variations || [])
-      .filter(v => v.instructed)
+      .filter(v => isInstructed(v))
       .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
-    const afa = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : (contractValue + instructedVars)
+    // THE SENT APPLICATION WINS. This endpoint used to take the stored override
+    // outright, with no application preference at all, so Project Financials and the
+    // project report could contradict the retention register on the same job.
+    const afaRes = resolveGrossAfa({
+      records: [settings],
+      applications: Array.isArray(settings.applications) ? settings.applications : [],
+      contractValue,
+      instructedVarsTotal: instructedVars,
+    })
+    const afa = afaRes.afa
+    const afaSource = afaRes.source
 
     const retPct = parseFloat(settings.retentionPct || 0)
     const totalRetention = retPct > 0 ? totalInvoiced * retPct / (1 - retPct) : 0
@@ -186,6 +197,7 @@ export default async function handler(req, res) {
           costsAfterDate,
           totalInvoiced,
           afa,
+          afaSource,
           currentMargin,
           effectiveMargin,
           remainingToClaim,

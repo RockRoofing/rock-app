@@ -1,5 +1,5 @@
 import { getAllProjectSettings, getOpsProjects } from '../../lib/db'
-import { computeApplicationSummary, isInstructed } from '../../lib/applications'
+import { computeApplicationSummary, isInstructed, resolveGrossAfa } from '../../lib/applications'
 import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
 import { syncRegistry, ghostsFromRegistry } from '../../lib/projectRegistry'
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -356,7 +356,7 @@ export default async function handler(req, res) {
       let certifiedSetOnApp = false
       let appliedForDetail = null
       // Set inside the applications block, read by the AFA preference below.
-      let latestSentSeqForAfa = null, latestSentAppNoForAfa = null
+      let latestSentForAfa = null, sentSumForAfa = null
       let afaFromApplication = null
       let finalAccountFromApplication = null
       let mcdOnVarsApp = null, mcdOnMosApp = null
@@ -469,10 +469,8 @@ export default async function handler(req, res) {
           // Account and the retention calculated on it. A draft is a working document;
           // it is not a figure that has been put to the customer.
           //
-          if (latestSent) {
-            latestSentSeqForAfa = latestSent.seq != null ? latestSent.seq : null
-            latestSentAppNoForAfa = latestSent.appNumber != null ? latestSent.appNumber : null
-          }
+          latestSentForAfa = latestSent || null
+          sentSumForAfa = sentSum || null
           if (latestSent && sentSum) {
             // CERTIFIED = THE "PREVIOUSLY CERTIFIED (GROSS)" BOX ON THE LATEST SENT
             // APPLICATION. The typed figure, nothing derived.
@@ -594,32 +592,22 @@ export default async function handler(req, res) {
       //
       // The stamp can land on either settings record (project:{id} or project:{jobNo}),
       // so both are checked and the most recent stamp wins.
-      const stampCandidates = [allSettings[id], allSettings[cp.jobNo]]
-        .filter(r => r && r.afaOverride != null && isFinite(r.afaOverride))
-        .sort((a, b) => (b.afaOverrideAt || 0) - (a.afaOverrideAt || 0))
-      const stamp = stampCandidates[0] || null
-      // Only trust it as THE application figure if it was stamped BY the application we
-      // are reading. Otherwise it is a manual override and ranks below a live application.
-      const stampIsFromLatestSent = !!(stamp && latestSentSeqForAfa != null
-        && stamp.afaOverrideAppSeq != null
-        && String(stamp.afaOverrideAppSeq) === String(latestSentSeqForAfa))
-
+      // ONE RULE, SHARED. resolveGrossAfa() in lib/applications.js is now the only
+      // place the order of preference is written; this file, the project page and the
+      // project API all call it. The sent application always beats a stored override.
+      const afaRes = resolveGrossAfa({
+        records: [allSettings[id], allSettings[cp.jobNo]],
+        latestSent: latestSentForAfa,
+        sentSum: sentSumForAfa,
+        contractValue,
+        instructedVarsTotal: instructedVars,
+      })
+      const stamp = afaRes.stamp
+      const stampIsFromLatestSent = afaRes.stampIsFromLatestSent
       const hasOverride = !!stamp
-      let afaBeforeMcd
-      if (stampIsFromLatestSent) {
-        afaBeforeMcd = Number(stamp.afaOverride)
-        afaSource = `application ${latestSentAppNoForAfa || latestSentSeqForAfa} (sent, as issued)`
-        afaFromApplication = afaBeforeMcd
-      } else if (afaFromApplication != null) {
-        afaBeforeMcd = afaFromApplication
-        // afaSource already names the application
-      } else if (hasOverride) {
-        afaBeforeMcd = Number(stamp.afaOverride)
-        afaSource = 'manual override'
-      } else {
-        afaBeforeMcd = afaFromSettings
-        afaSource = 'project details'
-      }
+      const afaBeforeMcd = afaRes.afa
+      afaSource = afaRes.source
+      if (afaRes.fromApp) afaFromApplication = afaRes.afa
       // Flagged so a stale override sitting behind a sent application is visible rather
       // than silently ignored.
       const afaOverrideIgnored = hasOverride && afaFromApplication != null
@@ -985,6 +973,7 @@ export default async function handler(req, res) {
         accountBaseNetOfMcd_v1: true,
         afaDecomp_v1: true,
         afaAsIssued_v1: true,
+        afaOneRule_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

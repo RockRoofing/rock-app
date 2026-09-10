@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
-import { computeApplicationSummary, isInstructed } from '../../lib/applications'
+import { computeApplicationSummary, isInstructed, resolveGrossAfa } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { missingProjectFields } from '../../lib/projectComplete'
 import ReportImprovementLink from '../../components/ReportImprovementLink'
@@ -57,25 +57,26 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
   apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
   const sentApps = apps.filter(a => a && a.status === 'sent')
   const latestSent = sentApps.length ? sentApps[sentApps.length - 1] : null
-  let afaFromApp = null, appliedForGross = 0, afaSource = 'project details'
+  let appliedForGross = 0
+  let sentSum = null
   if (latestSent) {
+    // PREVIOUSLY CERTIFIED: the application's own stored box first, same rule the
+    // certificate and the register use. This recomputed it and ignored prevCertGross.
     let prevGross = 0
-    for (const a of apps) { if ((a.seq || 0) < (latestSent.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
-    const sum = computeApplicationSummary(latestSent, prevGross)
+    if (latestSent.prevCertGross != null) prevGross = Number(latestSent.prevCertGross) || 0
+    else for (const a of apps) { if ((a.seq || 0) < (latestSent.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent || 0 }
+    sentSum = computeApplicationSummary(latestSent, prevGross)
     // Cumulative gross certified: measured to date + variations to date + materials on
     // site. Gross of MCD and INCLUDING retention, which is what was applied for.
-    appliedForGross = sum.grossCurrent || sum.applicationTotal || 0
-    const a2 = sum.anticipatedFinalAccount
-    if (a2 != null && isFinite(a2) && a2 > 0) {
-      afaFromApp = a2
-      afaSource = `application ${latestSent.appNumber || latestSent.seq || ''} (sent)`.trim()
-    }
+    appliedForGross = sentSum.grossCurrent || sentSum.applicationTotal || 0
   }
-  const hasAfaOverride = settings.afaOverride != null && isFinite(settings.afaOverride)
-  let afa
-  if (afaFromApp != null) afa = afaFromApp
-  else if (hasAfaOverride) { afa = Number(settings.afaOverride); afaSource = 'manual override' }
-  else afa = contractValue + instructedVars
+  // One shared rule - the sent application always beats a stored override.
+  const afaRes = resolveGrossAfa({
+    records: [settings], applications: apps, latestSent, sentSum,
+    contractValue, instructedVarsTotal: instructedVars,
+  })
+  const afa = afaRes.afa
+  const afaSource = afaRes.source
 
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
   // Remaining to APPLY FOR, gross - what is left of the final account still to be

@@ -1,100 +1,86 @@
-pkg800 - Gross AFA now reads the figure the application printed. Supersedes pkg799.
-=====================================================================================
+pkg801 - The sent application always wins. One rule, four surfaces. Supersedes pkg800.
+=======================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-799. It contains all of them. Five files.
+DEPLOY THIS INSTEAD OF pkg795-800. It contains all of them. Six files.
 
+  lib/applications.js                (resolveGrossAfa - the new shared rule)
   pages/api/dashboard.js
-  pages/retention.js
+  pages/api/project/[id].js          (NEW in this package)
   pages/project/[id].js
+  pages/retention.js
   pages/api/business-financials.js   (build marker only)
-  lib/applications.js
 
-pkg794 first if not already deployed - that carries the other ten files.
+pkg794 first if not already deployed - that carries the other nine files.
 
-FOLDER NOTE: pages/project/[id].js uses LITERAL square brackets.
-
-
-YOU WERE RIGHT - STOP REBUILDING IT
-====================================
-The highlighted cell on your screenshot, Proj. Final Account / Application Total,
-is 140,274.20. That number already exists as a stored figure.
-
-When an application is sent, applyAfaOverrideFromApp() in pages/api/applications.js
-writes its Anticipated Final Account straight onto the project:
-
-    project.afaOverride       = sum.anticipatedFinalAccount
-    project.afaOverrideAt     = Date.now()
-    project.afaOverrideAppSeq = app.seq
-
-That is the printed figure, saved at the moment it was issued.
-
-The register was ignoring it and REBUILDING the same number from the stored
-application - measuredContractSum + variationsFinal. A rebuild only matches if the
-stored record is identical to what the page had in hand when the total was produced,
-and the applications page computes its summary from workApp, the live edit state
-(pages/applications.js line 685), not from the saved record. So the rebuild could
-drift, and no amount of correcting the formula fixes that - the formula was never
-the right approach.
-
-Gross AFA now reads the stamped figure. No formula.
+FOLDER NOTE: both [id].js paths use LITERAL square brackets. They are DIFFERENT
+files - one under pages/api/project/, one under pages/project/.
 
 
-ORDER OF PREFERENCE
---------------------
-  1. afaOverride stamped BY the latest sent application  <- as issued, no arithmetic
-  2. rebuilt from the stored application                 <- only where nothing was
-                                                            stamped, i.e. applications
-                                                            sent before this existed
-  3. a manual override
+THE RULE, IN ONE PLACE
+=======================
+resolveGrossAfa() in lib/applications.js is now the only place the order of
+preference is written. The dashboard, the project page and the project API all call
+it. It was written four times before, in three different orders.
+
+  1. the figure STAMPED by the latest sent application   - as issued, no arithmetic
+  2. rebuilt from the latest sent application            - only where nothing was stamped
+  3. a stored override                                   - ONLY where there is no sent
+                                                             application at all
   4. project details
 
-Step 1 is only taken when afaOverrideAppSeq matches the latest sent application. A
-stamp left by an OLDER application is not the current figure, so it drops to step 2
-and is treated as an override, not as the application's number.
+A stored override can no longer beat a sent application on any surface.
 
-The stamp can land on either settings record - project:{id} or project:{jobNo}, the
-same duality that hid the applications themselves in pkg797 - so both are read and
-the most recent stamp wins.
-
-Verified:
-    stamped by latest sent app    -> 140,274.20  (as issued)
-    stamped by an older app       -> rebuilt, flagged as an override
-    no stamp at all               -> rebuilt from the application
-    no stamp, no application      -> project details
+Note there is no manual override field anywhere in the UI. Every afaOverride was
+written by an application send, so an override reaching step 3 is always a leftover
+from an earlier one.
 
 
-DRILL-DOWN
------------
-The Gross AFA section now shows "Figure stamped by the application" and says which
-of the four routes was used on that row - including, where the stamp is not from the
-latest sent application, which application did leave it. The measured / variations
-decomposition from pkg799 stays underneath, because it is still the thing that
-explains a gap where no stamp exists.
+WHAT WAS ACTUALLY WRONG
+------------------------
+pages/api/project/[id].js line 132 read:
+
+    const afa = (settings.afaOverride != null && isFinite(settings.afaOverride))
+      ? Number(settings.afaOverride) : (contractValue + instructedVars)
+
+No application preference at all. A stale override was authoritative. That endpoint
+feeds Project Financials and the project report, so those two could contradict the
+retention register on the same job - and would do so on exactly the projects where
+an override had been left behind by an earlier send.
+
+It also still used the truthy `v.instructed` test that pkg799 replaced everywhere
+else, so variations recorded as the string 'no' counted as instructed there. Both
+fixed. The endpoint now returns afaSource as well, so the figure can be traced.
+
+pages/project/[id].js additionally ignored prevCertGross when working out previously
+certified - it recomputed from the preceding application. Now the same rule as the
+certificate and the register.
 
 
-ONE CONSEQUENCE WORTH KNOWING
-------------------------------
-Because the stamp is written at SEND, editing a sent application without re-sending
-it will not move Gross AFA. That is deliberate - the register should show what went
-to the customer - but it does mean re-sending is what republishes the figure.
+VERIFIED
+---------
+Against your screenshot figure of 140,274.20:
 
+    stamp from latest sent app        140,274.20   application 3 (sent, as issued)
+    STALE stamp from an earlier app   140,274.20   application 3 (sent)
+    two records, newest stamp wins    140,274.20   application 3 (sent, as issued)
+    no stamp, sent app present        140,274.20   application 3 (sent)
+    override only, NO application     130,000.00   stored override
+    nothing but project details       136,262.78   project details
+    draft application only            130,000.00   stored override
 
-ALSO IN THIS PACKAGE (pkg799)
-------------------------------
-Seven copies of the old `filter(v => v.instructed)` test replaced with
-isInstructed(). The field is a boolean on new records and the STRING 'yes'/'no' on
-older ones, and the truthy form counts 'no' as instructed. pkg766 fixed this in
-applicationPdf.js and applications.js and missed the dashboard AFA and both budget
-figures, plus the project page AFA, both budgets and the edit-form preview.
+The second line is the one that matters: a stale override no longer wins.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg800
-  612 drill-down header                 -> v800
-  Applied for / Certified drill-down    -> v800
+  13-week cash flow build marker        -> pkg801
+  612 drill-down header                 -> v801
+  Applied for / Certified drill-down    -> v801
 
-Cache marker afaAsIssued_v1. Hard refresh after deploying.
+Cache marker afaOneRule_v1. Hard refresh after deploying.
+
+Worth a look after this one: open Project Financials on the job that was wrong and
+check it now agrees with the register. Those two had no reason to agree before.
 
 
 STILL OPEN, ON YOUR WORD
@@ -105,3 +91,6 @@ STILL OPEN, ON YOUR WORD
     pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
+  - Both afaOverride writers are wrapped in try {} catch {} that swallows silently,
+    so a failed stamp leaves the previous figure in place looking valid. Step 1 above
+    now catches the consequence, but the silent failure itself is still there.
