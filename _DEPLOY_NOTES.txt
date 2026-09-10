@@ -1,7 +1,7 @@
-pkg803 - Two copies of the same application, and the register read the wrong one.
-===================================================================================
+pkg804 - The drill-down was blind. That is why the last three diagnoses were guesses.
+=======================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-802. It contains all of them. Six files.
+DEPLOY THIS INSTEAD OF pkg795-803. It contains all of them. Six files.
 
   lib/applications.js
   pages/api/dashboard.js
@@ -10,93 +10,87 @@ DEPLOY THIS INSTEAD OF pkg795-802. It contains all of them. Six files.
   pages/retention.js
   pages/api/business-financials.js   (build marker only)
 
-pkg794 first if not already deployed - that carries the other nine files.
-
 FOLDER NOTE: both [id].js paths use LITERAL square brackets. DIFFERENT files.
 
 
-THE ANSWER: IT IS MY pkg797 MERGE, NOT THE FORMULA
-====================================================
-I checked the obvious suspects first and ruled them out:
+WHAT YOU FOUND
+===============
+"When I click the applied for value ALL projects have the same message."
 
-  buildAppVariations() returns app.variations unchanged once an application is
-  SENT, so the page and the register use the SAME frozen variations.
+That is the answer to why pkg800, 802 and 803 each fixed something real and none of
+them fixed your two projects. The diagnostic I built to settle this was returning
+nothing, on every row, and saying so in a way that read like a finding.
 
-  rows on the page is initialised straight from appProp.contractWorks, so they use
-  the same contract works too.
+A tracker row is built TWICE in pages/retention.js:
 
-Same function, same inputs - so the two could not disagree. Unless they are not
-reading the same COPY of application 2. They were not.
+  ~line 549   from a project that has no saved entry
+  ~line 730   by merging a saved entry with live dashboard data
 
-pkg797 taught the dashboard to read applications from BOTH settings records, because
-project settings are keyed by tracking option id OR job number. Where both records
-hold the same application, it had to choose, and the tiebreak I wrote was:
+appliedForDetail, certifiedSetOnApp, mcdBasis, afaFromApp and all four stamp fields
+were added to the MERGE ONLY. Any row without a saved entry - which is most of them -
+received none of it. So the drill-down reported "No application data for this
+project" on projects with sent applications, and I read that as information.
 
-    (a.status === prev.status && (a.contractWorks || []).length > (prev.contractWorks || []).length)
-
-Whichever copy had MORE contract-works rows. That is not a measure of currency. On
-J228 it picked a copy carrying an extra 29,405.50 of works, so the register
-recomputed 169,679.70 while the application page showed 140,274.20 - both from
-computeApplicationSummary, on two different copies of application 2.
-
-Reproduced exactly:
-
-    old tiebreak picks -> 169,679.70
-    new tiebreak picks -> 140,274.20     matching your screenshot
-
-THE FIX: the id record's copy always wins. The applications page loads one record,
-getProject(projectId), keyed by the tracking option id - so that copy is the one
-whose figures are on screen, and the register must read the same one. The
-job-number record now only fills gaps, which is what pkg797 was actually for.
+Both builders now share one function, dashFields(), so a field added for one is
+present on the other. This is the same fault class as everything else this session:
+one rule written twice and left to drift.
 
 
-NEW IN THE DRILL-DOWN
-----------------------
-A "Where the records live" line: how many applications sit on the id record, how
-many on the job-number record, and how many are held on BOTH. If a project is
-duplicated, you will see it in one glance instead of guessing.
+A SECOND, REAL BUG FALLS OUT OF THE SAME FIX
+----------------------------------------------
+The project-derived builder tested `p.certifiedGross ? ... : ''` - truthy, not set.
+pkg796 fixed that in the merge and not here. So on any project WITHOUT a saved
+entry whose latest sent application is its first, Certified was blank instead of
+0.00. Both paths now test certifiedSetOnApp.
 
 
-WHAT TO EXPECT ON J228
+WHAT I HAVE NOT PROVEN
 -----------------------
-  Gross AFA      140,274.20   application 2 (sent)
-  MCD                  0.00   0.00% (default)
-  Final Account  140,274.20
-  the note "edited since sent" should now CLEAR, because the copy being read
-  matches the stamp far more closely - if it persists, the application really was
-  edited after sending and re-sending will clear it
+pkg803 changed the duplicate-application tiebreak to prefer the id record's copy.
+That is right on principle - it is the record the applications page reads - but I
+have NOT verified it is your projects' problem, and it did not move the figures.
+It stays in because it is defensible, not because it is confirmed.
 
-J247 was already internally consistent after pkg802 (213,863.33 / 0.00 /
-213,863.33) and should be unaffected except for the same note.
+I am not going to offer a fifth theory. The next step is to read the drill-down now
+that it has data in it.
 
 
-ALSO STILL IN THIS PACKAGE (pkg802)
-------------------------------------
-  - Gross and net must come from the same source. finalAccountFromApplication is
-    now only paired with the gross when the gross IS that summary's own anticipated
-    final account, so the gap between two sources can never be reported as MCD.
-  - The application as it stands beats the figure stamped at send. The stamp is
-    only rewritten on send, so editing without re-sending leaves it behind.
-  - Two separate row notes instead of one that fired on every healthy row:
-    "edited since sent" and "older figure saved".
+AFTER DEPLOYING - PLEASE SEND ONE SCREENSHOT
+----------------------------------------------
+Open the Applied for cell on J228 Farmstead Drive. The "Gross AFA - where it comes
+from" section will now be populated. The two lines that decide this:
+
+    Measured contract sum (app)        expected 75,262.78
+    Variations at final value (app)    expected 65,011.42, with instructed/total
+
+and directly above them:
+
+    Where the records live             how many applications sit on each settings
+                                       record, and how many are held on BOTH
+
+Which of the two is out by 29,405.50 gives the answer outright:
+
+  variations high, instructed count higher than the application page shows
+      -> a variation frozen onto the application as instructed that is not
+         instructed on the project - the V12-at-29,405.50 shape from pkg766
+
+  measured contract sum high
+      -> the schedule the register reads really does hold more than the one the page
+         renders, and the "held on BOTH" count will say whether duplicate records
+         are behind it
+
+  both correct, yet Gross AFA still 169,679.70
+      -> the figure is not coming from that summary at all and the source label is
+         misreporting its own provenance. Different bug from anything fixed so far.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg803
-  612 drill-down header                 -> v803
-  Applied for / Certified drill-down    -> v803
+  13-week cash flow build marker        -> pkg804
+  612 drill-down header                 -> v804
+  Applied for / Certified drill-down    -> v804
 
-Cache marker appsIdRecordWins_v1. Hard refresh after deploying.
-
-
-A THOUGHT FOR AFTER THIS
--------------------------
-Duplicate project records are the root of this, the missing variations, the invisible
-applications and the stray afaOverride stamps. Every one of those was one record
-shadowing another. Worth a one-off script that lists every project holding settings
-under BOTH keys and what differs between them - it would turn a recurring class of
-bug into a finite list. Say the word.
+Cache marker dashFields_v1. Hard refresh after deploying.
 
 
 STILL OPEN, ON YOUR WORD
@@ -107,3 +101,6 @@ STILL OPEN, ON YOUR WORD
     pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
+  - A one-off script listing every project holding settings under BOTH keys, and
+    what differs between the two copies. Four separate faults this session traced
+    back to duplicate records; this would turn that into a finite list.

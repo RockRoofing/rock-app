@@ -118,6 +118,39 @@ function InlineNumberCell({ value, onCommit, disabled, note, title }) {
 //
 // Falls back to gross LESS the MCD actually recorded, and only to the raw gross when
 // no MCD is known - in which case there is genuinely no discount to apply.
+// EVERY DASHBOARD-DERIVED FIELD, IN ONE PLACE.
+//
+// A tracker row is built TWICE - once from a project that has no saved entry, and
+// once by merging a saved entry with live data - and the two field lists had drifted
+// apart. appliedForDetail, certifiedSetOnApp, mcdBasis, afaFromApp and the stamp
+// fields were added to the merge only.
+//
+// So on every row WITHOUT a saved entry the Applied for drill-down received nothing
+// and reported "No application data for this project" on projects that plainly had
+// sent applications - which is exactly what made the last three diagnoses guesswork.
+// The diagnostic was blind, and it was blind in a way that looked like an answer.
+function dashFields(p) {
+  return {
+    appliedForLatest: p.appliedForLatest || 0,
+    certifiedGross: p.certifiedGross,
+    certifiedSetOnApp: !!p.certifiedSetOnApp,
+    certifiedFromApp: p.certifiedFromApp || '',
+    appliedForDetail: p.appliedForDetail || null,
+    afaGross: p.afaGross != null ? p.afaGross : null,
+    afaSource: p.afaSource || '',
+    afaOverrideIgnored: !!p.afaOverrideIgnored,
+    afaStampStale: !!p.afaStampStale,
+    afaStamped: p.afaStamped != null ? p.afaStamped : null,
+    afaStampedFromApp: !!p.afaStampedFromApp,
+    afaStampedAppSeq: p.afaStampedAppSeq || null,
+    afaFromApp: !!p.afaFromApp,
+    mcdBasis: p.mcdBasis || '',
+    mcdPct: p.mcdPct != null ? p.mcdPct : 0,
+    mcdRecorded: !!p.mcdRecorded,
+    mcdValue: p.mcdValue || 0,
+  }
+}
+
 function accountValue(entry) {
   const fa = parseFloat(entry.finalAccount || 0) || 0
   if (fa) return fa
@@ -562,10 +595,10 @@ export default function RetentionPage() {
           vat: p.vat || 0,
           vatRateLabel: p.vatRateLabel || '—',
           paid: p.paid || 0,
+          ...dashFields(p),
           appliedFor: p.appliedForLatest ? String(p.appliedForLatest) : '',
-          appliedForLatest: p.appliedForLatest || 0,
-          certified: p.certifiedGross ? String(p.certifiedGross) : '',
-          certifiedFromApp: p.certifiedFromApp || '',
+          // Same test as the merge: SET, not truthy. A first application carries 0.
+          certified: p.certifiedSetOnApp ? String(p.certifiedGross) : '',
           // Still HELD: retention on the invoiced value, less anything already claimed
           // back through an application's Retention section. Without the deduction the
           // register keeps chasing money that has been applied for.
@@ -585,13 +618,6 @@ export default function RetentionPage() {
           ret612Detail: p.ret612Detail || [],
           ret612Lines: p.ret612Lines || 0,
           ret612From: p.ret612From || '',
-          afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
-          afaSource: p.afaSource || '',
-          afaOverrideIgnored: !!p.afaOverrideIgnored,
-          afaStampStale: !!p.afaStampStale,
-          mcdPct: p.mcdPct != null ? p.mcdPct : 0,
-          mcdRecorded: !!p.mcdRecorded,
-          mcdValue: p.mcdValue || 0,
           detailsMissing: p.detailsMissing || [],
           pcDateTBC: !!p.pcDateTBC,
           defectsDateTBC: !!p.defectsDateTBC,
@@ -712,9 +738,8 @@ export default function RetentionPage() {
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
         ret612Detail: x.ret612Detail,
-        afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, afaStampStale: !!x.afaStampStale, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
-        mcdBasis: x.mcdBasis || '', afaFromApp: !!x.afaFromApp,
-        afaStamped: x.afaStamped, afaStampedFromApp: !!x.afaStampedFromApp, afaStampedAppSeq: x.afaStampedAppSeq || null,
+        // One list, shared with the project-derived builder above.
+        ...dashFields(x),
         // THE APPLICATION WINS ON BOTH ACCOUNT COLUMNS.
         //
         // Final Account read `e.finalAccount || x.finalAccount`, so a figure typed once
@@ -736,15 +761,11 @@ export default function RetentionPage() {
         // their latest certificate. A manual figure is now only used where there is no
         // sent application to take it from.
         appliedFor: x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || ''),
-        appliedForLatest: x.appliedForLatest || 0,
         // CERTIFIED = the "Previously certified (gross)" box on the latest SENT
         // application. Tested on certifiedSetOnApp, not on the value being truthy: a
         // first application legitimately holds 0 and must show 0.00 rather than falling
         // through to whatever was typed on this row.
         certified: x.certifiedSetOnApp ? String(x.certifiedGross) : (e.certified || ''),
-        certifiedSetOnApp: !!x.certifiedSetOnApp,
-        certifiedFromApp: x.certifiedFromApp || '',
-        appliedForDetail: x.appliedForDetail || null,
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
         // markedComplete is a manual saved flag on `e` — keep it.
       }
@@ -946,14 +967,20 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v803</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v804</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
                   {!d ? (
                     <div style={{ fontSize: 12, color: '#555' }}>
-                      No application data for this project. Applied for is showing whatever was typed
-                      on the row, and Certified will be blank unless it was typed too.
+                      The dashboard returned no application data for this project. That means
+                      either the project genuinely has no applications, or none were found on
+                      its settings records. Applied for is showing whatever was typed on the
+                      row, and Certified will be blank unless it was typed too.
+                      <div style={{ marginTop: 6, color: '#94a3b8' }}>
+                        If Gross AFA above names an application, the two disagree and that is
+                        itself the fault - send this screen over.
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -1053,7 +1080,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v803</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v804</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
