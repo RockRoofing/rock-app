@@ -796,9 +796,15 @@ function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onCha
       // Say what happened to the tag. "I tagged them and nothing happened" should not
       // be a mystery - if the send failed, it says so here rather than in a log.
       const n = data.notified || {}
-      if (n.sent > 0) setNotice(`Saved. Emailed ${(n.names || []).join(', ')}.`)
-      else if (n.names && n.names.length) setNotice(`Saved, but the email to ${n.names.join(', ')} did not send${n.error ? ` (${n.error})` : ''}.`)
-      else setNotice('Saved.')
+      if (n.sent > 0) {
+        const partial = (n.failed || []).length ? ` ${n.failed.length} did not send.` : ''
+        setNotice(`Saved. Emailed ${(n.names || []).join(', ')}.${partial}`)
+      } else if (n.names && n.names.length) {
+        setNotice(`Saved, but the email to ${n.names.join(', ')} did not send. ${n.error || (n.failed || []).map(f => f.detail).join('; ') || ''}`)
+      } else {
+        // Never just "Saved." A comment nobody was told about should say so.
+        setNotice(`Saved. ${n.reason || 'Nobody was tagged.'}`)
+      }
     } catch (e) {
       setErr(e.message || 'Could not save')
     } finally { setBusy(false) }
@@ -882,7 +888,10 @@ function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onCha
           {err ? <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{err}</div> : null}
           {notice ? <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6 }}>{notice}</div> : null}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: '#9aa5b1' }}>Anyone tagged gets an email with a link back to this tab.</span>
+            <span style={{ fontSize: 11, color: '#9aa5b1' }}>
+              Anyone tagged gets an email with a link back to this tab.
+              {users && users.length ? ` ${users.length} taggable.` : ' Nobody is taggable - portal users need an email address and a commercial role.'}
+            </span>
             <button onClick={submit} disabled={busy || !body.trim()}
               style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: 'none', cursor: busy || !body.trim() ? 'default' : 'pointer', background: busy || !body.trim() ? '#e5e7eb' : '#1c704f', color: busy || !body.trim() ? '#9aa5b1' : '#fff' }}>
               {busy ? 'Saving...' : 'Comment'}

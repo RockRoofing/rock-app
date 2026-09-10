@@ -1,109 +1,81 @@
-pkg807 - Comments and @tagging on cost lines. Includes pkg806.
-================================================================
+pkg808 - The comment saved and told you nothing about the email. Includes pkg807.
+===================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-806. It contains all of them. Eight files.
+DEPLOY THIS INSTEAD OF pkg795-807. It contains all of them. Eight files.
 
   lib/applications.js
   lib/crmMentions.js
   pages/api/dashboard.js
   pages/api/business-financials.js            (build marker only)
   pages/api/project/[id].js
-  pages/api/project/[id]/cost-comments.js     *** NEW FILE - CREATE MANUALLY ***
+  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807 not deployed ***
   pages/project/[id].js
   pages/retention.js
 
-*** ONE NEW FILE TO CREATE IN THE GITHUB WEB EDITOR ***
-
-  pages/api/project/[id]/cost-comments.js
-
-  LITERAL square brackets in the folder name. That folder already exists - it holds
-  comment.js, report.js, settings.js, wip-adjustments.js and wip-margin.js - so add
-  the new file alongside them. Do NOT confuse it with pages/api/project/[id].js,
-  which is a different file one level up and is also in this package.
+If you already deployed pkg807, cost-comments.js exists and you are overwriting it.
+If not, create it by hand - LITERAL square brackets, in the folder that already
+holds comment.js and report.js.
 
 
-WHAT IT DOES
-=============
-A Comments column on the main cost table in the Costs tab, on the grouped invoice
-rows. Each row carries a pill: a count where comments exist, "Add" where they do
-not. Clicking opens the thread for that invoice.
+WHY YOU GOT NOTHING, AND WHY YOU COULD NOT TELL WHY
+=====================================================
+notifyMentions() returned a bare { sent: 0 } for three completely different
+outcomes:
 
-In the composer, typing @ brings up a list of people and completes the name. Anyone
-tagged gets an email with the comment and a link straight back to the Costs tab of
-that project.
+  - the name in the comment matched nobody
+  - the only person tagged was you, and nobody is emailed their own comment
+  - there are no taggable users at all
 
-The point being to say "this is on the wrong job" against the specific invoice, and
-put it in front of whoever can move it.
+The composer collapsed all three, plus a genuine send failure with no names, into
+the single word "Saved." So the one thing you needed to know - which of those
+happened - was the one thing it did not say.
 
-
-DECISIONS WORTH KNOWING
-------------------------
-WHO CAN BE TAGGED. Post-contract, management and admin. Pre-contract has no access
-to the Costs tab at all, so offering those names would only produce emails about a
-page the recipient cannot open.
-
-THE AUTHOR IS THE SESSION, NEVER THE CLIENT. A comment saying who flagged a
-mis-coded cost is worth nothing if the name can be typed by somebody else.
-
-EMAIL ADDRESSES STAY SERVER-SIDE. The tagging dropdown gets names only. It has no
-need of addresses, and a dropdown is not a reason to publish a staff email list to
-the browser.
-
-ONE SEND PATH. lib/crmMentions.js already resolved @names against real portal users
-and sent through Resend for the CRM, including the rule that two people sharing a
-first name makes "@James" ambiguous rather than a guess. Rather than write a second
-copy, I generalised it: getMentionableUsersForRoles(roles) and notifyMentions(...).
-sendMentionEmails() now calls notifyMentions() too, so CRM behaviour is unchanged
-and there is one place a mention email is sent.
-
-FAILED SENDS ARE REPORTED, NOT SWALLOWED. If the comment saves but the email does
-not, the composer says so and gives Resend's reason. "I tagged them and nothing
-happened" should be answerable without reading a log. The comment is never lost to
-a failed notification - it is saved first.
-
-STORAGE. One Redis key per project, ops:cost-comments:{projectId}, holding a map of
-invoice key -> comments. The Costs tab reads them all in one request; a key per line
-would be dozens of round trips for one page.
-
-Each comment also stores the supplier, reference and amount as they were at the
-time, so a thread still reads sensibly if the invoice later falls outside the date
-filter or is recoded and the row moves.
-
-DELETING. Your own comments, or anything if you are admin.
-
-THE COMMENT BUTTON DOES NOT EXPAND THE ROW. Clicking a grouped row toggles its line
-breakdown; the comment cell stops the event so opening a thread does not also expand
-the invoice.
-
-The modal closes on the x and Escape only, never a backdrop click - a half-typed
-comment should not vanish because you clicked past the edge.
+I have not guessed which of the three it was. The build now tells you.
 
 
-WHAT I HAVE NOT DONE
----------------------
-No notification anywhere except email - no badge in the portal, no digest. If you
-want an unread marker or a daily summary of open cost queries, that is a separate
-piece and worth scoping properly.
+WHAT CHANGED
+-------------
+Every outcome now comes back with a reason, and the composer prints it:
 
-No status on a comment. If these are going to be worked through as a list -
-"flagged / moved / not a problem" - they want a resolved flag and somewhere central
-to see all open ones across projects. Say the word and I will scope it.
+  tag a colleague        "Saved. Emailed Dori Balog."
+  tag YOURSELF           "Saved. Only you were tagged - you are not emailed your
+                          own comment."
+  a name that matches
+  nobody                 "Saved. No name in the comment matched anyone. Type @ and
+                          pick from the list."
+  no taggable users      "Saved. Nobody is taggable here. Portal users need an
+                          email address and the right role."
+  email not configured   "Saved, but the email to X did not send. Email is not
+                          configured on the server (RESEND_API_KEY is not set)."
+  Resend rejected it     "Saved, but the email to X did not send." followed by
+                          exactly what Resend said - usually an unverified sending
+                          domain, and it says so plainly.
+  some sent, some not    "Saved. Emailed A. 1 did not send."
+
+The composer footer also states how many people are taggable at all. If it reads
+"Nobody is taggable", that is the answer on its own and no amount of typing @ will
+help - the portal users need email addresses and a post-contract, management or
+admin role.
+
+All six branches verified against the real resolver, including that "@Dori" resolves
+on first name only where exactly one person has it.
 
 
-ALSO IN THIS PACKAGE (pkg806)
-------------------------------
-Certified no longer snaps back to 0 on Enter. certifiedSetOnApp is true on a FIRST
-application, where the box is legitimately 0, so the application won and discarded
-whatever was typed. A real figure from the application still wins; a zero does not.
-Where the application does own the figure the cell is now read-only rather than
-accepting a value and silently reverting it.
+MOST LIKELY, FOR WHAT IT IS WORTH
+-----------------------------------
+If you tagged yourself while testing, that is the second case and it is working as
+intended - the rule that nobody is emailed their own words came over from the CRM.
+Tag somebody else, or tell me and I will drop the rule so a self-tag emails you too.
+
+If the footer says nobody is taggable, the portal user records have no email
+addresses on them, and that is fixable in user admin rather than in code.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg807
-  612 drill-down header                 -> v807
-  Applied for / Certified drill-down    -> v807
+  13-week cash flow build marker        -> pkg808
+  612 drill-down header                 -> v808
+  Applied for / Certified drill-down    -> v808
 
 No new dashboard cache marker. Hard refresh after deploying.
 
