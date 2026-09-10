@@ -1,81 +1,80 @@
-pkg808 - The comment saved and told you nothing about the email. Includes pkg807.
-===================================================================================
+pkg809 - Tag yourself and you get the email. Includes pkg807 and pkg808.
+==========================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-807. It contains all of them. Eight files.
+DEPLOY THIS INSTEAD OF pkg795-808. It contains all of them. Eight files.
 
   lib/applications.js
   lib/crmMentions.js
   pages/api/dashboard.js
   pages/api/business-financials.js            (build marker only)
   pages/api/project/[id].js
-  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807 not deployed ***
+  pages/api/project/[id]/cost-comments.js     *** NEW FILE if pkg807/808 not deployed ***
   pages/project/[id].js
   pages/retention.js
 
-If you already deployed pkg807, cost-comments.js exists and you are overwriting it.
-If not, create it by hand - LITERAL square brackets, in the folder that already
-holds comment.js and report.js.
+If cost-comments.js already exists you are overwriting it. If not, create it by
+hand - LITERAL square brackets, in the folder that already holds comment.js and
+report.js.
 
 
-WHY YOU GOT NOTHING, AND WHY YOU COULD NOT TELL WHY
-=====================================================
-notifyMentions() returned a bare { sent: 0 } for three completely different
-outcomes:
+THE CHANGE
+===========
+A tag is a tag. Whoever is named gets the email, including you when you tag
+yourself.
 
-  - the name in the comment matched nobody
-  - the only person tagged was you, and nobody is emailed their own comment
-  - there are no taggable users at all
+The rule that suppressed it came over from the CRM, where the reasoning was that
+nobody needs an email telling them what they just typed. That holds for a running
+note on a deal. It does not hold here - tagging yourself on a mis-coded cost is a
+deliberate act, usually to put it in your own inbox to come back to, and dropping
+it silently is just surprising.
 
-The composer collapsed all three, plus a genuine send failure with no names, into
-the single word "Saved." So the one thing you needed to know - which of those
-happened - was the one thing it did not say.
+Verified:
 
-I have not guessed which of the three it was. The build now tells you.
+  cost comment, tag self          -> James McVeigh
+  cost comment, tag self + other  -> James McVeigh, Dori Balog
+  cost comment, tag other         -> Dori Balog
 
-
-WHAT CHANGED
--------------
-Every outcome now comes back with a reason, and the composer prints it:
-
-  tag a colleague        "Saved. Emailed Dori Balog."
-  tag YOURSELF           "Saved. Only you were tagged - you are not emailed your
-                          own comment."
-  a name that matches
-  nobody                 "Saved. No name in the comment matched anyone. Type @ and
-                          pick from the list."
-  no taggable users      "Saved. Nobody is taggable here. Portal users need an
-                          email address and the right role."
-  email not configured   "Saved, but the email to X did not send. Email is not
-                          configured on the server (RESEND_API_KEY is not set)."
-  Resend rejected it     "Saved, but the email to X did not send." followed by
-                          exactly what Resend said - usually an unverified sending
-                          domain, and it says so plainly.
-  some sent, some not    "Saved. Emailed A. 1 did not send."
-
-The composer footer also states how many people are taggable at all. If it reads
-"Nobody is taggable", that is the answer on its own and no amount of typing @ will
-help - the portal users need email addresses and a post-contract, management or
-admin role.
-
-All six branches verified against the real resolver, including that "@Dori" resolves
-on first name only where exactly one person has it.
+The composer footer now says so: "Tag yourself and you get one too."
 
 
-MOST LIKELY, FOR WHAT IT IS WORTH
+THE CRM IS DELIBERATELY UNCHANGED
 -----------------------------------
-If you tagged yourself while testing, that is the second case and it is working as
-intended - the rule that nobody is emailed their own words came over from the CRM.
-Tag somebody else, or tell me and I will drop the rule so a self-tag emails you too.
+notifyMentions() takes notifyAuthor, defaulting to true. The CRM's
+sendMentionEmails() passes false, so CRM notes behave exactly as they always have.
 
-If the footer says nobody is taggable, the portal user records have no email
-addresses on them, and that is fixable in user admin rather than in code.
+Verified: CRM note, tag self -> nobody emailed.
+
+I have not changed the CRM because you asked about cost comments and the CRM rule
+was put there on purpose. If you want it to match - tag yourself in a CRM note and
+get the email - it is one word, deleting `notifyAuthor: false`. Say so and it goes
+in the next package.
+
+
+IF IT STILL DOES NOT ARRIVE
+-----------------------------
+The comment will now tell you which case you are in rather than saying "Saved."
+(pkg808). The ones to watch for:
+
+  "Email is not configured on the server (RESEND_API_KEY is not set)"
+      -> nothing will ever send until that env var is set in Vercel
+
+  "did not send" followed by Resend's own words
+      -> almost always an unverified sending domain. FORMS_FROM_EMAIL defaults to
+         onboarding@resend.dev, which Resend will only deliver to the account
+         owner's address
+
+  "Nobody is taggable here"
+      -> the portal user records have no email address, or no post-contract /
+         management / admin role. Fixed in user admin, not in code
+
+And check junk - the from address is whatever FORMS_FROM_EMAIL is set to.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg808
-  612 drill-down header                 -> v808
-  Applied for / Certified drill-down    -> v808
+  13-week cash flow build marker        -> pkg809
+  612 drill-down header                 -> v809
+  Applied for / Certified drill-down    -> v809
 
 No new dashboard cache marker. Hard refresh after deploying.
 

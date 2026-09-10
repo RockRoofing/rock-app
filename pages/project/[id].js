@@ -890,7 +890,7 @@ function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onCha
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
             <span style={{ fontSize: 11, color: '#9aa5b1' }}>
               Anyone tagged gets an email with a link back to this tab.
-              {users && users.length ? ` ${users.length} taggable.` : ' Nobody is taggable - portal users need an email address and a commercial role.'}
+              {users && users.length ? ` Tag yourself and you get one too. ${users.length} taggable.` : ' Nobody is taggable - portal users need an email address and a commercial role.'}
             </span>
             <button onClick={submit} disabled={busy || !body.trim()}
               style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: 'none', cursor: busy || !body.trim() ? 'default' : 'pointer', background: busy || !body.trim() ? '#e5e7eb' : '#1c704f', color: busy || !body.trim() ? '#9aa5b1' : '#fff' }}>
