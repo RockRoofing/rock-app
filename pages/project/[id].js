@@ -387,7 +387,7 @@ export default function ProjectPage() {
                 ))}
               </div>
               {tab === 'overview' && <OverviewTab p={p} settings={settings || {}} atDate={atDate} trendData={trendData} vDateLabel={vDateLabel} costLines={costLines} invoiceLines={invoiceLines} />}
-              {tab === 'costs' && <CostsTab costLines={costLines} atDate={atDate} settings={settings || {}} />}
+              {tab === 'costs' && <CostsTab costLines={costLines} atDate={atDate} settings={settings || {}} projectId={id} />}
               {tab === 'income' && <IncomeTab invoiceLines={invoiceLines} atDate={atDate} />}
               {tab === 'wip' && <WipTab costLines={costLines} invoiceLines={invoiceLines} settings={settings || {}} pastVDates={pastVDates} selectedVDate={selectedVDate} id={id} onSettingsSaved={load} />}
               {tab === 'retention' && <RetentionTab p={p} settings={settings || {}} atDate={atDate} />}
@@ -717,7 +717,184 @@ function CostAccountPicker({ codes, codeName, selected, onChange }) {
   )
 }
 
-function CostsTab({ costLines, atDate, settings }) {
+// COMMENT COUNT PILL. Module scope, like everything else with state in this file -
+// a component declared inside another is a new type on every render and remounts.
+function CommentPill({ count, onClick }) {
+  const has = count > 0
+  return (
+    <button
+      onClick={onClick}
+      title={has ? `${count} comment${count === 1 ? '' : 's'} - click to read or reply` : 'Add a comment - flag a cost on the wrong job, or tag someone'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px',
+        borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+        border: `1px solid ${has ? '#c7d2fe' : '#e5e7eb'}`,
+        background: has ? '#eef2ff' : '#fff',
+        color: has ? '#3730a3' : '#9aa5b1',
+      }}
+    >
+      <span aria-hidden="true">{'\u{1F4AC}'}</span>
+      {has ? count : 'Add'}
+    </button>
+  )
+}
+
+// COST COMMENT THREAD.
+//
+// Closes on the x and Escape only, never a backdrop click - a half-typed comment
+// should not vanish because somebody clicked past the edge of the box.
+function CostCommentsModal({ projectId, invoice, list, users, me, onClose, onChanged }) {
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [caret, setCaret] = useState(0)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // @-token immediately before the caret, if any. Same rule the server resolves with,
+  // so what the dropdown offers is what will actually be matched.
+  const token = (() => {
+    const upto = body.slice(0, caret)
+    const m = /(^|[^\w@])@([\w'\-. ]{0,30})$/.exec(upto)
+    return m ? m[2] : null
+  })()
+  const suggestions = token == null ? [] : (users || [])
+    .filter(u => u.name && u.name.toLowerCase().includes(token.toLowerCase()))
+    .slice(0, 6)
+
+  const pick = (u) => {
+    const upto = body.slice(0, caret)
+    const rest = body.slice(caret)
+    const replaced = upto.replace(/@([\w'\-. ]{0,30})$/, `@${u.name} `)
+    setBody(replaced + rest)
+    setCaret(replaced.length)
+    if (inputRef.current) inputRef.current.focus()
+  }
+
+  const label = `${invoice.supplier || 'Unknown supplier'}${invoice.reference ? ` - ${invoice.reference}` : ''}`
+
+  async function submit() {
+    const text = body.trim()
+    if (!text || busy) return
+    setBusy(true); setErr(''); setNotice('')
+    try {
+      const res = await fetch(`/api/project/${encodeURIComponent(projectId)}/cost-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineKey: invoice.key, body: text, label, amount: invoice.total }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error || 'Could not save'); return }
+      onChanged(data.comments)
+      setBody('')
+      // Say what happened to the tag. "I tagged them and nothing happened" should not
+      // be a mystery - if the send failed, it says so here rather than in a log.
+      const n = data.notified || {}
+      if (n.sent > 0) setNotice(`Saved. Emailed ${(n.names || []).join(', ')}.`)
+      else if (n.names && n.names.length) setNotice(`Saved, but the email to ${n.names.join(', ')} did not send${n.error ? ` (${n.error})` : ''}.`)
+      else setNotice('Saved.')
+    } catch (e) {
+      setErr(e.message || 'Could not save')
+    } finally { setBusy(false) }
+  }
+
+  async function remove(id) {
+    try {
+      const res = await fetch(`/api/project/${encodeURIComponent(projectId)}/cost-comments`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineKey: invoice.key, commentId: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErr(data.error || 'Could not delete'); return }
+      onChanged(data.comments)
+    } catch (e) { setErr(e.message || 'Could not delete') }
+  }
+
+  const when = (ms) => {
+    try { return new Date(ms).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+    catch { return '' }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 620, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{label}</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+              {invoice.date} &middot; {invoice.accountCode} {invoice.accountName} &middot; {fmtC(invoice.total)}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888', lineHeight: 1 }}>&times;</button>
+        </div>
+
+        <div style={{ overflow: 'auto', padding: '12px 16px', flex: 1 }}>
+          {list.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#888', padding: '10px 0' }}>
+              No comments yet. If this cost is on the wrong job, say so here and tag whoever
+              needs to move it - type @ to bring up the list.
+            </div>
+          ) : list.map(c => (
+            <div key={c.id} style={{ borderLeft: '3px solid #c7d2fe', background: '#f7f9fc', padding: '9px 12px', borderRadius: 6, marginBottom: 9 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#3730a3' }}>{c.author}</span>
+                <span style={{ fontSize: 11, color: '#9aa5b1', whiteSpace: 'nowrap' }}>
+                  {when(c.at)}
+                  {(c.author === me) && (
+                    <button onClick={() => remove(c.id)} title="Delete this comment"
+                      style={{ marginLeft: 8, background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 11 }}>delete</button>
+                  )}
+                </span>
+              </div>
+              <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: '1px solid #e5e7eb', padding: '10px 16px', position: 'relative' }}>
+          {suggestions.length > 0 && (
+            <div style={{ position: 'absolute', bottom: '100%', left: 16, right: 16, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,.10)', overflow: 'hidden', zIndex: 2 }}>
+              {suggestions.map(u => (
+                <div key={u.name} onMouseDown={(e) => { e.preventDefault(); pick(u) }}
+                  style={{ padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>
+                  {u.name}
+                </div>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={inputRef}
+            value={body}
+            rows={3}
+            placeholder="Wrongly allocated? Say what it should be coded to, and type @ to tag someone."
+            onChange={(e) => { setBody(e.target.value); setCaret(e.target.selectionStart || 0) }}
+            onKeyUp={(e) => setCaret(e.target.selectionStart || 0)}
+            onClick={(e) => setCaret(e.target.selectionStart || 0)}
+            style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
+          />
+          {err ? <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{err}</div> : null}
+          {notice ? <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6 }}>{notice}</div> : null}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#9aa5b1' }}>Anyone tagged gets an email with a link back to this tab.</span>
+            <button onClick={submit} disabled={busy || !body.trim()}
+              style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: 'none', cursor: busy || !body.trim() ? 'default' : 'pointer', background: busy || !body.trim() ? '#e5e7eb' : '#1c704f', color: busy || !body.trim() ? '#9aa5b1' : '#fff' }}>
+              {busy ? 'Saving...' : 'Comment'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CostsTab({ costLines, atDate, settings, projectId }) {
   const twoYearsAgo = new Date()
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
   const [fromDate, setFromDate] = useState(twoYearsAgo.toISOString().split('T')[0])
@@ -728,6 +905,20 @@ function CostsTab({ costLines, atDate, settings }) {
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
   const [expandedInvoice, setExpandedInvoice] = useState(null)
+  // COMMENTS ON COST LINES, keyed by the same invoice key the table groups on.
+  const [comments, setComments] = useState({})
+  const [commentFor, setCommentFor] = useState(null)
+  const [mentionUsers, setMentionUsers] = useState([])
+  const [me, setMe] = useState('')
+  useEffect(() => {
+    if (!projectId) return
+    let live = true
+    fetch(`/api/project/${encodeURIComponent(projectId)}/cost-comments`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live && d) { setComments(d.comments || {}); setMentionUsers(d.users || []); setMe(d.me || '') } })
+      .catch(() => {})
+    return () => { live = false }
+  }, [projectId])
 
   const dateFiltered = costLines.filter(l => {
     if (!l.date) return false
@@ -876,11 +1067,13 @@ function CostsTab({ costLines, atDate, settings }) {
                   {label}{sortCol === col ? <span style={{ fontSize: 9, marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span> : <span style={{ fontSize: 9, marginLeft: 3, color: '#ccc' }}>↕</span>}
                 </th>
               ))}
+              {/* Not sortable - it is an action, not a value to order rows by. */}
+              <th style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>Comments</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#888' }}>No transactions found for selected filters</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#888' }}>No transactions found for selected filters</td></tr>
             ) : sorted.map((inv, i) => (
               <React.Fragment key={inv.key}>
                 <tr onClick={() => setExpandedInvoice(expandedInvoice === inv.key ? null : inv.key)} style={{ borderBottom: expandedInvoice === inv.key ? 'none' : '1px solid #f5f5f5', background: expandedInvoice === inv.key ? '#f0f4ff' : i % 2 === 0 ? '#fff' : '#fafafa', cursor: inv.lines.length > 1 ? 'pointer' : 'default' }}>
@@ -897,6 +1090,11 @@ function CostsTab({ costLines, atDate, settings }) {
                     {inv.lines.length > 1 && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>{inv.lines.length} lines</span>}
                   </td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmtC(inv.total)}</td>
+                  {/* stopPropagation - the row toggles the line breakdown, and opening
+                      comments must not also expand it. */}
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <CommentPill count={(comments[inv.key] || []).length} onClick={() => setCommentFor(inv)} />
+                  </td>
                 </tr>
                 {expandedInvoice === inv.key && inv.lines.map((line, li) => (
                   <tr key={li} style={{ background: '#eef2ff', borderBottom: li === inv.lines.length - 1 ? '2px solid #c7d2fe' : '1px solid #dde4ff' }}>
@@ -911,6 +1109,7 @@ function CostsTab({ costLines, atDate, settings }) {
                       <span style={{ fontSize: 11, padding: '1px 5px', borderRadius: 10, background: line.type === 'Labour' ? '#f0fdf4' : '#fff7ed', color: line.type === 'Labour' ? '#16a34a' : '#ea7c28' }}>{line.type}</span>
                     </td>
                     <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: 12, color: '#555' }}>{fmtC(line.amount)}</td>
+                    <td />
                   </tr>
                 ))}
               </React.Fragment>
@@ -919,6 +1118,17 @@ function CostsTab({ costLines, atDate, settings }) {
         </table>
       </div>
 
+      {commentFor && (
+        <CostCommentsModal
+          projectId={projectId}
+          invoice={commentFor}
+          list={comments[commentFor.key] || []}
+          users={mentionUsers}
+          me={me}
+          onClose={() => setCommentFor(null)}
+          onChanged={(next) => setComments(next || {})}
+        />
+      )}
     </div>
   )
 }

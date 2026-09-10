@@ -1,73 +1,111 @@
-pkg806 - Certified snapped back to 0 on Enter. Supersedes pkg805.
-===================================================================
+pkg807 - Comments and @tagging on cost lines. Includes pkg806.
+================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-805. It contains all of them. Six files.
+DEPLOY THIS INSTEAD OF pkg795-806. It contains all of them. Eight files.
 
   lib/applications.js
+  lib/crmMentions.js
   pages/api/dashboard.js
+  pages/api/business-financials.js            (build marker only)
   pages/api/project/[id].js
+  pages/api/project/[id]/cost-comments.js     *** NEW FILE - CREATE MANUALLY ***
   pages/project/[id].js
   pages/retention.js
-  pages/api/business-financials.js   (build marker only)
 
-FOLDER NOTE: both [id].js paths use LITERAL square brackets. DIFFERENT files.
+*** ONE NEW FILE TO CREATE IN THE GITHUB WEB EDITOR ***
 
+  pages/api/project/[id]/cost-comments.js
 
-WHY IT TURNED INTO 0
-=====================
-Nothing was wrong with the input, the save or the server. The value was written
-correctly and then overwritten on the way back out.
-
-The merge read:
-
-    certified: x.certifiedSetOnApp ? String(x.certifiedGross) : (e.certified || '')
-
-certifiedSetOnApp means "the Previously certified (gross) box is SET on the latest
-sent application". On a FIRST application that box is legitimately 0 - nothing has
-been certified before it. So the flag is true, the value is 0, the application wins,
-and whatever was typed is discarded and replaced with zero.
-
-    app 1 sent (box 0), user types 5000  ->  "0"
-
-On any project whose latest sent application is App 1, Certified was not editable at
-all, however editable the cell looked. That is a direct consequence of pkg796, where
-I made a zero display as 0.00 rather than fall through - correct for display, wrong
-once the cell became editable in pkg797.
+  LITERAL square brackets in the folder name. That folder already exists - it holds
+  comment.js, report.js, settings.js, wip-adjustments.js and wip-margin.js - so add
+  the new file alongside them. Do NOT confuse it with pages/api/project/[id].js,
+  which is a different file one level up and is also in this package.
 
 
-THE FIX - TWO PARTS
---------------------
-1. A REAL FIGURE FROM THE APPLICATION STILL WINS. A ZERO DOES NOT.
+WHAT IT DOES
+=============
+A Comments column on the main cost table in the Costs tab, on the grouped invoice
+rows. Each row carries a pill: a count where comments exist, "Add" where they do
+not. Clicking opens the thread for that invoice.
 
-   Where the box holds an actual value it continues to beat anything typed, exactly
-   as you specified. Where it holds 0, a typed value is used, and 0 still shows when
-   nothing has been typed.
+In the composer, typing @ brings up a list of people and completes the name. Anyone
+tagged gets an email with the comment and a link straight back to the Costs tab of
+that project.
 
-       app 1 sent (box 0), user types 5000   ->  5,000.00   editable
-       app 1 sent (box 0), nothing typed     ->  0.00       editable
-       app 3 sent, box 119,506.55            ->  119,506.55 READ-ONLY
-       no sent app, user types 5000          ->  5,000.00   editable
-       no sent app, nothing typed            ->  blank      editable
-
-2. THE CELL NO LONGER INVITES AN EDIT IT WILL THROW AWAY.
-
-   Where the application owns the figure, the cell is read-only - no box, no pencil,
-   no "Add". Hovering explains why: the value comes from the Previously certified
-   (gross) box on application N and must be changed there. Previously it looked
-   editable, accepted a value, saved it, and silently reverted.
-
-Applied to BOTH row builders, through the shared dashFields() from pkg804, so the
-behaviour is identical whether or not a row has a saved entry.
+The point being to say "this is on the wrong job" against the specific invoice, and
+put it in front of whoever can move it.
 
 
-MARKERS - ALL THREE MUST MOVE
+DECISIONS WORTH KNOWING
+------------------------
+WHO CAN BE TAGGED. Post-contract, management and admin. Pre-contract has no access
+to the Costs tab at all, so offering those names would only produce emails about a
+page the recipient cannot open.
+
+THE AUTHOR IS THE SESSION, NEVER THE CLIENT. A comment saying who flagged a
+mis-coded cost is worth nothing if the name can be typed by somebody else.
+
+EMAIL ADDRESSES STAY SERVER-SIDE. The tagging dropdown gets names only. It has no
+need of addresses, and a dropdown is not a reason to publish a staff email list to
+the browser.
+
+ONE SEND PATH. lib/crmMentions.js already resolved @names against real portal users
+and sent through Resend for the CRM, including the rule that two people sharing a
+first name makes "@James" ambiguous rather than a guess. Rather than write a second
+copy, I generalised it: getMentionableUsersForRoles(roles) and notifyMentions(...).
+sendMentionEmails() now calls notifyMentions() too, so CRM behaviour is unchanged
+and there is one place a mention email is sent.
+
+FAILED SENDS ARE REPORTED, NOT SWALLOWED. If the comment saves but the email does
+not, the composer says so and gives Resend's reason. "I tagged them and nothing
+happened" should be answerable without reading a log. The comment is never lost to
+a failed notification - it is saved first.
+
+STORAGE. One Redis key per project, ops:cost-comments:{projectId}, holding a map of
+invoice key -> comments. The Costs tab reads them all in one request; a key per line
+would be dozens of round trips for one page.
+
+Each comment also stores the supplier, reference and amount as they were at the
+time, so a thread still reads sensibly if the invoice later falls outside the date
+filter or is recoded and the row moves.
+
+DELETING. Your own comments, or anything if you are admin.
+
+THE COMMENT BUTTON DOES NOT EXPAND THE ROW. Clicking a grouped row toggles its line
+breakdown; the comment cell stops the event so opening a thread does not also expand
+the invoice.
+
+The modal closes on the x and Escape only, never a backdrop click - a half-typed
+comment should not vanish because you clicked past the edge.
+
+
+WHAT I HAVE NOT DONE
+---------------------
+No notification anywhere except email - no badge in the portal, no digest. If you
+want an unread marker or a daily summary of open cost queries, that is a separate
+piece and worth scoping properly.
+
+No status on a comment. If these are going to be worked through as a list -
+"flagged / moved / not a problem" - they want a resolved flag and somewhere central
+to see all open ones across projects. Say the word and I will scope it.
+
+
+ALSO IN THIS PACKAGE (pkg806)
 ------------------------------
-  13-week cash flow build marker        -> pkg806
-  612 drill-down header                 -> v806
-  Applied for / Certified drill-down    -> v806
+Certified no longer snaps back to 0 on Enter. certifiedSetOnApp is true on a FIRST
+application, where the box is legitimately 0, so the application won and discarded
+whatever was typed. A real figure from the application still wins; a zero does not.
+Where the application does own the figure the cell is now read-only rather than
+accepting a value and silently reverting it.
 
-No new cache marker - this is a client-side resolution change only, so a hard
-refresh is enough.
+
+MARKERS
+--------
+  13-week cash flow build marker        -> pkg807
+  612 drill-down header                 -> v807
+  Applied for / Certified drill-down    -> v807
+
+No new dashboard cache marker. Hard refresh after deploying.
 
 
 STILL OPEN, ON YOUR WORD
