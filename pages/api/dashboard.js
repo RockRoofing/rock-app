@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -346,6 +346,7 @@ export default async function handler(req, res) {
       // Null when there are no applications - the caller then falls back to project
       // details. Zero would be indistinguishable from a real zero.
       let certifiedGross = 0, certifiedFromApp = ''
+      let certifiedSetOnApp = false
       let appliedForDetail = null
       let afaFromApplication = null
       let afaSource = 'project details'
@@ -424,15 +425,22 @@ export default async function handler(req, res) {
           // it is not a figure that has been put to the customer.
           //
           if (latestSent && sentSum) {
-            // CERTIFIED = PREVIOUSLY CERTIFIED (GROSS) on the latest sent application.
+            // CERTIFIED = THE "PREVIOUSLY CERTIFIED (GROSS)" BOX ON THE LATEST SENT
+            // APPLICATION. The typed figure, nothing derived.
             //
-            // NOTE this is what has been certified BEFORE the latest application, so on
-            // a project whose only sent application is App 1 it is legitimately zero and
-            // the column reads blank. If what is wanted is the cumulative gross certified
-            // INCLUDING the latest sent application, that is sentSum.current.gross - both
-            // figures are carried in appliedForDetail below so the drill-down can show
-            // them side by side and the right one can be chosen on the evidence.
-            certifiedGross = (sentSum.previously && sentSum.previously.gross) || 0
+            // That box is prevCertGross, written by pages/applications.js as a number
+            // when it is filled in and null when it is not (0 on a first application,
+            // where nothing has been certified before).
+            //
+            // Deliberately NO fallback to recomputing it from the preceding application.
+            // The certificate does fall back, but here a blank means "nobody has entered
+            // it", which is a thing worth seeing and can be fixed by typing it into the
+            // cell. Silently substituting a computed number hides that.
+            certifiedGross = latestSent.prevCertGross != null ? (Number(latestSent.prevCertGross) || 0) : 0
+            // Whether the box is SET, as distinct from set to zero. A first application
+            // legitimately carries 0 and should show as 0.00, not fall through to a
+            // value typed on the tracker row.
+            certifiedSetOnApp = latestSent.prevCertGross != null
             certifiedFromApp = latestSent.appNumber || latestSent.seq || ''
             const afaApp = sentSum.anticipatedFinalAccount
             if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
@@ -461,6 +469,9 @@ export default async function handler(req, res) {
             sentPrevGross: sentSum ? r2(sentSum.previously && sentSum.previously.gross) : null,
             // The typed previously-certified on the application, if there is one.
             prevCertTyped: (latestSent && latestSent.prevCertGross != null) ? r2(Number(latestSent.prevCertGross)) : null,
+            // What the certificate would fall back to where the box is empty. Shown for
+            // information only - the column does not use it.
+            prevCertComputed: latestSent ? r2(prevGrossFor({ ...latestSent, prevCertGross: null })) : null,
             // What the LATEST application of any status would have given - the old
             // behaviour, kept so a changed figure can be explained.
             anyNetBeforeRet: r2(sum.current && sum.current.netBeforeRet),
@@ -671,6 +682,7 @@ export default async function handler(req, res) {
         qsResolved: true,
         appliedForLatest,
         certifiedGross,
+        certifiedSetOnApp,
         certifiedFromApp,
         appliedForDetail,
         latestAppEnd,
@@ -826,6 +838,7 @@ export default async function handler(req, res) {
         certifiedGross_v1: true,
         certifiedPrevCert_v2: true,
         appliedForSent_v1: true,
+        certifiedTypedBox_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

@@ -1,106 +1,85 @@
-pkg795 - Applied for was reading a DRAFT. Certified now inline editable.
-=========================================================================
+pkg796 - Certified = the typed "Previously certified (gross)" box. Supersedes pkg795.
+======================================================================================
 
-DEPLOY OVER pkg794. Three files, all already exist. Overwrite in place.
+DEPLOY THIS INSTEAD OF pkg795. It contains pkg795 in full. Three files, all exist.
 
   pages/api/dashboard.js
   pages/retention.js
   pages/api/business-financials.js   (build marker only)
 
-If you have not yet deployed pkg794, deploy that first - it carries the other
-eleven files.
+pkg794 first if you have not deployed it - that carries the other eleven files.
 
 
-1. APPLIED FOR NOT MATCHING ON SOME ROWS - FOUND
-------------------------------------------------
-dashboard.js had two different applications feeding the two columns:
+THE RULE, AS YOU SET IT
+------------------------
+Certified is the "Previously certified (gross)" box on the latest SENT application.
+The typed figure. Nothing derived.
 
-    const latest = apps[apps.length - 1]              <- ANY status
-    appliedForLatest = sum.current.netBeforeRet       <- from `latest`
-
-    const latestSent = sentApps[sentApps.length - 1]  <- SENT only
-    certifiedGross  = sentSum.previously.gross        <- from `latestSent`
-
-So Applied for read the latest application of any status. A draft somebody had
-started but never issued silently superseded the sent one, and the tracker showed a
-figure that appears on no certificate.
-
-That is why it looked intermittent: it only goes wrong on projects where a draft
-exists. Everywhere else `latest` and `latestSent` are the same application.
-
-The column tooltip has promised "the sent application wins" since pkg792. The code
-never did it. Both columns now read the latest SENT application.
-
-Also hoisted: previously-certified was computed by two different rules in the same
-file. There is now one prevGrossFor() and both consumers use it - prevCertGross
-first, the preceding application's grossCurrent only where it is absent.
+That box is stored as prevCertGross (pages/applications.js line 816): a number when
+filled in, 0 on a first application, null when never touched. It is what prints in
+the Previously Cert. column, and This Certificate = current less previously.
 
 
-2. CERTIFIED NOT PULLING THROUGH - LIKELY A DEFINITION, NOT A BUG
-------------------------------------------------------------------
-Certified is sourced from PREVIOUSLY CERTIFIED on the latest sent application -
-what the customer certified BEFORE that application. On a project whose only sent
-application is App 1 that is legitimately zero, so the column reads blank. It will
-also read blank wherever prevCertGross was never typed and there is no earlier
-application to recompute from.
+WHAT CHANGED FROM pkg795
+-------------------------
+pkg795 read sentSum.previously.gross - the computed previous column, which falls
+back to recomputing from the preceding application where the box is empty. It now
+reads prevCertGross directly, with NO fallback.
 
-I have not changed the meaning, because there are two defensible ones and picking
-the wrong one silently is worse than asking. Both figures are now carried and shown
-side by side in the new drill-down:
+No fallback is deliberate. The certificate does fall back; this column should not.
+A blank here means "nobody has filled that box in", which is worth seeing and is
+fixable by typing it. Substituting a computed number hides it. The drill-down still
+reports what the certificate would have fallen back to, marked as not used.
 
-  Certified (shown)              = previously certified, EXCLUDES the latest app
-  Gross on the sent application  = cumulative gross, INCLUDES the latest app
+Second change, and the one that would have bitten: the merge tested whether the
+value was TRUTHY. A first application legitimately carries 0, so 0 failed the test
+and the row fell through to whatever had been typed on the tracker - showing a stale
+figure on exactly the projects where nothing has been certified yet. It now tests
+whether the box is SET, so a first application shows 0.00.
 
-Open the drill-down on a row where Certified is blank and tell me which of those
-two is the number you want. It is a one-line change once decided.
+Verified across the five cases that matter, including that one:
 
-
-3. NEW: APPLIED FOR / CERTIFIED DRILL-DOWN
--------------------------------------------
-Click the Applied for cell on any row. Same shape as the 612 drill-down: it shows
-how many applications exist and how many are sent, which application each column
-read, its status, and every candidate figure - so a wrong number can be read rather
-than guessed at. Always on, whether or not anything looks wrong.
-
-Three banners fire on their own conditions:
-  - a later DRAFT exists, with what it would have shown before this package
-  - no SENT application at all, so both columns fall back to typed values
-  - Certified blank because nothing was certified before the first application
+  App 3 sent, box typed 120000        -> 120,000.00
+  App 1 sent, box is 0 (first app)    -> 0.00        (pkg795 gave the typed row value)
+  App 4 sent, box never filled        -> typed row value
+  App 4 sent, box empty, nothing typed-> blank
+  no sent application at all          -> typed row value
 
 
-4. CERTIFIED NOW EDITABLE INLINE
----------------------------------
-Click the value in the cell. Enter or clicking away saves, Escape cancels.
+ALSO IN THIS PACKAGE (from pkg795)
+-----------------------------------
+1. APPLIED FOR was reading a DRAFT. dashboard.js had two different applications
+   feeding the two columns - `latest` (any status) for Applied for, `latestSent` for
+   Certified. A draft nobody issued silently superseded the sent one, which is why
+   it only went wrong on some rows. Both columns now read the latest sent
+   application. The tooltip has promised this since pkg792; the code never did it.
 
-Built as a MODULE-SCOPE component. A component declared inside another component is
-a new type on every render, so React remounts the subtree - the classic "input loses
-focus after one keystroke" bug. It saves through the existing saveEntry path, so a
-Xero-derived row still becomes a manual override in the normal way. The diagnostic
-blob is stripped before saving so it does not get written into Redis.
+2. One prevGrossFor() rule, replacing two divergent copies in the same file.
 
-Still true, and by design: the next application sent overwrites a typed value.
+3. APPLIED FOR / CERTIFIED DRILL-DOWN. Click the Applied for cell on any row: how
+   many applications exist and how many are sent, which one each column read, its
+   status, the typed box, This Certificate, and the fallback the column does not
+   use. Always on. Banners for a superseding draft, no sent application, and an
+   empty box.
 
+4. CERTIFIED EDITABLE INLINE. Click the value, Enter saves, Escape cancels. Module
+   scope component, so no remount-on-render focus loss. Saves through the existing
+   saveEntry path; the diagnostic blob is stripped before writing to Redis.
 
-5. ALSO
---------
-Neither modal on this page had an Escape handler. Both now close on Escape and the
-x, never a backdrop click.
+5. Both modals now close on Escape as well as the x. Neither had an Escape handler.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg795
-  612 drill-down header                 -> v795
-  Applied for / Certified drill-down    -> v795
+  13-week cash flow build marker        -> pkg796
+  612 drill-down header                 -> v796
+  Applied for / Certified drill-down    -> v796
 
-Cache marker bumped to appliedForSent_v1, so the old cache will not be served. Hard
-refresh after deploying.
+Cache marker certifiedTypedBox_v1. Hard refresh after deploying.
 
 
-WHAT I DELIBERATELY DID NOT CHANGE
------------------------------------
+NOT CHANGED, ON PURPOSE
+------------------------
 latestAppEnd, retentionClaimed and appRelease1/2 still read the latest application
-of ANY status. The same argument applies to all three, but latestAppEnd moves the
-13-week cash flow and appRelease1/2 tick the retention halves. Those are behaviour
-changes you have not asked for and I am not making them silently. Say the word and
-they go the same way in one line each.
+of ANY status. Same argument as Applied for, but latestAppEnd moves the 13-week cash
+flow and appRelease1/2 tick the retention halves. One line each when you want them.

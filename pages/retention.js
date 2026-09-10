@@ -663,9 +663,12 @@ export default function RetentionPage() {
         // their latest certificate. A manual figure is now only used where there is no
         // sent application to take it from.
         appliedFor: x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || ''),
-        // Same rule: previously certified (gross) from the latest sent application beats
-        // anything typed, and a typed value fills the gap where there is no application.
-        certified: x.certifiedGross ? String(x.certifiedGross) : (e.certified || ''),
+        // CERTIFIED = the "Previously certified (gross)" box on the latest SENT
+        // application. Tested on certifiedSetOnApp, not on the value being truthy: a
+        // first application legitimately holds 0 and must show 0.00 rather than falling
+        // through to whatever was typed on this row.
+        certified: x.certifiedSetOnApp ? String(x.certifiedGross) : (e.certified || ''),
+        certifiedSetOnApp: !!x.certifiedSetOnApp,
         certifiedFromApp: x.certifiedFromApp || '',
         appliedForDetail: x.appliedForDetail || null,
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
@@ -869,7 +872,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v795</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v796</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -887,9 +890,10 @@ export default function RetentionPage() {
                           {row('Latest application', d.latestApp ? `app ${d.latestApp}` : '-', d.latestStatus)}
                           {row('Latest SENT application', d.sentApp ? `app ${d.sentApp}` : 'none', 'both columns read this one')}
                           {row('Applied for (shown)', d.sentNetBeforeRet == null ? '-' : fmtC(d.sentNetBeforeRet), 'sent app: gross less MCD, retention still in')}
-                          {row('Certified (shown)', d.sentPrevGross == null ? '-' : fmtC(d.sentPrevGross), 'sent app: previously certified, gross')}
-                          {row('Gross on the sent application', d.sentGross == null ? '-' : fmtC(d.sentGross), 'cumulative gross INCLUDING this application')}
-                          {row('Typed previously-certified', d.prevCertTyped == null ? 'not set' : fmtC(d.prevCertTyped), 'prevCertGross on the application')}
+                          {row('Certified (shown)', d.prevCertTyped == null ? 'not set' : fmtC(d.prevCertTyped), 'the "Previously certified (gross)" box on the sent app')}
+                          {row('Gross on the sent application', d.sentGross == null ? '-' : fmtC(d.sentGross), 'current - this is what THIS certificate applies for, cumulative')}
+                          {row('This certificate', (d.sentGross == null || d.prevCertTyped == null) ? '-' : fmtC(d.sentGross - d.prevCertTyped), 'current less previously certified')}
+                          {row('Certificate fallback if box empty', d.prevCertComputed == null ? '-' : fmtC(d.prevCertComputed), 'the preceding application - NOT used by this column')}
                           {row('Typed on this row', appliedForFor.certified ? fmtC(parseFloat(appliedForFor.certified)) : 'not set', 'only used where there is no sent application')}
                         </tbody>
                       </table>
@@ -907,12 +911,13 @@ export default function RetentionPage() {
                           draft. Both columns fall back to whatever is typed on the row.
                         </div>
                       ) : null}
-                      {d.sentCount > 0 && !d.sentPrevGross ? (
+                      {d.sentCount > 0 && d.prevCertTyped == null ? (
                         <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12, color: '#1e3a5f' }}>
-                          Certified is blank because nothing was certified BEFORE app {d.sentApp}.
-                          Certified currently means previously-certified, so it is zero on the first
-                          application. If it should instead be the gross certified to date INCLUDING
-                          this application, that figure is {d.sentGross == null ? '-' : fmtC(d.sentGross)}.
+                          The "Previously certified (gross)" box on app {d.sentApp} is empty, so
+                          Certified is blank. Fill it in on the application, or type it straight into
+                          the cell on this row. The certificate itself would fall back to{' '}
+                          {d.prevCertComputed == null ? '-' : fmtC(d.prevCertComputed)} - this column
+                          deliberately does not, so an unfilled box is visible rather than papered over.
                         </div>
                       ) : null}
                     </>
@@ -937,7 +942,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v795</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v796</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1189,7 +1194,7 @@ export default function RetentionPage() {
                         ['MCD', 'right', 'Main Contractor\u2019s Discount deducted from the gross. Set on the IHM and editable in Edit Project Details.', 'mcdValue'],
                         ['Final Account', 'right', 'Gross AFA less MCD. This is the figure retention is calculated on, matching how every application works: gross \u2192 less MCD \u2192 retention on the sub-total.', 'finalAccount'],
                         ['Applied for', 'right', 'The sub-total on the latest SENT application: gross measured works less MCD, plus variations. The application always wins - a typed value is only used where a project has no sent application. A warning triangle means it does not agree with Certified.', 'appliedFor'],
-                        ['Certified', 'right', 'Previously Certified (gross) on the latest SENT application - what the customer has certified to date. Editable inline, but the next application sent overwrites it.', 'certified'],
+                        ['Certified', 'right', 'The "Previously certified (gross)" box on the latest SENT application - the typed figure, used as the Previously Cert. column on the certificate, where This Certificate = current less previously. Blank means the box has not been filled in. Editable inline, but the next application sent overwrites it.', 'certified'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Applied for. What is still to be CLAIMED against the final account. Falls back to invoiced only where a project has no application.', null],
