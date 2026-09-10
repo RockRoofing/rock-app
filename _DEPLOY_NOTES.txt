@@ -1,86 +1,112 @@
-pkg801 - The sent application always wins. One rule, four surfaces. Supersedes pkg800.
-=======================================================================================
+pkg802 - J228: the stamp was stale, and gross and net came from different sources.
+====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg795-800. It contains all of them. Six files.
+DEPLOY THIS INSTEAD OF pkg795-801. It contains all of them. Six files.
 
-  lib/applications.js                (resolveGrossAfa - the new shared rule)
+  lib/applications.js
   pages/api/dashboard.js
-  pages/api/project/[id].js          (NEW in this package)
+  pages/api/project/[id].js
   pages/project/[id].js
   pages/retention.js
   pages/api/business-financials.js   (build marker only)
 
 pkg794 first if not already deployed - that carries the other nine files.
 
-FOLDER NOTE: both [id].js paths use LITERAL square brackets. They are DIFFERENT
-files - one under pages/api/project/, one under pages/project/.
+FOLDER NOTE: both [id].js paths use LITERAL square brackets. DIFFERENT files.
 
 
-THE RULE, IN ONE PLACE
-=======================
-resolveGrossAfa() in lib/applications.js is now the only place the order of
-preference is written. The dashboard, the project page and the project API all call
-it. It was written four times before, in three different orders.
+WHAT THE J228 ROW WAS TELLING US
+=================================
+Two figures on that row cannot both be true:
 
-  1. the figure STAMPED by the latest sent application   - as issued, no arithmetic
-  2. rebuilt from the latest sent application            - only where nothing was stamped
-  3. a stored override                                   - ONLY where there is no sent
-                                                             application at all
+    MCD   29,405.50   at 0.00% (default)
+
+A zero rate must produce zero. And:
+
+    169,679.70  -  140,274.20  =  29,405.50
+
+exactly. So the "MCD" was not a discount at all. It was the gap between two
+different sources being subtracted from each other.
+
+
+FAULT 1 - THE GROSS CAME FROM THE STAMP, THE NET FROM THE APPLICATION
+-----------------------------------------------------------------------
+pkg800 took Gross AFA from the figure stamped at send. But Final Account was still
+being taken from sentSum.finalSubTotal - recomputed from the stored application -
+with no check that the two belonged together. mcdValue is computed as
+afaBeforeMcd - afa, so the whole difference between the two sources was reported as
+Main Contractor's Discount, on a project set to 0%.
+
+Gross and net are now only paired when the gross IS that summary's own anticipated
+final account. Otherwise the Final Account is derived from the same gross using the
+MCD placement flags, and the row always satisfies gross - MCD = Final Account.
+
+
+FAULT 2 - THE STAMP WAS STALE, AND I PREFERRED IT
+---------------------------------------------------
+Your application 2 reads 140,274.20. The stamp said 169,679.70 - out by 29,405.50.
+
+The stamp is only rewritten on SEND, so editing a sent application without
+re-sending leaves the old figure behind. pkg800 preferred it, which was the wrong
+call: the stored application IS the application, and recomputing from it gives what
+the applications page shows.
+
+Order of preference is now:
+
+  1. the latest sent application, as it stands now
+  2. the figure stamped at send      - only where 1 cannot be computed
+  3. a stored override               - only where there is no sent application
   4. project details
 
-A stored override can no longer beat a sent application on any surface.
+Verified on your J228 figures:
 
-Note there is no manual override field anywhere in the UI. Every afaOverride was
-written by an application send, so an override reaching step 3 is always a leftover
-from an earlier one.
-
-
-WHAT WAS ACTUALLY WRONG
-------------------------
-pages/api/project/[id].js line 132 read:
-
-    const afa = (settings.afaOverride != null && isFinite(settings.afaOverride))
-      ? Number(settings.afaOverride) : (contractValue + instructedVars)
-
-No application preference at all. A stale override was authoritative. That endpoint
-feeds Project Financials and the project report, so those two could contradict the
-retention register on the same job - and would do so on exactly the projects where
-an override had been left behind by an earlier send.
-
-It also still used the truthy `v.instructed` test that pkg799 replaced everywhere
-else, so variations recorded as the string 'no' counted as instructed there. Both
-fixed. The endpoint now returns afaSource as well, so the figure can be traced.
-
-pages/project/[id].js additionally ignored prevCertGross when working out previously
-certified - it recomputed from the preceding application. Now the same rule as the
-certificate and the register.
+    Gross AFA        140,274.20   application 2 (sent)
+    MCD                    0.00   <- was 29,405.50 at 0%
+    Final Account    140,274.20
+    gross - MCD = Final Account    true
+    stamp flagged stale            true
 
 
-VERIFIED
----------
-Against your screenshot figure of 140,274.20:
+FAULT 3 - THE ROW NOTE CONTRADICTED ITSELF
+--------------------------------------------
+"stale override saved" was showing next to "application 2 (sent, as issued)" -
+saying in one breath that the stamp was in use and that it was stale. The flag was
+`hasOverride && afaFromApplication != null`, which is true on every row that has
+ever had an application sent.
 
-    stamp from latest sent app        140,274.20   application 3 (sent, as issued)
-    STALE stamp from an earlier app   140,274.20   application 3 (sent)
-    two records, newest stamp wins    140,274.20   application 3 (sent, as issued)
-    no stamp, sent app present        140,274.20   application 3 (sent)
-    override only, NO application     130,000.00   stored override
-    nothing but project details       136,262.78   project details
-    draft application only            130,000.00   stored override
+Two separate notes now, and neither fires on a healthy row:
 
-The second line is the one that matters: a stale override no longer wins.
+  "edited since sent"   the application was changed after it was sent, so the saved
+                        figure and the live one differ. Re-send to bring them back
+                        into line. THIS is what J228 will show.
+
+  "older figure saved"  a figure left by an EARLIER application is still stored but
+                        is not being used.
 
 
 MARKERS - ALL THREE MUST MOVE
 ------------------------------
-  13-week cash flow build marker        -> pkg801
-  612 drill-down header                 -> v801
-  Applied for / Certified drill-down    -> v801
+  13-week cash flow build marker        -> pkg802
+  612 drill-down header                 -> v802
+  Applied for / Certified drill-down    -> v802
 
-Cache marker afaOneRule_v1. Hard refresh after deploying.
+Cache marker afaLiveNotStamp_v1. Hard refresh after deploying.
 
-Worth a look after this one: open Project Financials on the job that was wrong and
-check it now agrees with the register. Those two had no reason to agree before.
+
+WHAT TO CHECK ON J228 AFTER DEPLOY
+-----------------------------------
+  Gross AFA      140,274.20   matching the Proj. Final Account on the application
+  MCD                  0.00   with "0.00% (default)" beneath it
+  Final Account  140,274.20
+  the row note now reads "edited since sent", not "stale override saved"
+
+The Final Account will still be marginally below Invoiced of 140,725.90 - that gap
+of 451.70 is real and is not something this package changes.
+
+If Gross AFA is still not 140,274.20, open the Applied for drill-down on that row.
+It reports the measured contract sum and variations the application recomputes to,
+against the contract value and variations on project details, and attributes any
+remaining gap to whichever of the two accounts for it.
 
 
 STILL OPEN, ON YOUR WORD
@@ -91,6 +117,5 @@ STILL OPEN, ON YOUR WORD
     pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
-  - Both afaOverride writers are wrapped in try {} catch {} that swallows silently,
-    so a failed stamp leaves the previous figure in place looking valid. Step 1 above
-    now catches the consequence, but the silent failure itself is still there.
+  - Both afaOverride writers swallow errors in a bare catch, so a failed stamp is
+    silent. Less damaging now that the stamp is only a fallback.

@@ -588,6 +588,7 @@ export default function RetentionPage() {
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
           afaSource: p.afaSource || '',
           afaOverrideIgnored: !!p.afaOverrideIgnored,
+          afaStampStale: !!p.afaStampStale,
           mcdPct: p.mcdPct != null ? p.mcdPct : 0,
           mcdRecorded: !!p.mcdRecorded,
           mcdValue: p.mcdValue || 0,
@@ -711,7 +712,7 @@ export default function RetentionPage() {
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
         ret612Detail: x.ret612Detail,
-        afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
+        afaSource: x.afaSource, afaOverrideIgnored: x.afaOverrideIgnored, afaStampStale: !!x.afaStampStale, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         mcdBasis: x.mcdBasis || '', afaFromApp: !!x.afaFromApp,
         afaStamped: x.afaStamped, afaStampedFromApp: !!x.afaStampedFromApp, afaStampedAppSeq: x.afaStampedAppSeq || null,
         // THE APPLICATION WINS ON BOTH ACCOUNT COLUMNS.
@@ -945,7 +946,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v801</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Applied for / Certified &mdash; {appliedForFor.project || appliedForFor.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v802</span></span>
                   <button onClick={() => setAppliedForFor(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ overflow: 'auto', padding: '10px 16px' }}>
@@ -1050,7 +1051,7 @@ export default function RetentionPage() {
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v801</span></span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>612 lines &mdash; {ret612For.project || ret612For.ref} <span style={{ fontWeight: 400, fontSize: 11, color: '#94a3b8' }}>v802</span></span>
                   <button onClick={() => setRet612For(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>&times;</button>
                 </div>
                 <div style={{ padding: '10px 16px', fontSize: 12, color: '#555', borderBottom: '1px solid #f3f4f6' }}>
@@ -1467,14 +1468,19 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#666' }}>
                               {entry.afaGross != null ? fmt(parseFloat(entry.afaGross)) : '\u2014'}
                               {entry.afaSource && <div style={{ fontSize: 9.5, color: entry.afaSource === 'manual override' ? '#b45309' : '#bbb' }}>{entry.afaSource}</div>}
-                              {/* A figure typed in settings that a sent application has
-                                  now overtaken. Not used, but worth clearing so nobody
-                                  wonders which one is live. */}
-                              {entry.afaOverrideIgnored && (
-                                <div style={{ fontSize: 9, color: '#b45309' }} title="A manual AFA override is saved on this project but is no longer used - the sent application takes precedence. Clear it in Edit Project Details.">
-                                  stale override saved
+                              {/* Two different notes, and the old one fired for both.
+                                  "stale override saved" was showing on rows where the
+                                  stamp WAS the figure on screen, which read as a
+                                  contradiction next to "sent, as issued". */}
+                              {entry.afaStampStale ? (
+                                <div style={{ fontSize: 9, color: '#b45309' }} title="This application was edited after it was sent. The figure shown is the application as it stands now; the figure saved when it was sent is different. Re-send the application to bring them back into line.">
+                                  edited since sent
                                 </div>
-                              )}
+                              ) : entry.afaOverrideIgnored ? (
+                                <div style={{ fontSize: 9, color: '#b45309' }} title="A figure left on this project by an EARLIER application is still saved but is not used - the latest sent application takes precedence.">
+                                  older figure saved
+                                </div>
+                              ) : null}
                             </td>
                             {/* MCD deducted. A missing percentage is shown, not hidden -
                                 a blank here means nobody has recorded one and the Final

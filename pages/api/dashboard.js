@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -608,9 +608,23 @@ export default async function handler(req, res) {
       const afaBeforeMcd = afaRes.afa
       afaSource = afaRes.source
       if (afaRes.fromApp) afaFromApplication = afaRes.afa
-      // Flagged so a stale override sitting behind a sent application is visible rather
-      // than silently ignored.
-      const afaOverrideIgnored = hasOverride && afaFromApplication != null
+
+      // GROSS AND NET MUST COME FROM THE SAME PLACE.
+      //
+      // finalAccountFromApplication was set from sentSum.finalSubTotal regardless of
+      // where the gross had come from. Pair them only when the gross IS this summary's
+      // own anticipated final account; otherwise the subtraction below reports the gap
+      // between two sources as MCD. That is how J228 showed 29,405.50 of discount at 0%.
+      const sumForFa = afaRes.sum || null
+      const grossMatchesSum = !!(sumForFa && sumForFa.anticipatedFinalAccount != null
+        && Math.abs(Number(sumForFa.anticipatedFinalAccount) - afaBeforeMcd) < 0.01)
+      if (!grossMatchesSum) finalAccountFromApplication = null
+
+      // Only "ignored" when the stamp is NOT what is on screen.
+      const afaOverrideIgnored = hasOverride && !afaRes.stampIsFromLatestSent && afaFromApplication != null
+      // A stamp that no longer agrees with the application it came from - the
+      // application was edited after it was sent. Shown, not silently preferred.
+      const afaStampStale = !!afaRes.stampDisagrees
       const grossAfa = afaBeforeMcd
 
       // MCD, DEDUCTED FROM THE FINAL ACCOUNT.
@@ -808,6 +822,7 @@ export default async function handler(req, res) {
         appliedForDetail,
         mcdBasis,
         finalAccountFromApplication,
+        afaStampStale,
         afaStamped: stamp ? Number(stamp.afaOverride) : null,
         afaStampedFromApp: stampIsFromLatestSent,
         afaStampedAppSeq: stamp ? (stamp.afaOverrideAppSeq != null ? String(stamp.afaOverrideAppSeq) : null) : null,
@@ -974,6 +989,7 @@ export default async function handler(req, res) {
         afaDecomp_v1: true,
         afaAsIssued_v1: true,
         afaOneRule_v1: true,
+        afaLiveNotStamp_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
