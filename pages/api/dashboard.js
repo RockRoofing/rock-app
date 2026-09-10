@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true && cached[0].appsIdRecordWins_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -357,6 +357,7 @@ export default async function handler(req, res) {
       let appliedForDetail = null
       // Set inside the applications block, read by the AFA preference below.
       let latestSentForAfa = null, sentSumForAfa = null
+      let appsDupCount = 0, appsFromIdCount = 0, appsFromJobCount = 0
       let afaFromApplication = null
       let finalAccountFromApplication = null
       let mcdOnVarsApp = null, mcdOnMosApp = null
@@ -383,18 +384,30 @@ export default async function handler(req, res) {
           if (!byId.length) return byJob.slice()
           // Both hold applications: merge so neither is dropped. Keyed on the permanent
           // appNumber where there is one, otherwise seq, otherwise id.
+          // WHERE BOTH RECORDS HOLD THE SAME APPLICATION, TAKE THE ID RECORD'S COPY.
+          //
+          // The applications page loads one record - getProject(projectId), keyed by the
+          // tracking option id - so that copy is the one whose figures are on screen. The
+          // job-number record only fills gaps.
+          //
+          // The old tiebreak preferred whichever copy had MORE contract-works rows, which
+          // is not a measure of currency at all. On J228 it picked a copy carrying an
+          // extra 29,405.50 of works, so the register recomputed 169,679.70 while the
+          // application page showed 140,274.20 - both from the same function, on two
+          // different copies of application 2.
           const seen = new Map()
-          for (const a of [...byJob, ...byId]) {
+          const keyOf = (a) => String(a.appNumber != null ? `n${a.appNumber}` : (a.seq != null ? `s${a.seq}` : `i${a.id}`))
+          const dupKeys = new Set()
+          for (const a of byJob) { if (a) seen.set(keyOf(a), a) }
+          for (const a of byId) {
             if (!a) continue
-            const k = String(a.appNumber != null ? `n${a.appNumber}` : (a.seq != null ? `s${a.seq}` : `i${a.id}`))
-            const prev = seen.get(k)
-            // A SENT application beats a draft of the same number - it is the one that
-            // went to the customer.
-            const better = !prev
-              || (a.status === 'sent' && prev.status !== 'sent')
-              || (a.status === prev.status && (a.contractWorks || []).length > (prev.contractWorks || []).length)
-            if (better) seen.set(k, a)
+            const k = keyOf(a)
+            if (seen.has(k)) dupKeys.add(k)
+            seen.set(k, a)   // the id record always wins
           }
+          appsDupCount = dupKeys.size
+          appsFromIdCount = byId.length
+          appsFromJobCount = byJob.length
           return [...seen.values()]
         })()
         if (apps.length) {
@@ -551,6 +564,10 @@ export default async function handler(req, res) {
             afaSettingsVariations: r2(instructedVars),
             settingsVarCount: Array.isArray(settings.variations) ? settings.variations.length : 0,
             settingsVarInstructed: Array.isArray(settings.variations) ? settings.variations.filter(v => isInstructed(v)).length : 0,
+            // Where the application records live, and whether two copies exist.
+            appsFromId: appsFromIdCount,
+            appsFromJob: appsFromJobCount,
+            appsDuplicated: appsDupCount,
           }
         }
       } catch {}
@@ -990,6 +1007,7 @@ export default async function handler(req, res) {
         afaAsIssued_v1: true,
         afaOneRule_v1: true,
         afaLiveNotStamp_v1: true,
+        appsIdRecordWins_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
