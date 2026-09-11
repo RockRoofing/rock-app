@@ -1,9 +1,10 @@
-pkg812 - Search for another project from inside a deal. Includes pkg811.
-==========================================================================
+pkg813 - Inline add-row gone, Add Variation moved into the filter box. Includes pkg812.
+=========================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811. It contains it. Five files, all exist.
+DEPLOY THIS INSTEAD OF pkg811/812. It contains both. Six files, all exist.
 
-  pages/crm.js                                (the search)
+  pages/variations.js                         (this change)
+  pages/crm.js                                (pkg812 - search from inside a deal)
   pages/api/project/[id]/cost-comments.js     (pkg811 - project name on the email)
   pages/project/[id].js                       (pkg811)
   pages/retention.js                          (marker only)
@@ -12,66 +13,59 @@ DEPLOY THIS INSTEAD OF pkg811. It contains it. Five files, all exist.
 pkg810 first if you have not deployed it.
 
 
-THE SEARCH
+THE CHANGE
 ===========
-A search box in the deal's top bar, left of Won/Lost. Type, and matching projects
-drop down; click one, or press Enter, and it opens.
+The persistent add-row at the top of the Variation Tracker table is gone. It was a
+row of empty inputs sitting directly above the data, led by a project dropdown and
+a box reading "Description" - which is a reasonable thing to read as a search bar.
 
-Opening a deal replaces the whole page - nav and all - so the toolbar search
-disappears the moment you are inside one, and getting from one project to another
-meant going back to the list and starting again.
-
-
-DECISIONS WORTH KNOWING
-------------------------
-IT USES THE SAME MATCHING RULE AS EVERYTHING ELSE. dealHaystack() already defines
-what a CRM search looks at, and its own comment says a search that quietly stops
-covering a field is the kind of fault nobody reports. So this reads it rather than
-listing fields again: title, company, contact, and the whole Details card including
-scope of works and general info.
-
-RANKED BY WHERE IT MATCHED, not just alphabetically:
-
-    title starts with it   ->  first
-    title contains it      ->  next
-    company contains it    ->  next
-    anywhere else          ->  last
-
-Searching "oakwood" puts the Oakwood projects above a job that merely mentions
-oakwood in its scope of works. Eight results maximum.
-
-WON AND LOST ARE INCLUDED, with the status shown on the right of each row - open
-deals show their stage instead. When you are hunting for a project from inside
-another one, it is usually an old one.
-
-THE PROJECT YOU ARE ALREADY IN IS EXCLUDED. It is never the answer, and it would
-otherwise sit at the top of its own results.
-
-KEYBOARD. Up and down to move, Enter to open, Escape to clear and then to close.
-Clicks are bound on mousedown, and the blur is delayed, so a click on a result
-cannot be lost to the list closing first - that is the commonest way a box like
-this feels broken.
-
-Verified: current deal excluded, won and lost returned, company matches ranked
-above free-text ones, no match says so rather than showing an empty box.
+Add Variation now sits at the right-hand end of the filter box, and is a good deal
+bigger: 15px bold, 11px by 22px padding, against 13px and 7px by 16px before. It
+opens the same modal the nav button always did, so nothing about adding a variation
+has changed except where you press.
 
 
-ALSO IN THIS PACKAGE (pkg811)
-------------------------------
-The cost-comment mention email names the project instead of its GUID:
+ONE BUTTON, ONE PLACE
+----------------------
+There were three ways to add a variation and now there is one.
 
-    "... mentioned you in a cost comment on
-     J228 - Farmstead Drive - Speedy Asset Services - 7307666662"
+  - the nav button, top right                  REMOVED
+  - a duplicate in the embed header            REMOVED
+  - the inline row                             REMOVED
+  - the filter box button                      the one that remains
 
-Resolved server-side from the dashboard cache, with the page's own label as a
-fallback for when that cache has just been cleared.
+The embed had its own copy because the nav is not rendered there. The filter box
+is, so a single button now serves both and there is no second copy to drift.
+
+
+DETAILS WORTH KNOWING
+----------------------
+The button is pushed right with marginLeft: auto rather than a spacer, so it still
+lands at the right-hand end when the filters wrap onto a second line on a narrow
+screen.
+
+The inline row's state and its save function are removed as well, not just the
+markup - inlineAdd, inlineSaving, inlineProject, saveInlineAdd and the inlineCell
+style. Dead code that still writes variations is worth deleting rather than
+leaving for somebody to find later and wonder about. The modal's save path is
+untouched and was always the same one.
+
+
+ALSO IN THIS PACKAGE
+---------------------
+pkg812: a search box in the CRM deal's top bar. Opening a deal replaces the whole
+page, so the toolbar search disappears and getting between projects meant going
+back to the list. Matches on the same rule as the rest of the CRM, ranks title
+matches above buried ones, includes won and lost, excludes the deal you are in.
+
+pkg811: the cost-comment mention email names the project rather than its GUID.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg812
-  612 drill-down header                 -> v812
-  Applied for / Certified drill-down    -> v812
+  13-week cash flow build marker        -> pkg813
+  612 drill-down header                 -> v813
+  Applied for / Certified drill-down    -> v813
 
 No new dashboard cache marker. Hard refresh after deploying.
 

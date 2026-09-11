@@ -303,37 +303,6 @@ export default function VariationTracker() {
     } catch (e) { console.error(e); loadProjects() }
   }
 
-  // Inline add-row (persistent, below the header). Same save path as the modal.
-  const [inlineAdd, setInlineAdd] = useState({ projectId: '', varNumber: '', description: '', instructed: 'no', materials: '', labour: '', profit: '' })
-  const [inlineSaving, setInlineSaving] = useState(false)
-  const inlineProject = projects.find(p => p.xeroId === inlineAdd.projectId)
-
-  async function saveInlineAdd() {
-    if (!inlineAdd.projectId || !inlineAdd.description) { alert('Pick a project and enter a description.'); return }
-    setInlineSaving(true)
-    try {
-      const res = await fetch(`/api/project/${inlineAdd.projectId}`)
-      const data = await res.json()
-      const settings = data.settings || {}
-      const vars = settings.variations || []
-      const newVar = {
-        varNumber: inlineAdd.varNumber || nextVarNumber(vars),
-        description: inlineAdd.description,
-        instructed: inlineAdd.instructed === 'yes',
-        materials: inlineAdd.materials || '0',
-        labour: inlineAdd.labour || '0',
-        profit: inlineAdd.profit || '0',
-      }
-      await fetch(`/api/project/${inlineAdd.projectId}/settings`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...settings, variations: [...vars, newVar] }),
-      })
-      await loadProjects()
-      setInlineAdd({ projectId: '', varNumber: '', description: '', instructed: 'no', materials: '', labour: '', profit: '' })
-    } catch (e) { console.error(e); alert('Could not add variation.') }
-    setInlineSaving(false)
-  }
-
   async function deleteVariation(r) {
     if (!confirm(`Delete variation ${r.varNumber} — ${r.description}?`)) return
     try {
@@ -468,7 +437,6 @@ export default function VariationTracker() {
   const thS = { padding: '8px 10px', fontWeight: 600, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '2px solid #e5e5e5', whiteSpace: 'nowrap', background: '#f8f9fa' }
   const tdS = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }
   const selS = { fontSize: 12, padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', fontFamily: 'inherit', cursor: 'pointer' }
-  const inlineCell = { fontSize: 12, padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box' }
   const inputS = { width: '100%', padding: '7px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit' }
 
   // For add modal: get selected project's existing variations to compute next var number
@@ -481,12 +449,9 @@ export default function VariationTracker() {
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f0f2f5' }}>
 
         {/* Nav */}
-        {!isEmbed && (
-        <CommercialNav active="/variations" right={
-          <button onClick={() => { setShowAdd(true); setAddForm({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' }); setAddProjectId('') }}
-            style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Add Variation</button>
-        } />
-        )}
+        {/* No Add Variation in the nav any more - it lives in the filter box, where the
+            eye already is when you are working on this page. One button, one place. */}
+        {!isEmbed && <CommercialNav active="/variations" />}
 
         <div style={{ padding: 24 }}>
           {/* Two sub-tabs. The tracker is the register of every variation however it was
@@ -512,13 +477,9 @@ export default function VariationTracker() {
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Variation Tracker</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 12, color: '#888' }}>Live & in-progress projects only · {filtered.length} variation{filtered.length !== 1 ? 's' : ''}</span>
-              {isEmbed && (
-                <button
-                  onClick={() => { setShowAdd(true); setAddForm({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' }); setAddProjectId('') }}
-                  style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
-                  + Add Variation
-                </button>
-              )}
+              {/* The embed used to carry its own copy here, because the nav it would
+                  otherwise use is not rendered. The filter box is, so one button now
+                  serves both. */}
             </div>
           </div>
 
@@ -546,6 +507,13 @@ export default function VariationTracker() {
             <button onClick={() => { setFilterProject('All'); setFilterCustomer('All'); setFilterCM('All'); setFilterEstimator('All'); setFilterInstructed('All') }}
               style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555' }}>
               Reset
+            </button>
+            {/* Pushes Add Variation to the right-hand end of the box. marginLeft:auto
+                rather than a spacer div, so it still lands right when the filters wrap
+                onto two lines on a narrow screen. */}
+            <button onClick={() => { setShowAdd(true); setAddForm({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' }); setAddProjectId('') }}
+              style={{ marginLeft: 'auto', background: '#e63946', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 22px', cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', boxShadow: '0 1px 3px rgba(230,57,70,0.35)' }}>
+              + Add Variation
             </button>
           </div>
 
@@ -598,38 +566,12 @@ export default function VariationTracker() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Persistent inline add-row */}
-                    <tr style={{ background: '#fffbeb', borderBottom: '2px solid #fde68a' }}>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
-                        <input value={inlineAdd.varNumber} onChange={e => setInlineAdd(a => ({ ...a, varNumber: e.target.value }))} placeholder="auto" style={{ ...inlineCell, width: 60 }} />
-                      </td>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap' }} colSpan={2}>
-                        <select value={inlineAdd.projectId} onChange={e => setInlineAdd(a => ({ ...a, projectId: e.target.value }))} style={{ ...inlineCell, minWidth: 220 }}>
-                          <option value="">Select project…</option>
-                          {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.customer || inlineProject.customerName || '—') : '—'}</td>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.estimator || '—') : '—'}</td>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.contractsManager || '—') : '—'}</td>
-                      <td style={tdS}>
-                        <input value={inlineAdd.description} onChange={e => setInlineAdd(a => ({ ...a, description: e.target.value }))} placeholder="Description" style={{ ...inlineCell, minWidth: 180 }} />
-                      </td>
-                      <td style={{ ...tdS, textAlign: 'center' }}>
-                        <button onClick={() => setInlineAdd(a => ({ ...a, instructed: a.instructed === 'yes' ? 'no' : 'yes' }))}
-                          style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: inlineAdd.instructed === 'yes' ? '#dcfce7' : '#fee2e2', color: inlineAdd.instructed === 'yes' ? '#16a34a' : '#e63946' }}>
-                          {inlineAdd.instructed === 'yes' ? 'Instructed' : 'Not Instructed'}
-                        </button>
-                      </td>
-                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.materials} onChange={e => setInlineAdd(a => ({ ...a, materials: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
-                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.labour} onChange={e => setInlineAdd(a => ({ ...a, labour: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
-                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.profit} onChange={e => setInlineAdd(a => ({ ...a, profit: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
-                      <td style={tdS}></td>
-                      <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
-                        <button onClick={saveInlineAdd} disabled={inlineSaving}
-                          style={{ fontSize: 11, padding: '4px 12px', border: 'none', borderRadius: 4, background: '#e63946', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>{inlineSaving ? 'Adding…' : '+ Add'}</button>
-                      </td>
-                    </tr>
+                    {/* The persistent inline add-row that used to sit here has gone.
+                        It was the first row of the table, with a project dropdown and an
+                        empty Description box, and people read it as a search bar rather
+                        than a form - which is a reasonable thing to read a row of empty
+                        inputs above a table as. Adding a variation is now the button in
+                        the filter box, which opens the modal. */}
                     {sorted.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                         <td style={{ ...tdS, fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{r.varNumber || '—'}</td>
