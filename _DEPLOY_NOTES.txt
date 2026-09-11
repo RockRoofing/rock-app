@@ -1,9 +1,9 @@
-pkg831 - Fixes "find is not a function" when moving a project. Includes pkg811-830.
-=====================================================================================
+pkg832 - The Weekly Labour Allocation pop-out takes the screen. Includes pkg811-831.
+======================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-830. It contains all of them. Forty-one files.
+DEPLOY THIS INSTEAD OF pkg811-831. It contains all of them. Forty-one files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-830)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-831)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -20,49 +20,54 @@ DEPLOY THIS INSTEAD OF pkg811-830. It contains all of them. Forty-one files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-WHAT I GOT WRONG
-=================
-A day cell in ops:planning-allocations is not always an array. It is the legacy
+BIGGER
+=======
+1000px to min(1800px, 96vw), and 96% of the height.
 
-    [ { opId, half } ]
+Six weeks is 42 day columns at 88px each. At 1000px the grid was a narrow window
+onto a very wide table, and most of what you had asked for was scrolled out of
+sight.
 
-on older records, and
+The card is now a fixed height with the grid scrolling INSIDE it, rather than the
+whole page growing. The header, the tabs and the Download / Close buttons stay put -
+before, a long list pushed the buttons below the fold and you had to scroll back for
+them.
 
-    { status, unnamed, entries: [ { opId, half } ] }
 
-on anything written through the newer path. planning.js already has cellEntries()
-for precisely this, with a comment saying so, and every other action in the file
-uses it. My move action did not - it called .find() straight on the cell, so on any
-project whose cells had been through the newer path it threw.
+AND IT NO LONGER SHUTS WHEN YOU CLICK OUTSIDE
+===============================================
+The backdrop carried onMouseDown={onClose}. A click that began inside the table and
+drifted outside it closed the whole thing - and with a project picker and the O/A
+toggles in there now, that is real work lost.
 
-The whole action is rewritten:
-
-  READING goes through cellEntries(), so both shapes work.
-
-  WRITING puts the cell back in the shape it was already in. Writing an array where
-  an object was would have flattened it and silently dropped that day's `unnamed`
-  count and its provisional/confirmed status - a worse bug than the crash, because
-  nothing would have told you.
-
-  EMPTYING a day only deletes it when there is nothing left at all. A cell still
-  carrying unnamed slots is kept, with its entries emptied.
-
-Verified against both shapes:
-
-  object cell, full day moved   -> moves; unnamed 2 and status kept on the old day
-  array cell, full day moved    -> moves; empty day and empty project cleaned up
-  am moved onto own pm (object) -> merges to a full day; target's unnamed kept
-  moving onto another project
-  the person is already on       -> refused as a clash
+The x and Escape close it, like every other modal in the portal. Escape closes the
+project picker first when that is open, so pressing it over the picker does not
+shut the grid behind it. The picker follows the same rule - Cancel and Escape, no
+backdrop close.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg831
-  612 drill-down header                 -> v831
-  Applied for / Certified drill-down    -> v831
+  13-week cash flow build marker        -> pkg832
+  612 drill-down header                 -> v832
+  Applied for / Certified drill-down    -> v832
 
 Hard refresh after deploying.
+
+
+ALSO IN THIS PACKAGE
+---------------------
+pkg831  Fixed "find is not a function" when moving a project - a day cell is
+        sometimes an array and sometimes an object, and the move ignored the
+        normaliser that already existed for it.
+pkg830  Click a project in the View Weekly Labour Allocation grid to move that
+        operative-day to another job. Updates the grid and the Gantt.
+pkg829  In Query: status on the row, counted status filter, all months by default.
+pkg828  In Query: assignees, comments, approvals, send list, reviewer page.
+pkg827  In Query tab in Bookkeeping.
+pkg826  Water ingress now reads "WI: <job>" on the labour PDFs.
+pkg825  Weekly Labour Allocation offers up to 6 weeks.
+pkg824  Timesheet CSV from the Planner.
 
 
 STILL OPEN, ON YOUR WORD

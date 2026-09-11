@@ -1353,9 +1353,28 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
     } catch {}
   }
 
+  // Escape closes it. The backdrop does NOT - see below.
+  useEffect(() => {
+    // Escape closes the project picker first if it is open, then the modal. Otherwise
+    // the only way out of the picker is the Cancel button, and pressing Escape over it
+    // would shut the whole grid behind it.
+    const onKey = (e) => { if (e.key !== 'Escape') return; if (movePick) setMovePick(null); else onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, movePick])
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
-      <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
+    // Six weeks is 42 day columns. At 1000px the grid was a narrow window onto a very
+    // wide table and most of it was scrolled out of sight. Now it takes the screen -
+    // 1800px or 96% of the viewport, whichever is smaller - and the table scrolls
+    // inside a fixed-height card rather than pushing the page down.
+    //
+    // The backdrop no longer closes it. It carried onMouseDown={onClose}, so a click
+    // that started inside the table and drifted outside shut the whole thing - and
+    // with a project picker and the O/A toggles in here now, that is a real loss of
+    // work. The x and Escape close it, like every other modal in the portal.
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2vh 2vw' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 'min(1800px, 96vw)', maxHeight: '96vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>View Weekly Labour Allocations</div>
@@ -1369,6 +1388,10 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
           <button onClick={() => setTab('review')} style={{ padding: '8px 14px', border: 'none', borderBottom: tab === 'review' ? '2px solid #7c3aed' : '2px solid transparent', background: 'transparent', fontSize: 13, fontWeight: tab === 'review' ? 700 : 500, color: tab === 'review' ? INK : '#888', cursor: 'pointer', fontFamily: 'inherit' }}>Review past O/A</button>
         </div>
 
+        {/* The scrolling part. The card is a fixed height now, so the grid scrolls
+            inside it - the header, the tabs and the buttons stay put instead of the
+            whole page growing and the Download button ending up below the fold. */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {tab === 'review' ? (
           <div style={{ padding: 22 }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
@@ -1487,9 +1510,10 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
 
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
 
+          {/* No backdrop close on the picker either - Cancel and Escape. */}
           {movePick && (
-            <div onClick={() => setMovePick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 460, padding: 20 }}>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 460, padding: 20 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Move to another project</div>
                 <div style={{ fontSize: 13, color: '#888', margin: '4px 0 14px' }}>
                   {movePick.name} &middot; {parseISO(movePick.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
@@ -1528,6 +1552,7 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
           </div>
         </div>
         )}
+        </div>
       </div>
     </div>
   )
