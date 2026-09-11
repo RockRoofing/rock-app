@@ -1,11 +1,11 @@
-pkg824 - Timesheet CSV out of the Planner. Includes pkg811-823.
-=================================================================
+pkg826 - Water ingress was invisible on the labour PDFs. Includes pkg811-825.
+================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-823. It contains all of them. Thirty files.
+DEPLOY THIS INSTEAD OF pkg811-825. It contains all of them. Thirty-one files.
 
 *** FIVE NEW FILES TO CREATE BY HAND ***
 
-  pages/api/planning-timesheet-csv.js                 (new, this package)
+  pages/api/planning-timesheet-csv.js                 (from pkg824)
   lib/handoverPdf.js                                  (from pkg822)
   pages/api/handover-pdf.js                           (from pkg822)
   components/SearchableSelect.js                      (from pkg818)
@@ -16,93 +16,63 @@ DEPLOY THIS INSTEAD OF pkg811-823. It contains all of them. Thirty files.
 Everything else exists. Overwrite in place.
 
 
-YES, IT CAN BE DONE - AND ALMOST ALL OF IT IS ALREADY RECORDED
-================================================================
-Your W.L.A sheet IS the Planner grid, so I expected to be able to produce the names,
-the dates and the jobs and no more. In fact the Planner already holds nearly the
-whole workbook across five stores:
+YOUR QUESTION: YES, BOTH ARE INCLUDED
+=======================================
+assembleWeek folds overheads and water ingress into each person's day cells, and
+the PDF prints every entry in a cell, so they come out alongside the project work.
+Built one to look at rather than reading the code and assuming:
 
-    ops:planning-allocations   project work, full or half day
-    ops:water-ingress          call-out visits, with their own job names
-    ops:overheads              Holidays, Sick, Paid Leave, Internal Time, Ops Support
-    ops:overnight-allowance    nights away, by person and date
-    ops:operatives-roster      names (Site App users take precedence)
+  Alan Clark   Farmstead Drive | Holidays | WI: Leak - Royal Tea | Ops Support |
+               Winnersh (AM)
 
-Which covers every column: Employee Name, Date, Job No, Job Description, Hours,
-Rate Description - one row per person, per day, per rate.
+  Overheads       by category - Holidays, Sick, Internal Time, Ops Support,
+                  Paid Leave, Unpaid Leave
+  Water ingress   by job name
+  Half days       marked (AM) / (PM)
+  Provisional     in blue, confirmed in green
+  Unnamed slots   a "TBC - <project>" row reading "2 unnamed"
 
-
-WHERE TO FIND IT
------------------
-Planner -> the Accounts report modal -> "Download timesheet CSV", beside the
-existing Download report. It uses the SAME week commencing, the same number of
-weeks and the same ticked installers as the PDF, so the two cannot end up
-describing different people over different dates.
-
-Dates come out as DD/MM/YYYY and the file carries a UTF-8 BOM, so Excel opens it
-in a UK locale without turning dates into text or mangling an accented name.
+ONE DIFFERENCE BETWEEN THE TWO VERSIONS, which is deliberate and worth knowing: the
+ACCOUNTS version drops the "TBC - unnamed" rows and adds the O/A markers and an
+overnight allowance total. Nobody is paid for an unnamed slot, so it has no place on
+a sheet going to accounts. The general Weekly Labour Allocation keeps them, because
+a gap in next week's labour is the thing you want to see.
 
 
-CHECKED AGAINST YOUR WORKBOOK
--------------------------------
-Ran the logic over William McVeigh's July-August rows. It reproduces them line for
-line, including the two-row days - J246 Standard 8 plus Overnight Allowance 1 on
-22 July - and half days coming out as 4 hours at the Weekend rate on a Saturday.
+AND A DEFECT THE CHECK TURNED UP
+==================================
+Water ingress was there, but you could not tell it apart from a project.
+
+assembleWeek labels a call-out with a droplet - "<droplet> Leak - Royal Tea" - and
+the PDF sanitiser strips anything above Latin-1 so pdf-lib cannot throw. The droplet
+went with it, and a leak visit printed as a bare job name, identical in appearance
+to a planned project. On screen the planner marks it clearly; on the sheet that goes
+to accounts and out to operatives, it did not.
+
+It now reads "WI: Leak - Royal Tea". Mapped before the catch-all strip, the same way
+the sanitiser already handles smart quotes and bullets.
+
+This affects both labour PDFs. The timesheet CSV from pkg824 was never affected - it
+reads the water-ingress store directly and puts those rows under their own job
+number.
 
 
-TWO THINGS ARE DERIVED, NOT RECORDED - WORTH KNOWING BEFORE PAYROLL USES IT
-=============================================================================
-1. HOURS. The Planner records a full day or a half day, not a clock. A full day is
-   8 hours and a half day 4. Somebody who actually worked 9.5 hours still reads 8,
-   because the Planner has nowhere to put the 1.5. Your Hours & OA check sheet shows
-   Michael Walker on 31 weekend hours, which is exactly the sort of figure this
-   cannot produce on its own.
+ALSO IN THIS PACKAGE (pkg825)
+------------------------------
+"How far ahead" offers 1 to 6 weeks instead of 1 to 4, and the Accounts report's
+Weeks dropdown with it. No server change was needed - both PDF routes always
+accepted up to 26.
 
-   If that matters, the Planner needs an hours field on the day cell. That is a real
-   change, not a tweak, and worth deciding on separately.
-
-2. WEEKEND RATE. Taken from the date being a Saturday or Sunday, which is how the
-   workbook separates it. A weekday paid at a weekend rate cannot be told apart.
-
-
-AND ONE HEURISTIC, FLAGGED
-----------------------------
-An overnight is often the night BEFORE the job - travelling up on a Sunday, or
-staying over at the end of a holiday to start on site the next morning. On those
-days there is no project allocation, so the allowance would land on "Internal time"
-and the cost would never reach the job.
-
-Your workbook does this by hand: 11 August is a Holiday, and the overnight that
-night is booked to J246, where he was the following morning.
-
-So the export uses the job that day, failing that the job within the next three
-days, failing that the day before. It reproduces your 11 August row correctly.
-Anything it still cannot place stays on "Internal time" rather than being guessed
-onto a job, so it shows up to be looked at.
-
-The Planner does not record which job an overnight belongs to. If that should be
-explicit rather than inferred, it is a small addition to the overnight store.
-
-
-OVERHEAD CATEGORIES MAPPED
----------------------------
-    Holidays       -> Holiday          / Holiday
-    Sick           -> Sick             / Holiday
-    Paid Leave     -> Paid leave       / Standard-Paid leave
-    Unpaid Leave   -> Unpaid leave     / Unpaid
-    Internal Time  -> Office Day       / Standard
-    Ops Support    -> Ops support      / Standard
-
-All under Job No "Internal time", as in the workbook. The mapping is one table at
-the top of the file - tell me if any of those descriptions should read differently
-and it is one line each.
+Still worth remembering: that control drives the download AND "Send to operatives".
+Choosing 6 emails operatives six weeks of allocation. Say the word if the email
+should stay at four and the two need separate controls.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg824
-  612 drill-down header                 -> v824
-  Applied for / Certified drill-down    -> v824
+  13-week cash flow build marker        -> pkg826
+  612 drill-down header                 -> v826
+  Applied for / Certified drill-down    -> v826
 
 Hard refresh after deploying.
 
@@ -116,5 +86,8 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
+  - An hours field on the Planner day cell, if the timesheet CSV is to carry real
+    hours rather than 8 and 4.
+  - Separate week controls for the download and the operative email.
   - The same "send for approval?" question on the other design pages.
   - Merging attached PDFs into the handover document, as the variation PDF now does.

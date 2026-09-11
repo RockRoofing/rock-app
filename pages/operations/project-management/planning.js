@@ -1387,7 +1387,7 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
             </label>
             <label style={{ fontSize: 13, color: '#555' }}>Weeks:&nbsp;
               <select value={weeksAhead} onChange={e => setWeeksAhead(Number(e.target.value))} style={{ ...fInput }}>
-                {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
           </div>
@@ -1460,7 +1460,7 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
 
 // ── Weekly labour pop-out: filters + one stacked table per week + Download/Send ──
 function WeekModal({ monday, onClose }) {
-  const [weeksAhead, setWeeksAhead] = useState(1)      // 1..4 forward weeks (week 1 = next Monday)
+  const [weeksAhead, setWeeksAhead] = useState(1)      // 1..6 forward weeks (week 1 = next Monday)
   const [includePrev, setIncludePrev] = useState(false) // Previous week (download-only), off by default
   const [weeksData, setWeeksData] = useState(null)     // array of { week, kind:'prev'|'ahead', label }
   const [excluded, setExcluded] = useState(new Set())
@@ -1538,7 +1538,9 @@ function WeekModal({ monday, onClose }) {
           <div style={{ padding: 14, border: '1px solid #eee', background: '#faf9f7', borderRadius: 10, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: '#555' }}>How far ahead:</span>
-              {[1, 2, 3, 4].map(w => (
+              {/* Up to six. Both PDF routes already accept up to 26 weeks - the four
+                  was only ever in this row of buttons. */}
+              {[1, 2, 3, 4, 5, 6].map(w => (
                 <button key={w} onClick={() => setWeeksAhead(w)} style={{ padding: '6px 12px', borderRadius: 8, border: weeksAhead === w ? `2px solid ${GOLD}` : '1px solid #ddd', background: weeksAhead === w ? '#fffbeb' : '#fff', fontWeight: weeksAhead === w ? 700 : 500, fontSize: 12.5, cursor: 'pointer' }}>{w} week{w > 1 ? 's' : ''}</button>
               ))}
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, marginLeft: 6, cursor: 'pointer', color: '#555' }}>
