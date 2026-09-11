@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { projectVariations, projectLabel } from '../lib/variationInstruct'
 import { isInstructed } from '../lib/applications'
+import SearchableSelect from './SearchableSelect'
 import { upload } from '@vercel/blob/client'
 import { compressImage } from '../lib/compressImage'
 
@@ -744,13 +745,16 @@ export default function VariationBuilder({ projects, onSaved }) {
     <div>
       <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
         <div style={lbl}>Project</div>
-        <select value={projectId} onChange={e => { setProjectId(e.target.value); setItems([]); setMsg('') }}
-          style={{ ...inp, maxWidth: 520 }}>
-          <option value="">Select a project…</option>
-          {(projects || []).map(p => (
-            <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>
-          ))}
-        </select>
+        {/* Type to narrow. A native select on a couple of hundred projects is a scroll,
+            and its built-in type-ahead only matches the START of the option - so
+            typing a project name against a "J228 - ..." label finds nothing. */}
+        <SearchableSelect
+          style={{ maxWidth: 520 }}
+          value={projectId}
+          placeholder="Select a project, or type to search..."
+          emptyLabel="No project matches that"
+          options={(projects || []).map(p => ({ value: p.xeroId, label: projectLabel(p.jobNo, p.name) }))}
+          onChange={(v) => { setProjectId(v); setItems([]); setMsg('') }} />
       </div>
 
       {!project ? (

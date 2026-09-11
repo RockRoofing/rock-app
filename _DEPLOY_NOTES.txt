@@ -1,101 +1,89 @@
-pkg817 - Photos on variations, carried through to every PDF. Includes pkg811-816.
-====================================================================================
+pkg818 - Type-to-search on the project pickers. Includes pkg811-817.
+======================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-816. It contains all of them. Twenty-one files.
+DEPLOY THIS INSTEAD OF pkg811-817. It contains all of them. Twenty-two files.
 
-*** ONE NEW FILE AND ONE NEW FOLDER TO CREATE BY HAND ***
+*** TWO NEW FILES TO CREATE BY HAND ***
 
-  pages/api/admin/variations-instructed-audit.js      (from pkg816)
-
-  The pages/api/admin/ folder does not exist yet - create it, then the file.
+  components/SearchableSelect.js                      (new, this package)
+  pages/api/admin/variations-instructed-audit.js      (new, from pkg816 -
+                                                       the pages/api/admin/ folder
+                                                       does not exist yet either)
 
 Everything else exists. Overwrite in place. Folders with LITERAL square brackets:
 pages/api/project/[id]/ and pages/project/.
 
 
-THE PHOTOS
+THE CHANGE
 ===========
-A Photos panel in the Variation Builder, under Clarifications. Add photos, see them
-as thumbnails, click one to open it full size, remove any before saving.
+Three project pickers now filter as you type:
 
-On a phone the picker opens the camera directly, and it takes several at once.
+  Variation Tracker    the Project filter in the filter box
+  Variation Tracker    the Project field in the Add Variation modal
+  Variation Builder    the project selector at the top
 
-They appear on the variation PDF after the priced work, each with its filename as a
-caption - and because Download, Send to customer and the instruction email all build
-that same PDF through buildVariationPDF, they carry the photos with no change to any
-of those paths.
-
-
-WHERE THEY ARE STORED, AND WHY IT MATTERS
--------------------------------------------
-On the builder block, as variation.builder.photos.
-
-NOT on variation.attachments, which already exists and looked like the obvious home.
-applicationPdf.js uses that array for something else:
-
-    const has = Array.isArray(v.attachments) && v.attachments.length > 0
-    if (has || !isInstructed(v) || !v.builder) return v     // ... else generate the
-                                                            // variation PDF into it
-
-A variation that already has attachments does NOT get its variation PDF generated
-for the application. Putting photos there would have quietly dropped the variation
-document from every application it appeared on, and the photos would have replaced
-it. They live on the builder block instead, and reach the application anyway inside
-the variation PDF.
+Type any part of the job number or the name and the list narrows. Arrow keys move,
+Enter picks, Escape closes. Clicking the field clears the box so the whole list is
+there again - you are choosing, not editing what is already chosen.
 
 
-UPLOADS
---------
-Straight from the browser to Blob storage via @vercel/blob/client and
-/api/blob-upload, which is the route every other upload in the portal takes. Not
-through our own API: serverless request bodies cap at about 4.5MB and two phone
-photos clear that on their own.
+WHY NOT JUST LEAVE THE NATIVE SELECT
+--------------------------------------
+Browsers do have type-ahead on a <select>, but it only matches the START of the
+option text. Every option here reads "J228 - Farmstead Drive", so typing "Farmstead"
+matches nothing at all - and the job name is how people remember a job. Typing the
+number worked; typing the name did not, which is the half that is missing rather
+than the half that is there.
 
-Compressed first, with the existing lib/compressImage - a phone photo is 3-6MB and
-nothing in a variation PDF needs that. It returns the original untouched for
-anything that is not a raster image, or if compression fails, so an upload never
-breaks because of it.
+Matching is anywhere in the label, and a prefix match ranks first, so "J228" puts
+J228 at the top rather than some other job that mentions it.
 
-A photo that fails to upload is named in the error rather than the batch reporting
-"upload failed", which tells you nothing about which one to try again.
-
-An instructed variation is locked, so photos cannot be added or removed once the
-customer has instructed it - same rule as the rest of the builder.
+    ""         all options
+    "farm"     J228 - Farmstead Drive, J250 - Farmstead Annexe
+    "J228"     J228 - Farmstead Drive
+    "warwick"  J194 - Warwick Road      <- name match, not a prefix
+    "zz"       No project matches that
 
 
-VERIFIED
+ONE COMPONENT, NOT THREE
+-------------------------
+components/SearchableSelect.js is shared by all three. Three separate dropdowns is
+how they end up behaving differently from one another - which is the fault behind a
+good deal of what has been fixed this week.
+
+Customer, CM, Estimator and Instructed? are deliberately left as plain selects. They
+are short lists and a native select is quicker on those; a search box on a list of
+six is friction, not help.
+
+
+A DETAIL
 ---------
-Built the PDF end to end with two real photos - one landscape, one portrait - and
-one deliberately broken URL, then rendered it to images and looked at it.
-
-  landscape photo   scaled to the page width, caption above it
-  portrait photo    too tall for the space left, moved to a fresh page rather than
-                    being squashed or running off the bottom
-  broken URL        prints "[broken.jpg could not be loaded]" and carries on
-
-That last one is deliberate. A photo that will not load must not take the document
-down with it, and it must not vanish silently either - a variation quietly missing
-its evidence, with nothing to say any was meant to be there, is worse than a line
-admitting it.
+The list closes on a click anywhere outside it, tracked on the document rather than
+with onBlur. onBlur alone does not work here: the list sits inside the same box, so
+clicking an option blurs the input first and the list would close before the click
+landed on it.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg817
-  612 drill-down header                 -> v817
-  Applied for / Certified drill-down    -> v817
+  13-week cash flow build marker        -> pkg818
+  612 drill-down header                 -> v818
+  Applied for / Certified drill-down    -> v818
 
 Hard refresh after deploying.
 
 
-ALSO IN THIS PACKAGE (pkg816)
-------------------------------
-The `instructed` flag fixed across about twenty readers, in both directions, plus
-the three that were not cosmetic: the lock refusing changes to an instructed
-variation, the guard against a customer instructing twice, and the reminder cron
-chasing already-instructed variations. Normalised on write. And the admin audit
-endpoint so the existing data can be repaired without doing it by hand - run the GET
-first and read it before applying anything.
+ALSO IN THIS PACKAGE
+---------------------
+pkg817  Photos on variations in the builder, appended to the PDF and so carried by
+        Download, Send to customer and the instruction email.
+pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
+        audit endpoint to repair the existing data. Run its GET and read it before
+        applying anything.
+pkg814  Long text wraps on the variation PDF instead of running over the column.
+pkg813  Variation Tracker add-row removed, Add Variation moved into the filter box.
+pkg812  Search from inside a CRM deal.
+pkg811  Cost-comment emails name the project.
 
 
 STILL OPEN, ON YOUR WORD

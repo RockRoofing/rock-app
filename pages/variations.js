@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { isInstructed } from '../lib/applications'
+import SearchableSelect from '../components/SearchableSelect'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
@@ -488,8 +489,19 @@ export default function VariationTracker() {
 
           {/* Filters */}
           <div style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {/* Project is the long one - a few hundred entries - so it is searchable.
+                Customer, CM and Estimator are short lists and a plain select is
+                quicker for those. */}
+            <div style={{ minWidth: 300 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>Project</div>
+              <SearchableSelect
+                value={filterProject}
+                placeholder="All"
+                emptyLabel="No project matches that"
+                options={projectOptions.map(o => ({ value: o, label: o }))}
+                onChange={(v) => setFilterProject(v)} />
+            </div>
             {[
-              { label: 'Project', value: filterProject, set: setFilterProject, opts: projectOptions },
               { label: 'Customer', value: filterCustomer, set: setFilterCustomer, opts: uniq(allRows, 'customer') },
               { label: 'CM', value: filterCM, set: setFilterCM, opts: uniq(allRows, 'cm') },
               { label: 'Estimator', value: filterEstimator, set: setFilterEstimator, opts: uniq(allRows, 'estimator') },
@@ -706,15 +718,17 @@ export default function VariationTracker() {
 
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Project *</label>
-                <select value={addProjectId} onChange={e => {
-                  setAddProjectId(e.target.value)
-                  const proj = projects.find(p => p.xeroId === e.target.value)
-                  const vars = projectVariations(proj)
-                  setAddForm(f => ({ ...f, varNumber: nextVarNumber(vars) }))
-                }} style={{ ...inputS }}>
-                  <option value="">Select project...</option>
-                  {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{p.jobNo} — {p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={addProjectId}
+                  placeholder="Select project, or type to search..."
+                  emptyLabel="No project matches that"
+                  options={projects.map(p => ({ value: p.xeroId, label: `${p.jobNo} - ${p.name}` }))}
+                  onChange={(v) => {
+                    setAddProjectId(v)
+                    const proj = projects.find(p => p.xeroId === v)
+                    const vars = projectVariations(proj)
+                    setAddForm(f => ({ ...f, varNumber: nextVarNumber(vars) }))
+                  }} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, marginBottom: 14 }}>
