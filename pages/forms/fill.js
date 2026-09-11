@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
 import { compressImage } from '../../lib/compressImage'
@@ -141,6 +141,26 @@ export default function Fill() {
       return { ...a, [personnelFieldId]: merged }
     })
   }, [planning, personnelFieldId, projectId, diaryDate, roster])
+
+  // EVERYONE ALLOCATED TO THIS PROJECT, any date.
+  //
+  // The crew picker listed the whole Site App roster, so choosing today's gang meant
+  // scrolling past every operative in the company. These are the people actually
+  // planned onto this job.
+  //
+  // Across ALL dates rather than the diary date alone: somebody who turns up a day
+  // early, or is pulled on to help, is still on this project - and the date may not
+  // even be filled in yet when the picker is first opened.
+  const projectPeople = useMemo(() => {
+    if (!planning || !projectId) return []
+    const days = planning.allocations[`L:${projectId}`] || {}
+    const ids = new Set()
+    for (const cell of Object.values(days)) {
+      const entries = Array.isArray(cell) ? cell : (cell && cell.entries) || []
+      for (const e of entries) if (e && e.opId) ids.add(e.opId)
+    }
+    return [...ids].map(id => (roster.find(o => o.id === id) || {}).name).filter(Boolean).sort((a, b) => a.localeCompare(b))
+  }, [planning, projectId, roster])
 
   function set(id, val) {
     setAnswers(a => ({ ...a, [id]: val }))
@@ -304,7 +324,11 @@ export default function Fill() {
         {form.fields
           .filter(f => !(form.id === 'pre-start-notification' && f.id === 'f_4'))
           .map(f => (
-            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} opsUsers={opsUsers} projectNo={selectedProject?.jobNo || selectedProject?.id} userName={user?.name || ''} />
+            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} opsUsers={opsUsers} projectNo={selectedProject?.jobNo || selectedProject?.id} userName={user?.name || ''}
+              /* Only the crew field is narrowed. The "your name" fields stay the full
+                 roster - the person filling the diary in is not always on the plan for
+                 it, and locking them out of signing it would be worse than a long list. */
+              projectPeople={f.id === personnelFieldId ? projectPeople : null} />
           ))}
 
         {form.id === 'pre-start-notification' ? (
@@ -328,7 +352,7 @@ export default function Fill() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, userName }) {
+function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, userName, projectPeople }) {
   if (f.type === 'section') {
     return <div style={{ margin: '26px 0 4px', paddingBottom: 6, borderBottom: '2px solid #ece8df' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND }}>{f.label}</div>
@@ -378,10 +402,16 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, u
         </div>
       )}
 
-      {f.type === 'members' && (
-        <MembersPicker value={value} onChange={onChange}
-          people={(roster && roster.length ? roster.map(o => o.name) : (team || []))} />
-      )}
+      {f.type === 'members' && (() => {
+        const everyone = (roster && roster.length ? roster.map(o => o.name) : (team || []))
+        // Narrowed only where there is something to narrow TO. A project with nobody
+        // planned on it would otherwise give an empty picker and an uncompletable
+        // diary, which is a worse failure than a long list.
+        const narrowed = projectPeople && projectPeople.length ? projectPeople : null
+        return <MembersPicker value={value} onChange={onChange}
+          people={narrowed || everyone}
+          allPeople={narrowed ? everyone : null} />
+      })()}
 
       {f.type === 'projectusers' && (() => {
         // Site App users allocated to this project ('all' access, or projectNo listed).
@@ -398,6 +428,8 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, u
     </div>
   )
 }
+
+const linkish = { background: 'none', border: 'none', padding: 0, color: '#1c704f', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, fontFamily: 'inherit' }
 
 function Choice({ label, selected, onClick, check }) {
   return (
@@ -421,10 +453,15 @@ function Choice({ label, selected, onClick, check }) {
 // Searchable multi-select for people (operatives roster). Shows selected as chips,
 // a search box, and a filtered list. Also keeps any pre-selected name that isn't
 // in the list (e.g. an auto-filled name), so nothing is silently dropped.
-function MembersPicker({ value, onChange, people }) {
+function MembersPicker({ value, onChange, people, allPeople }) {
   const [q, setQ] = useState('')
+  // allPeople is only passed when the list has been narrowed to the project. Somebody
+  // turns up who was not on the plan often enough that a diary must still be able to
+  // record them - so the narrowing is a default, not a wall.
+  const [showAll, setShowAll] = useState(false)
   const selected = Array.isArray(value) ? value : (value ? [value] : [])
-  const all = [...new Set([...(people || []), ...selected])]
+  const base = (showAll && allPeople) ? allPeople : people
+  const all = [...new Set([...(base || []), ...selected])]
   const toggle = nm => onChange(selected.includes(nm) ? selected.filter(x => x !== nm) : [...selected, nm])
   const filtered = all.filter(nm => !selected.includes(nm) && (!q || nm.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.localeCompare(b))
   return (
@@ -443,6 +480,13 @@ function MembersPicker({ value, onChange, people }) {
         ? <div style={{ fontSize: 13, color: '#aaa' }}>No operatives on the roster yet — add them in Operations → H&S → Operatives.</div>
         : (
           <>
+            {allPeople && (
+              <div style={{ fontSize: 12.5, color: '#777', marginBottom: 8 }}>
+                {showAll
+                  ? <>Showing everyone on the roster. <button onClick={() => setShowAll(false)} style={linkish}>Just this project</button></>
+                  : <>Showing the {(people || []).length} on this project. <button onClick={() => setShowAll(true)} style={linkish}>Show everyone</button></>}
+              </div>
+            )}
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search to add a person…"
               style={{ ...inp, marginBottom: 8 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>

@@ -1,9 +1,9 @@
-pkg832 - The Weekly Labour Allocation pop-out takes the screen. Includes pkg811-831.
-======================================================================================
+pkg833 - Site diary crew picker shows only who is on the project. Includes pkg811-832.
+========================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-831. It contains all of them. Forty-one files.
+DEPLOY THIS INSTEAD OF pkg811-832. It contains all of them. Forty-two files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-831)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-832)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -20,54 +20,60 @@ DEPLOY THIS INSTEAD OF pkg811-831. It contains all of them. Forty-one files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-BIGGER
-=======
-1000px to min(1800px, 96vw), and 96% of the height.
+THE CHANGE
+===========
+"Personnel on site working on behalf of Rock" now lists only the people allocated to
+that project in the Planner, instead of every operative on the Site App roster.
 
-Six weeks is 42 day columns at 88px each. At 1000px the grid was a narrow window
-onto a very wide table, and most of what you had asked for was scrolled out of
-sight.
-
-The card is now a fixed height with the grid scrolling INSIDE it, rather than the
-whole page growing. The header, the tabs and the Download / Close buttons stay put -
-before, a long list pushed the buttons below the fold and you had to scroll back for
-them.
+The diary already read the Planner - it pre-selects whoever is on the Gantt for the
+diary date. It just never narrowed the LIST you picked from, so choosing today's gang
+meant scrolling past the whole company.
 
 
-AND IT NO LONGER SHUTS WHEN YOU CLICK OUTSIDE
-===============================================
-The backdrop carried onMouseDown={onClose}. A click that began inside the table and
-drifted outside it closed the whole thing - and with a project picker and the O/A
-toggles in there now, that is real work lost.
+DECISIONS WORTH KNOWING
+------------------------
+ALL DATES ON THE PROJECT, not just the diary date. Somebody who turns up a day early,
+or is pulled across to help, is still on this job - and the date may not even be
+filled in when the picker is first opened. Narrowing to a single day would have hidden
+people who are genuinely there.
 
-The x and Escape close it, like every other modal in the portal. Escape closes the
-project picker first when that is open, so pressing it over the picker does not
-shut the grid behind it. The picker follows the same rule - Cancel and Escape, no
-backdrop close.
+ONLY THE CREW FIELD. "Insert your name" is the same field type, and it is NOT
+narrowed - the person filling the diary in is not always on the plan for it, and
+locking them out of signing it would be worse than a long list. The crew field is
+identified by the same label rule the file already uses to decide where to pre-select
+from, rather than a second rule of my own.
+
+A PROJECT WITH NOBODY PLANNED ON IT falls back to the full roster. An empty picker
+would make the diary uncompletable, which is a worse failure than a long list.
+
+AND THERE IS A WAY PAST IT. Above the search box: "Showing the 4 on this project.
+Show everyone." Somebody turning up who was not on the plan happens often enough that
+this has to be a default, not a wall. Anyone already selected stays selected whether
+they are on the project or not.
+
+Verified against both day-cell shapes - the legacy array and the newer
+{ status, unnamed, entries } object - since allocations hold a mix of the two.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg832
-  612 drill-down header                 -> v832
-  Applied for / Certified drill-down    -> v832
+  13-week cash flow build marker        -> pkg833
+  612 drill-down header                 -> v833
+  Applied for / Certified drill-down    -> v833
 
-Hard refresh after deploying.
+Hard refresh after deploying. On a phone the Site App may need closing and reopening.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg831  Fixed "find is not a function" when moving a project - a day cell is
-        sometimes an array and sometimes an object, and the move ignored the
-        normaliser that already existed for it.
-pkg830  Click a project in the View Weekly Labour Allocation grid to move that
-        operative-day to another job. Updates the grid and the Gantt.
-pkg829  In Query: status on the row, counted status filter, all months by default.
-pkg828  In Query: assignees, comments, approvals, send list, reviewer page.
-pkg827  In Query tab in Bookkeeping.
-pkg826  Water ingress now reads "WI: <job>" on the labour PDFs.
-pkg825  Weekly Labour Allocation offers up to 6 weeks.
-pkg824  Timesheet CSV from the Planner.
+pkg832  View Weekly Labour Allocation pop-out widened to min(1800px, 96vw), scrolls
+        inside a fixed-height card, and no longer closes on a backdrop click.
+pkg831  Fixed "find is not a function" when moving a project between cells.
+pkg830  Click a project in the WLA grid to move that operative-day to another job.
+pkg827-829  In Query tab in Bookkeeping: assignees, comments, approvals, send list
+        and the reviewer page.
+pkg824-826  Timesheet CSV from the Planner, six-week labour allocation, water
+        ingress labelled on the labour PDFs.
 
 
 STILL OPEN, ON YOUR WORD
