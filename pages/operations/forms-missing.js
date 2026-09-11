@@ -36,7 +36,38 @@ export default function FormsMissingPage() {
   }
   useEffect(() => { load() }, [fromMon, toMon])
 
+
   const people = useMemo(() => data ? [...new Set(data.rows.map(r => r.responsible).filter(v => v && v !== '—'))].sort() : [], [data])
+
+  // Which card was clicked. null = closed, '' = the overall card (every form type),
+  // otherwise the form type.
+  const [drill, setDrill] = useState(null)
+  // x and Escape only, never a backdrop click - the same rule as every other modal.
+  useEffect(() => {
+    if (drill === null) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setDrill(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drill])
+
+  // The DRILL-DOWN READS data.rows, NOT the filtered rows above.
+  //
+  // The cards are built from the API's own summary, which knows nothing about the
+  // page's status/form/person filters. Opening a card against the filtered list would
+  // show a count that did not match the number on the card you just pressed.
+  const drillRows = useMemo(() => {
+    if (!data || drill === null) return { missing: [], done: [], upcoming: [], label: '' }
+    const all = data.rows.filter(r => drill === '' || r.formType === drill)
+    const by = (a, b) => a.week.localeCompare(b.week)
+      || String(a.projectNo).localeCompare(String(b.projectNo), undefined, { numeric: true })
+      || FORM_ORDER.indexOf(a.formType) - FORM_ORDER.indexOf(b.formType)
+    return {
+      missing: all.filter(r => !r.done && !r.upcoming).sort(by),
+      done: all.filter(r => r.done).sort(by),
+      upcoming: all.filter(r => r.upcoming).sort(by),
+      label: drill === '' ? 'All required forms' : drill,
+    }
+  }, [data, drill])
 
   const rows = useMemo(() => {
     if (!data) return []
@@ -74,7 +105,7 @@ export default function FormsMissingPage() {
         <>
           {/* summary cards */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-            <Card>
+            <Card onClick={() => setDrill('')} title="See every required form, missing and completed">
               {data.summary.required ? <>
                 <div style={cardNum}>{data.summary.pct}%</div>
                 <div style={cardLbl}>Completed</div>
@@ -90,7 +121,7 @@ export default function FormsMissingPage() {
               const na = !b.required   // no forms needed for this type
               const pct = na ? null : Math.round((b.completed / b.required) * 100)
               return (
-                <Card key={ft} small>
+                <Card key={ft} small onClick={() => setDrill(ft)} title={`See the ${ft} forms, missing and completed`}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 4 }}>{ft}</div>
                   {na ? (
                     <div style={{ fontSize: 20, fontWeight: 800, color: '#bbb' }}>N/A</div>
@@ -160,6 +191,61 @@ export default function FormsMissingPage() {
               </tbody>
             </table>
           </div>
+          {drill !== null && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 2vw' }}>
+              <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 'min(1100px, 96vw)', maxHeight: '94vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{drillRows.label}</div>
+                    <div style={{ fontSize: 12.5, color: '#888', marginTop: 2 }}>
+                      {wcLabel(fromMon)} to {wcLabel(toMon)} &middot; {drillRows.done.length} completed, {drillRows.missing.length} missing
+                      {drillRows.upcoming.length ? `, ${drillRows.upcoming.length} upcoming` : ''}
+                    </div>
+                  </div>
+                  <button onClick={() => setDrill(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#999', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+                </div>
+
+                <div style={{ overflowY: 'auto', padding: '4px 18px 18px' }}>
+                  {/* MISSING FIRST. They are the reason anybody opens this. */}
+                  {[['Missing', drillRows.missing, '#b91c1c', '#fee2e2'],
+                    ['Upcoming', drillRows.upcoming, '#0369a1', '#e0f2fe'],
+                    ['Completed', drillRows.done, '#16a34a', '#dcfce7']].map(([title, list, colour, bg]) => (
+                    list.length === 0 ? null : (
+                      <div key={title} style={{ marginTop: 16 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: colour, marginBottom: 6 }}>
+                          {title} ({list.length})
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead><tr style={{ background: '#faf9f7' }}>
+                            <th style={{ ...th, textAlign: 'left' }}>Week</th>
+                            <th style={{ ...th, textAlign: 'left' }}>Project</th>
+                            {drill === '' && <th style={{ ...th, textAlign: 'left' }}>Form</th>}
+                            <th style={{ ...th, textAlign: 'left' }}>Responsible</th>
+                          </tr></thead>
+                          <tbody>
+                            {list.map((r, i) => (
+                              <tr key={i} style={{ borderTop: '1px solid #f2f2f2', background: bg === '#fee2e2' ? '#fffaf7' : '#fff' }}>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                                <td style={td}>{r.projectNo}{r.projectName && r.projectName !== r.projectNo ? ` - ${r.projectName}` : ''}</td>
+                                {drill === '' && <td style={td}>{r.formType}{r.day ? <span style={{ color: '#999', fontSize: 11 }}> &middot; {parseISO(r.day).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</span> : ''}</td>}
+                                <td style={td}>{r.responsible}{r.role ? <span style={{ color: '#aaa', fontSize: 11 }}> ({r.role})</span> : ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  ))}
+                  {drillRows.missing.length === 0 && drillRows.done.length === 0 && drillRows.upcoming.length === 0 && (
+                    <div style={{ padding: 26, textAlign: 'center', color: '#aaa', fontSize: 13.5 }}>
+                      No forms are required for this over the selected weeks.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>“Responsible” is who receives the Monday notification: the Contracts Manager for Pre-Start, and the designated Site Supervisor (or the qualified supervisor allocated on the Gantt) for the other forms.</div>
         </>
       )}
@@ -167,7 +253,20 @@ export default function FormsMissingPage() {
   )
 }
 
-const Card = ({ children, small }) => <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16, minWidth: small ? 150 : 210, flex: small ? '0 0 auto' : '0 0 auto' }}>{children}</div>
+const Card = ({ children, small, onClick, title }) => (
+  <div onClick={onClick} title={title}
+    style={{
+      background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16,
+      minWidth: small ? 150 : 210, flex: '0 0 auto',
+      cursor: onClick ? 'pointer' : 'default',
+      // A card that does something should look like it does. Without this the only
+      // way to find out is to click one.
+      boxShadow: onClick ? '0 1px 2px rgba(0,0,0,.04)' : 'none',
+    }}>
+    {children}
+    {onClick && <div style={{ fontSize: 10.5, color: '#aaa', marginTop: 6 }}>Click to see the forms</div>}
+  </div>
+)
 const Bar = ({ pct }) => (
   <div style={{ height: 8, background: '#f0efe9', borderRadius: 6, overflow: 'hidden', marginTop: 8 }}>
     <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : (pct >= 50 ? GOLD : '#dc2626') }} />

@@ -1,9 +1,9 @@
-pkg839 - Projects are archived, never deleted. Includes pkg811-838.
-=====================================================================
+pkg840 - Forms Missing cards open a drill-down. Includes pkg811-839.
+======================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-838. It contains all of them. Forty-seven files.
+DEPLOY THIS INSTEAD OF pkg811-839. It contains all of them. Forty-eight files.
 
-*** ELEVEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg838)
+*** ELEVEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg838/839)
 
   lib/uploadFile.js                                   (pkg838)
   lib/inquery.js
@@ -21,94 +21,62 @@ DEPLOY THIS INSTEAD OF pkg811-838. It contains all of them. Forty-seven files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-THE FIX - SMALLER THAN IT LOOKS
-=================================
-Archiving was already three-quarters built. 'archived' was already a status, already
-in the labels, already in the Status filter, already in the row dropdown and already
-in the Add/Edit modal. Nothing needed inventing.
+THE CHANGE
+===========
+Every card at the top of Forms Missing now opens a pop-out listing the forms behind
+its number.
 
-What was missing was that Delete still existed alongside it.
+  The % card          every required form across all types
+  Each form card      just that form type
 
-  DELETE IS GONE from the projects list.
+Inside, they are grouped MISSING first, then Upcoming, then Completed - missing is
+the reason anybody opens this page, so it should not be below a list of things that
+are already done. Each row gives the week, the project, who is responsible, and the
+form type where the view covers all of them.
 
-  DELETE IS REFUSED BY THE API, with a message saying to archive instead. It
-  previously had NO guard at all - it removed whatever project number it was given.
-  The only thing stopping anyone was a hidden button, and per your last question that
-  button was hidden in the wrong places: a manually-added project KEEPS manual: true
-  after an Internal Handover is completed against it, because the IHM upsert spreads
-  the existing record. So Delete appeared on projects with full minutes behind them.
-
-  RESTORE appears on archived rows, putting them back to Live.
-
-  ARCHIVING ASKS FIRST, because the project leaves every live list: "It disappears
-  from the Planner, the Site App and every live list, but nothing is deleted. You can
-  restore it from the Archived filter at any time."
-
-  STATUS IS VALIDATED server-side against draft / active / complete / archived. A
-  typo would have set a status no consumer recognises and the project would have
-  vanished from every list with nothing to explain it.
-
-  archivedAt and archivedBy are recorded, and cleared on restore.
+The cards say "Click to see the forms" underneath. A card that does something should
+look like it does; otherwise the only way to find out is to click one.
 
 
-WHY ARCHIVING ALREADY WORKS EVERYWHERE
-========================================
-Every consumer of the project list allowlists 'active' and 'draft' rather than
-excluding 'complete'. So a status they have never heard of drops out on its own.
-Checked all of them:
+ONE DECISION THAT MATTERS
+==========================
+THE DRILL-DOWN READS ALL ROWS, NOT THE FILTERED ONES.
 
-    Planner, project process board        draft, active      archived excluded
-    Site badges, RAMS approvals, notices   draft, active      archived excluded
-    RAMS matrix                            draft, active      archived excluded
-    Site App project picker                active             archived excluded
+The cards are built from the API's own summary, which knows nothing about the page's
+Status / Form / Responsible filters. Had the pop-out used the filtered list, pressing
+a card reading 12 missing could have shown four - the number you pressed and the
+number you got would disagree, and there would be nothing on screen to explain why.
 
-That is the allowlist paying off - had any of them been written as "not complete",
-archived projects would have carried on appearing and this would have been a much
-larger change.
+So the pop-out always matches the card. The filters below carry on applying to the
+table only.
 
 
-WHY DELETING WAS NEVER RIGHT
-==============================
-The handover minutes, the RAMS, the drawings, the submissions and the planner
-allocations all key off the project number, and none of them were removed with the
-project. Worse, saving that project's handover again simply recreated the record -
-so on an IHM project the button would have appeared to do nothing.
-
-
-FOR BBB "TEST PROJECT 2"
-=========================
-Set its Status to Archived. It leaves the Live list and everywhere else, and stays
-recoverable. Same for anything else sitting in the list that should not be there.
-
-
-ONE THING LEFT ALONE
-=====================
-pages/api/cron/deliveries-notify.js reads the project list, but only to resolve a
-name against a delivery - it decides what to chase from the deliveries themselves.
-An archived project with an outstanding delivery would still be chased. That is
-arguably correct, and changing it is a behaviour change you have not asked for, so
-it is flagged rather than done.
+ALSO
+-----
+x and Escape close it, never a backdrop click - the same rule as the other modals.
+Where a form type has nothing required in the chosen weeks it says so rather than
+opening an empty box.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg839
-  612 drill-down header                 -> v839
-  Applied for / Certified drill-down    -> v839
+  13-week cash flow build marker        -> pkg840
+  612 drill-down header                 -> v840
+  Applied for / Certified drill-down    -> v840
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg838  RAMS upload failure - files over ~4.5MB were rejected by the platform as
-        plain text, which then failed to parse as JSON. Now uploads straight to Blob
-        storage. Seven photo-upload paths still use the old route and are listed in
-        those notes.
+pkg839  Projects are archived, not deleted. Delete removed from the UI and refused
+        by the API, Restore added, status validated server-side.
+pkg838  RAMS uploads over ~4.5MB were rejected by the platform as plain text, which
+        then failed to parse as JSON. Now straight to Blob storage. Seven photo
+        paths still use the old route - listed in those notes.
 pkg837  Type-to-search on the Overheads staff picker.
 pkg836  "Your name" fields take one person only.
 pkg835  Search on Site App Users - people and projects.
-pkg834  Site App Users table full width.
 
 
 STILL OPEN, ON YOUR WORD
