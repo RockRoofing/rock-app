@@ -1,100 +1,99 @@
-pkg822 - Download the Internal Handover Minutes as a PDF. Includes pkg811-821.
-================================================================================
+pkg823 - The handover PDF printed raw JSON. Includes pkg811-822.
+==================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-821. It contains all of them. Twenty-eight files.
+DEPLOY THIS INSTEAD OF pkg811-822. It contains all of them. Twenty-eight files.
 
 *** FOUR NEW FILES TO CREATE BY HAND ***
 
-  lib/handoverPdf.js                                  (new, this package)
-  pages/api/handover-pdf.js                           (new, this package)
+  lib/handoverPdf.js                                  (from pkg822)
+  pages/api/handover-pdf.js                           (from pkg822)
   components/SearchableSelect.js                      (from pkg818)
   pages/api/admin/variations-instructed-audit.js      (from pkg816 - the
                                                        pages/api/admin/ folder does
                                                        not exist yet either)
 
-Everything else exists. Overwrite in place. LITERAL square brackets on
-pages/design/[project]/, pages/api/project/[id]/ and pages/project/.
+Everything else exists. Overwrite in place.
 
 
-THE BUTTON
-===========
-"Download PDF" in both places:
+WHAT WENT WRONG
+================
+The schema has fourteen field types. I gave the PDF a case for five of them and let
+the rest fall through to JSON.stringify, which is why your J249 came out with
 
-  PRE-CONTRACT   on the handover form, in the button row beside Meeting Complete
-  OPERATIONS     top right of the Handover tab inside a project
+    {"title":"Sales Rep","name":"Colin Sanderson","company":"Renolit",...}
 
-Both produce the identical file, because both fetch it from the same endpoint.
+for the manufacturer contacts, the whole roof build-up as a bracketed array, the
+scope drawings as 200-character blob URLs, and the entire procurement schedule and
+live task list as raw objects. A default that dumps JSON looks like it works right
+up until somebody fills the field in.
 
+Every type now has its own case:
 
-BUILT FROM THE SCHEMA, NOT FROM A LIST OF FIELDS
---------------------------------------------------
-The PDF renders lib/ihmSchema.js - and the CUSTOM template from admin/templates
-where one has been saved, resolved exactly as /api/templates does it for the form.
-
-That matters more than it sounds. A hand-written list of fields in the PDF would go
-stale the first time somebody added a question in admin/templates, and nobody would
-notice until a handover went out with a section missing. Verified by building one
-against a template with an extra section bolted on: the new question appears with no
-change to the PDF code.
-
-It also means the PDF asks the same questions the meeting worked through, rather
-than the stock schema.
-
-
-EMPTY FIELDS ARE PRINTED, NOT SKIPPED
----------------------------------------
-This is the record of a meeting. "Has the warranty period been confirmed? -" is a
-finding. Dropping unanswered fields would make the document read as though the
-question was never asked, which is the opposite of what a handover record is for.
-
-Unanswered values print as a grey dash so they are distinguishable at a glance from
-answered ones.
+  Manufacturer contacts   Colin Sanderson | Sales Rep | Renolit | 07818 336897 | email
+  Scope drawings          the file NAME. A blob URL is noise on a printed document
+                          and is not what anybody reads
+  Roof build-up           the name, the substrate, then one line per layer:
+                            VCL: Renolit, Polythene, 0.25mm
+                            Insulation: Kingspan, TT46, 130mm to 290mm, calc: No
+                          Empty layers are dropped
+  Live tasks              numbered, with owner and close-out date
+  Procurement             numbered by package, with supplier, owner, budget, the
+                          buying notes and any attachments by name
+  Risk log                numbered, with mitigation and owner on their own lines
 
 
-DETAILS
---------
-It prints the SAVED record, not what is on screen. On the Pre-Contract form the
-button is greyed until there is a project number to fetch by, and says so if you
-press it early - before the first save there is nothing stored to print.
+AND THE SCOPE OF WORKS WAS HTML
+---------------------------------
+Scope of works is a `long` field, but the form writes it from a rich-text editor, so
+what is stored is markup. It printed as
 
-Repeatable sections each get their own layout: site contacts as one line per person,
-roof types as a block per type, the risk log numbered, checklists as one line per
-item with its Yes / No / N-A answer.
+    <u style=""><b>5th Floor roof area</b></u><div>Single ply membrane...
 
-Text wraps inside the value column, so a project address or a long note stays in its
-column instead of running across the page.
+Now converted to text. Two details that took a second pass: breaking only on closing
+tags ran the heading into the paragraph after it ("5th Floor roof areaSingle ply
+membrane..."), and breaking on both put a blank line between every line of the
+specification. A closing tag immediately followed by an opening one is collapsed to
+a single break, so consecutive lines sit together and a deliberately empty line
+still comes through as a paragraph break.
 
-Smart quotes and dashes pasted out of Word are converted. pdf-lib throws on anything
-WinAnsi cannot encode, and a curly apostrophe should not fail a download.
 
-A failure returns JSON, not a half-written PDF - otherwise the browser saves a broken
-file and there is nothing to say what went wrong.
+BOTH VIEWS THE SAME - TWO REAL FAULTS IN THE OPS VIEW
+=======================================================
+Checking the two against each other turned up that the Ops read-only view was wrong
+in its own right, independently of the PDF:
 
-Verified against: an entirely empty handover, null data, Word punctuation, a
-half-answered checklist, an empty contacts array, a field holding an unexpected
-object, and a customised template. All produce a document.
+1. ROOF TYPES SHOWED ONLY THE NAME. The renderer read r.type, r.area, r.system and
+   r.notes. A roof type has none of those - emptyRoofType() in lib/ihmSchema.js is
+   { name, substrate, rows[] } - so every field but the name came out empty and the
+   entire specification, the layers the meeting sat and agreed, was not displayed at
+   all. It now shows the substrate and one line per layer, the same content as the
+   PDF.
+
+2. SCOPE OF WORKS SHOWED ITS TAGS. Down the template-driven path a `long` field
+   holding markup went through the plain text row, so the Ops view printed the HTML.
+   It now renders as HTML when it looks like HTML, which is what the older
+   non-template path always did.
+
+Pre-Contract see the form itself, which has always rendered these correctly through
+its own editors. Both sides now agree with each other and with the PDF.
+
+
+VERIFIED
+---------
+Rebuilt the PDF from the exact shapes that produced the gobbledygook on J249 and
+checked the output for JSON artefacts - none. Re-ran the edge cases: empty handover,
+null data, Word punctuation, half-answered checklist, empty contacts array, an
+unexpected object in a field, and a customised template. All still produce a
+document.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg822
-  612 drill-down header                 -> v822
-  Applied for / Certified drill-down    -> v822
+  13-week cash flow build marker        -> pkg823
+  612 drill-down header                 -> v823
+  Applied for / Certified drill-down    -> v823
 
 Hard refresh after deploying.
-
-
-ALSO IN THIS PACKAGE
----------------------
-pkg821  Calculations can be uploaded without issuing - "Do you want to send this for
-        approval?" - with a Not issued state and a send-later action.
-pkg820  Documents as well as images on variations; PDFs merged in whole.
-pkg819  Workings window closes on the x; completeness check moved to the raise.
-pkg818  Type-to-search on the project pickers.
-pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
-        audit endpoint. Run its GET and read it first.
-pkg811-814  Variation PDF wrapping, tracker tidy-up, CRM deal search, cost-comment
-        emails naming the project.
 
 
 STILL OPEN, ON YOUR WORD
@@ -106,5 +105,8 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
-  - The same "send for approval?" question on the other design pages - drawings,
-    tech submittals, warranties, leak test certs.
+  - The same "send for approval?" question on the other design pages.
+  - The scope drawings and procurement attachments are named on the handover PDF but
+    not merged into it. The variation PDF now merges attached PDFs whole (pkg820) and
+    the same could be done here, which would make the handover a single document
+    carrying its drawings. Say the word.

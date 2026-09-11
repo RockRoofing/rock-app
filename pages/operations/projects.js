@@ -448,14 +448,34 @@ function HandoverReadOnly({ projectNo }) {
     </div>
   ) : null
 
+  // THE BUILD-UP, NOT JUST THE NAME.
+  //
+  // This read r.type, r.area, r.system and r.notes. A roof type does not have any of
+  // those - emptyRoofType() in lib/ihmSchema.js is { name, substrate, rows[] } - so
+  // every field but the name came out empty and the entire specification, the layers
+  // somebody sat in a meeting to agree, was not shown at all.
   const roofTypesBlock = (list) => (Array.isArray(list) && list.length) ? (
     <div style={{ padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
       <div style={{ ...labelCol, width: 'auto', marginBottom: 6 }}>Roof Types</div>
-      {list.map((r, i) => (
-        <div key={i} style={{ fontSize: 13.5, color: INK, padding: '3px 0' }}>
-          {[r.type || r.name, r.area != null ? `${r.area} m2` : '', r.system, r.notes].filter(Boolean).join('  ·  ')}
-        </div>
-      ))}
+      {list.map((rt, i) => {
+        const rows = (Array.isArray(rt.rows) ? rt.rows : [])
+          .map(r => ({ layer: r.layer, detail: [r.manufacturer, r.reference, r.thickness, r.calc ? `calc: ${r.calc}` : ''].filter(Boolean).join(', ') }))
+          .filter(r => r.detail)
+        return (
+          <div key={i} style={{ border: '1px solid #f0efec', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+            <div style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>{rt.name || `Roof type ${i + 1}`}</div>
+            {rt.substrate && <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>Substrate: {rt.substrate}</div>}
+            {rows.length === 0
+              ? <div style={{ fontSize: 12.5, color: '#aaa', marginTop: 4 }}>No build-up recorded</div>
+              : rows.map((r, ri) => (
+                <div key={ri} style={{ display: 'flex', gap: 10, fontSize: 12.5, marginTop: 3 }}>
+                  <span style={{ width: 150, flexShrink: 0, color: '#888' }}>{r.layer || 'Layer'}</span>
+                  <span style={{ color: INK }}>{r.detail}</span>
+                </div>
+              ))}
+          </div>
+        )
+      })}
     </div>
   ) : null
 
@@ -534,7 +554,14 @@ function HandoverReadOnly({ projectNo }) {
       case 'date': return row(f.label, fmtDate(v))
       case 'richtext':
       case 'html': return htmlRow(f.label, v)
-      default: return row(f.label, typeof v === 'string' ? v : (v != null && typeof v !== 'object' ? String(v) : ''))
+      // Scope of works is a `long` field that the form writes from a rich-text editor,
+      // so its stored value is markup. Down this path it printed the tags. Rendered as
+      // HTML when it looks like HTML, which is what the PDF does with it and what the
+      // non-template path below has always done.
+      default: {
+        if (typeof v === 'string' && /<[a-z/][\s\S]*>/i.test(v)) return htmlRow(f.label, v)
+        return row(f.label, typeof v === 'string' ? v : (v != null && typeof v !== 'object' ? String(v) : ''))
+      }
     }
   }
 
