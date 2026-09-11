@@ -1,9 +1,10 @@
-pkg813 - Inline add-row gone, Add Variation moved into the filter box. Includes pkg812.
-=========================================================================================
+pkg814 - Variation PDF wraps long text. Includes pkg811-813.
+==============================================================
 
-DEPLOY THIS INSTEAD OF pkg811/812. It contains both. Six files, all exist.
+DEPLOY THIS INSTEAD OF pkg811/812/813. It contains all three. Seven files, all exist.
 
-  pages/variations.js                         (this change)
+  lib/variationPdf.js                         (this change)
+  pages/variations.js                         (pkg813 - add-row removed, button moved)
   pages/crm.js                                (pkg812 - search from inside a deal)
   pages/api/project/[id]/cost-comments.js     (pkg811 - project name on the email)
   pages/project/[id].js                       (pkg811)
@@ -13,61 +14,78 @@ DEPLOY THIS INSTEAD OF pkg811/812. It contains both. Six files, all exist.
 pkg810 first if you have not deployed it.
 
 
-THE CHANGE
-===========
-The persistent add-row at the top of the Variation Tracker table is gone. It was a
-row of empty inputs sitting directly above the data, led by a project dropdown and
-a box reading "Description" - which is a reasonable thing to read as a search bar.
+THE FAULT
+==========
+The Variation Description in the header block was drawn as a single line with
+page.drawText, which does not wrap. Anything longer than the column ran straight
+through the divider and over "Requested by", exactly as your screenshot shows.
 
-Add Variation now sits at the right-hand end of the filter box, and is a good deal
-bigger: 15px bold, 11px by 22px padding, against 13px and 7px by 16px before. It
-opens the same modal the nav button always did, so nothing about adding a variation
-has changed except where you press.
+The item descriptions had the opposite problem and it was worse: they were CUT to
+fit, with
 
+    while (t && f.widthOfTextAtSize(t, size) > w - 5) t = t.slice(0, -1)
 
-ONE BUTTON, ONE PLACE
-----------------------
-There were three ways to add a variation and now there is one.
+so the end of a long description was silently thrown away. No ellipsis, no sign
+anything was missing. A customer reading a priced variation would simply never see
+the rest of it.
 
-  - the nav button, top right                  REMOVED
-  - a duplicate in the embed header            REMOVED
-  - the inline row                             REMOVED
-  - the filter box button                      the one that remains
-
-The embed had its own copy because the nav is not rendered there. The filter box
-is, so a single button now serves both and there is no second copy to drift.
+The clarifications block was the only part of the file that wrapped correctly.
 
 
-DETAILS WORTH KNOWING
-----------------------
-The button is pushed right with marginLeft: auto rather than a spacer, so it still
-lands at the right-hand end when the filters wrap onto a second line on a narrow
-screen.
+THE FIX
+========
+One wrapToWidth() helper, used by all three.
 
-The inline row's state and its save function are removed as well, not just the
-markup - inlineAdd, inlineSaving, inlineProject, saveInlineAdd and the inlineCell
-style. Dead code that still writes variations is worth deleting rather than
-leaving for somebody to find later and wonder about. The modal's save path is
-untouched and was always the same one.
+  HEADER   The box now grows to fit the text rather than the text running out of
+           the box. Labels stay on the first line, values flow beneath, and the
+           divider between the two columns is drawn to the new height.
+
+  ITEMS    The description wraps and the ROW grows with it. Quantity, Unit, Rate
+           and Total stay on the first line. The page break is measured against
+           that row's actual height, so a tall row cannot start too near the bottom
+           and run off the page.
+
+  NARROW   Quantity and Unit are too narrow to wrap into, so they still clip - but
+  COLUMNS  now end in an ellipsis, so a clipped value looks clipped instead of
+           looking complete.
+
+  CLARIF.  Now uses the shared helper instead of its own private copy.
+
+Wrapping is by MEASURED width, not a character count: at 8pt Helvetica "W" and "i"
+are nothing like the same width, so a character limit either wastes a third of the
+column or overflows it anyway. A single word wider than the column is broken
+mid-word, so a long reference or a pasted URL cannot overflow either.
 
 
-ALSO IN THIS PACKAGE
----------------------
-pkg812: a search box in the CRM deal's top bar. Opening a deal replaces the whole
-page, so the toolbar search disappears and getting between projects meant going
-back to the list. Matches on the same rule as the rest of the CRM, ranks title
-matches above buried ones, includes won and lost, excludes the deal you are in.
+VERIFIED
+---------
+Built the PDF end to end with your exact description and rendered it to an image to
+look at, rather than trusting that it compiled.
 
-pkg811: the cost-comment mention email names the project rather than its GUID.
+    header description   -> 3 lines, widest 225.2pt against a 226.3pt column,
+                            nothing crossing the divider, "Requested by: Gareth
+                            Rickerby" untouched in its own cell
+    item description     -> 3 lines, row grown, figures aligned on the first line
+    73-char unbroken
+    token                -> broken across two lines inside the column
+    empty / null         -> one empty line, no crash
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg813
-  612 drill-down header                 -> v813
-  Applied for / Certified drill-down    -> v813
+  13-week cash flow build marker        -> pkg814
+  612 drill-down header                 -> v814
+  Applied for / Certified drill-down    -> v814
 
 No new dashboard cache marker. Hard refresh after deploying.
+
+
+WORTH A LOOK AFTER THIS
+------------------------
+The same drawText-without-wrapping pattern will exist in the other PDFs -
+applicationPdf.js in particular has a description column. I have not touched it,
+because you have not reported a problem there and it is a bigger file, but the
+helper is now written and reusable if you want the same treatment.
 
 
 STILL OPEN, ON YOUR WORD
