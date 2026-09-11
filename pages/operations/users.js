@@ -86,7 +86,11 @@ export default function UsersPage() {
   }
 
   return (
-    <OperationsShell active="/operations/users" title="Site App Users" allow={['management', 'admin']}>
+    // `wide` - the shell's own flag for full-width pages, which it says is for
+    // tables. Eleven columns inside the default 1100px cap left Projects, Mobile and
+    // Email squeezed into a scroll nobody notices, on a page that is nothing but a
+    // table.
+    <OperationsShell active="/operations/users" title="Site App Users" allow={['management', 'admin']} wide>
       <PageHeading title="Site App Users" sub="People who can log into the Site App"
         action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', company: '', trades: [], active: true }) }} style={primaryBtn}>+ Add user</button>} />
 

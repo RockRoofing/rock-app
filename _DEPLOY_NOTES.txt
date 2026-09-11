@@ -1,9 +1,9 @@
-pkg833 - Site diary crew picker shows only who is on the project. Includes pkg811-832.
-========================================================================================
+pkg834 - Site App Users table goes full width. Includes pkg811-833.
+=====================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-832. It contains all of them. Forty-two files.
+DEPLOY THIS INSTEAD OF pkg811-833. It contains all of them. Forty-three files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-832)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-833)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -22,58 +22,43 @@ middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 THE CHANGE
 ===========
-"Personnel on site working on behalf of Rock" now lists only the people allocated to
-that project in the Planner, instead of every operative on the Site App roster.
+One word: `wide` on the page's OperationsShell.
 
-The diary already read the Planner - it pre-selects whoever is on the Gantt for the
-diary date. It just never narrowed the LIST you picked from, so choosing today's gang
-meant scrolling past the whole company.
+The shell already takes that flag and its own comment says it is for full-width
+pages - tables and planning grids - and twenty-five other Operations pages pass it.
+Site App Users did not, so eleven columns were being squeezed into the default
+1100px cap, pushing Projects, Mobile and Email into a sideways scroll that is easy
+to miss on a page which is nothing but a table.
 
-
-DECISIONS WORTH KNOWING
-------------------------
-ALL DATES ON THE PROJECT, not just the diary date. Somebody who turns up a day early,
-or is pulled across to help, is still on this job - and the date may not even be
-filled in when the picker is first opened. Narrowing to a single day would have hidden
-people who are genuinely there.
-
-ONLY THE CREW FIELD. "Insert your name" is the same field type, and it is NOT
-narrowed - the person filling the diary in is not always on the plan for it, and
-locking them out of signing it would be worse than a long list. The crew field is
-identified by the same label rule the file already uses to decide where to pre-select
-from, rather than a second rule of my own.
-
-A PROJECT WITH NOBODY PLANNED ON IT falls back to the full roster. An empty picker
-would make the diary uncompletable, which is a worse failure than a long list.
-
-AND THERE IS A WAY PAST IT. Above the search box: "Showing the 4 on this project.
-Show everyone." Somebody turning up who was not on the plan happens often enough that
-this has to be a default, not a wall. Anyone already selected stays selected whether
-they are on the project or not.
-
-Verified against both day-cell shapes - the legacy array and the newer
-{ status, unnamed, entries } object - since allocations hold a mix of the two.
+No new styling, no override of the shell. It just uses the flag that was already
+there for exactly this.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg833
-  612 drill-down header                 -> v833
-  Applied for / Certified drill-down    -> v833
+  13-week cash flow build marker        -> pkg834
+  612 drill-down header                 -> v834
+  Applied for / Certified drill-down    -> v834
 
-Hard refresh after deploying. On a phone the Site App may need closing and reopening.
+Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg832  View Weekly Labour Allocation pop-out widened to min(1800px, 96vw), scrolls
-        inside a fixed-height card, and no longer closes on a backdrop click.
-pkg831  Fixed "find is not a function" when moving a project between cells.
-pkg830  Click a project in the WLA grid to move that operative-day to another job.
+pkg833  Daily Site Diary crew picker lists only the people allocated to that project,
+        with a "Show everyone" way past it and a fallback to the full roster where
+        nobody is planned on.
+pkg832  View Weekly Labour Allocation pop-out widened and no longer closes on a
+        backdrop click.
+pkg830/831  Click a project in the WLA grid to move an operative-day to another job.
 pkg827-829  In Query tab in Bookkeeping: assignees, comments, approvals, send list
         and the reviewer page.
 pkg824-826  Timesheet CSV from the Planner, six-week labour allocation, water
         ingress labelled on the labour PDFs.
+pkg821-823  Calculations held without issuing, handover PDF, handover field
+        rendering.
+pkg816-820  The `instructed` flag fixed across about twenty readers plus its audit
+        endpoint, type-to-search project pickers, documents on variations.
 
 
 STILL OPEN, ON YOUR WORD
