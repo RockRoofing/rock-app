@@ -1,18 +1,18 @@
-pkg828 - In Query: assignees, comments, approvals and a send-out. Includes pkg811-827.
-=========================================================================================
+pkg829 - In Query: status on the row, a visible Approved view, all months.
+============================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-827. It contains all of them. Thirty-nine files.
+DEPLOY THIS INSTEAD OF pkg811-828. It contains all of them. Thirty-nine files.
 
-*** TEN NEW FILES TO CREATE BY HAND ***
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828)
 
-  This package (In Query):
+  This feature:
     lib/inquery.js
     components/InQueryTable.js
     pages/api/bookkeeping-inquery.js
     pages/api/inquery-review.js
     pages/inquery-review.js
 
-  Outstanding from earlier packages:
+  Outstanding from earlier:
     pages/api/planning-timesheet-csv.js                 (pkg824)
     lib/handoverPdf.js                                  (pkg822)
     pages/api/handover-pdf.js                           (pkg822)
@@ -21,87 +21,77 @@ DEPLOY THIS INSTEAD OF pkg811-827. It contains all of them. Thirty-nine files.
                                                          pages/api/admin/ folder
                                                          does not exist yet either)
 
-middleware.js IS CHANGED in this package - see "the review link" below. Everything
-else exists; overwrite in place.
+middleware.js is changed (from pkg828). Everything else exists; overwrite in place.
 
 
-WHAT IS THERE NOW
-==================
-CATEGORISED BY DEFAULT. Every row on this tab is tagged - to the In Query option -
-so the page's usual "No category assigned" default showed an empty tab. It switches
-on arrival and switches back when you leave, so the other tabs keep their default.
-
-GROUPED BY INVOICE, with a chevron to open the lines, the same as the Costs tab on a
-project. Four lines on one Renolit invoice are one row at the invoice total, not
-four rows to answer separately.
-
-SORTABLE. Click any header. Click again to reverse.
-
-USER RESPONSIBLE. A dropdown of portal users, plus "Someone else..." for a name
-typed in. A typed name MUST have an email address - the list is sent to them and the
-link they get is tied to it, so a name with no address could never be told.
-
-STATUS. In Query or Approved. Everything starts In Query: the absence of a decision
-is not approval, so an invoice nobody has touched still counts as outstanding.
-
-COMMENTS. A thread per invoice, from both sides, with the latest shown on the row.
-
-FILTERS. By status - In Query / Approved / Both, defaulting to In Query - and by
-person, listing only the names actually on the table rather than the whole staff
-list.
-
-SEND LIST. Emails what is on screen, grouped so somebody with nine queries gets one
-email with nine lines rather than nine emails. Already-approved items are not
-re-sent. Afterwards it reports one line per recipient, because "sent" on its own
-cannot tell you which of five people did not get it.
+1. STATUS CHANGEABLE ON THE ROW
+=================================
+The Status cell is now a dropdown. In Query or Approved, straight from the table.
+Approving a run of invoices is the common job and it should not need a modal opened
+and closed for each one. It still works inside the comments window as well.
 
 
-THE REVIEW LINK
-================
-The email contains a link to /inquery-review. It is NOT behind the portal login, and
-middleware.js is changed to allow it and its API through - the people answering
-these are often not portal users, and without those two lines the link bounces to a
-login page they cannot get past.
+2. YOUR APPROVED ITEMS ARE NOT GONE - AND NOW IT SAYS SO
+==========================================================
+They were never deleted. The view defaults to In Query, so approving something makes
+it leave that view, and a collapsed dropdown gave no clue where it went. That reads
+as "the row vanished", which is exactly how you read it - and fairly.
 
-The signed token IS the authentication. It names one email address, it expires after
-60 days, and it SCOPES the response: a token only ever returns the invoices assigned
-to that address, so a forwarded link cannot show somebody else's queries.
+Two changes:
 
-On that page they see each invoice, its lines and its total, and can Approve, put it
-back In Query, or add a comment. Marking it either way is written into the thread as
-a note, so it reads as a history rather than a status that silently changed.
+  The filter is now a SEGMENTED CONTROL WITH COUNTS, not a dropdown:
 
-The page never reads Xero. It shows a snapshot of the lines taken when the list was
-sent, which is why the send writes that snapshot onto the record.
+      [ In Query (12) ]  [ Approved (3) ]  [ All (15) ]
 
+  "Approved (3)" sitting there in plain sight says both that they still exist and
+  where to find them. The counts are taken before the filter is applied, so they
+  always describe the whole tab rather than the view you happen to be in.
 
-APPROVED IS NOT THE END OF IT
-===============================
-Approving records that the cost is right. It does not move the cost.
+  And while you are on In Query with approvals present, a line appears:
+  "3 approved invoices are hidden by this view - they are not gone. Show them."
 
-The bookkeeper then re-tags it in Xero from In Query to the project, at which point
-it stops arriving as In Query and disappears from the tab on its own - it needs no
-action here and nothing is deleted. The record stays, so the Approved filter still
-shows what was said about it right up until it is re-tagged.
+They leave the tab for good only when you re-tag them to a project in Xero.
 
 
-TWO THINGS WORTH KNOWING
-=========================
-KEYED BY date|supplier|reference, matching how the Costs tab groups. The bookkeeping
-feed carries no Xero invoice id, so there is nothing more stable to use. If a
-supplier's date or reference is edited in Xero, that invoice reads as a new one and
-its comments stay with the old key.
+3. MONTHS DEFAULTS TO ALL MONTHS
+==================================
+Done, and a fault of mine fixed with it.
 
-STILL OUTSTANDING FROM pkg827: In Query is a tracking option, so it will also be
-showing up as a PROJECT on Project Financials and the dashboard, with costs and no
-revenue. This package does not change that. It wants deciding alongside whether
-there are other non-project options - Suspense, Overheads - doing the same job.
+The page already had a switchTab() that sets the defaults per tab - Overheads, for
+instance, gets Categorised plus all months. In pkg827 I added the In Query
+categorised default as a SEPARATE useEffect instead of using it.
+
+Two mechanisms for one job, and they fought: switching to Overheads set Categorised,
+then my effect saw a tab that was not In Query, saw Categorised, and set it back to
+No. So pkg827/828 broke the Overheads tab's default.
+
+The effect is deleted and In Query now sits alongside Overheads in switchTab -
+Categorised, all months. One mechanism, and Overheads behaves again.
+
+All months matters here in its own right: a query can sit for months, and defaulting
+to last month hides the old ones, which are the ones that need chasing.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg828
-  612 drill-down header                 -> v828
-  Applied for / Certified drill-down    -> v828
+  13-week cash flow build marker        -> pkg829
+  612 drill-down header                 -> v829
+  Applied for / Certified drill-down    -> v829
 
 Hard refresh after deploying.
+
+
+STILL OPEN, ON YOUR WORD
+-------------------------
+  - In Query is a tracking option, so it also appears as a PROJECT on Project
+    Financials and the dashboard, with costs and no revenue. Worth deciding
+    alongside whether other non-project options exist - Suspense, Overheads.
+  - Release halves are on the Applied-for base, not the Final Account base their own
+    tooltip and the certificate use (pkg798 notes). Material mid-contract.
+  - MCD placement flags default TRUE in lib/applications.js, FALSE in
+    pages/api/applications.js (pkg797 notes).
+  - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
+    application of ANY status.
+  - A script listing every project holding settings under BOTH keys.
+  - An hours field on the Planner day cell, for real hours in the timesheet CSV.
+  - Separate week controls for the labour download and the operative email.

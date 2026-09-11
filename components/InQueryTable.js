@@ -79,6 +79,14 @@ export default function InQueryTable({ rows, statusFilter, onStatusFilterChange 
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]))
   }, [groups])
 
+  // Counts across everything on the tab, BEFORE the status filter - they exist to
+  // tell you what is in the other views, so they cannot be filtered by the view.
+  const counts = useMemo(() => ({
+    query: groups.filter(g => g.status !== 'approved').length,
+    approved: groups.filter(g => g.status === 'approved').length,
+    all: groups.length,
+  }), [groups])
+
   const filtered = useMemo(() => {
     let out = groups
     if (statusFilter) out = out.filter(g => g.status === statusFilter)
@@ -132,12 +140,24 @@ export default function InQueryTable({ rows, statusFilter, onStatusFilterChange 
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <select value={statusFilter} onChange={e => onStatusFilterChange(e.target.value)}
-          style={{ padding: '7px 10px', fontSize: 13, border: '1px solid #e5e5e5', borderRadius: 7, fontFamily: 'inherit' }}>
-          <option value="query">In Query</option>
-          <option value="approved">Approved</option>
-          <option value="">Both</option>
-        </select>
+        {/* A segmented control with COUNTS, not a dropdown.
+            Approving something makes it leave the default view, and a collapsed
+            dropdown gives no clue where it went - it reads as though the row was
+            deleted. "Approved (3)" sitting next to it says plainly that it is still
+            there and where to find it. */}
+        <div style={{ display: 'inline-flex', border: '1px solid #e5e5e5', borderRadius: 8, overflow: 'hidden' }}>
+          {[['query', 'In Query', counts.query], ['approved', 'Approved', counts.approved], ['', 'All', counts.all]].map(([v, label, n]) => (
+            <button key={v || 'all'} onClick={() => onStatusFilterChange(v)}
+              style={{
+                padding: '7px 13px', fontSize: 12.5, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                fontWeight: statusFilter === v ? 700 : 500,
+                background: statusFilter === v ? '#1a1a2e' : '#fff',
+                color: statusFilter === v ? '#fff' : '#555',
+              }}>
+              {label} ({n})
+            </button>
+          ))}
+        </div>
         <select value={userFilter} onChange={e => setUserFilter(e.target.value)}
           style={{ padding: '7px 10px', fontSize: 13, border: '1px solid #e5e5e5', borderRadius: 7, fontFamily: 'inherit', minWidth: 190 }}>
           <option value="">Everyone</option>
@@ -153,6 +173,13 @@ export default function InQueryTable({ rows, statusFilter, onStatusFilterChange 
         </button>
       </div>
 
+      {statusFilter === 'query' && counts.approved > 0 && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', borderRadius: 8, padding: '7px 11px', fontSize: 12.5, marginBottom: 10 }}>
+          {counts.approved} approved {counts.approved === 1 ? 'invoice is' : 'invoices are'} hidden by this view - they are not gone.
+          {' '}<button onClick={() => onStatusFilterChange('approved')} style={{ background: 'none', border: 'none', padding: 0, color: '#15803d', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, fontFamily: 'inherit' }}>Show them</button>
+          {' '}They leave this tab for good once you re-tag them to a project in Xero.
+        </div>
+      )}
       {msg && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '8px 11px', fontSize: 12.5, marginBottom: 10 }}>{msg}</div>}
       {sendResult && (
         <div style={{ background: '#f7fdf9', border: '1px solid #bbf7d0', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, marginBottom: 10 }}>
@@ -218,10 +245,23 @@ export default function InQueryTable({ rows, statusFilter, onStatusFilterChange 
                     {g.assignee && <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{g.assignee.email}</div>}
                   </td>
                   <td style={td}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: '2px 8px', whiteSpace: 'nowrap',
-                      background: g.status === 'approved' ? '#dcfce7' : '#fef3c7', color: g.status === 'approved' ? '#15803d' : '#b45309' }}>
-                      {g.status === 'approved' ? 'Approved' : 'In Query'}
-                    </span>
+                    {/* Changed here, not only inside the comments window. Approving a
+                        run of invoices is the common job and it should not need a
+                        modal opened and closed for each one. */}
+                    <select
+                      value={g.status}
+                      onChange={e => post({ action: 'status', key: g.key, status: e.target.value })}
+                      title="Change the status"
+                      style={{
+                        fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: '3px 8px', cursor: 'pointer',
+                        fontFamily: 'inherit', appearance: 'none', textAlign: 'center',
+                        background: g.status === 'approved' ? '#dcfce7' : '#fef3c7',
+                        color: g.status === 'approved' ? '#15803d' : '#b45309',
+                        border: `1px solid ${g.status === 'approved' ? '#bbf7d0' : '#fde68a'}`,
+                      }}>
+                      <option value="query">In Query</option>
+                      <option value="approved">Approved</option>
+                    </select>
                   </td>
                   <td style={td}>
                     <button onClick={() => { setCommentFor(g.key); setDraft('') }}

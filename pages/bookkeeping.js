@@ -182,17 +182,6 @@ export default function BookkeepingPage() {
   const [assigned, setAssigned] = useState('no')   // default: No category assigned
   const [inqStatus, setInqStatus] = useState('query')  // In Query tab: query | approved | both
 
-  // IN QUERY IS CATEGORISED BY DEFINITION.
-  //
-  // Every row on that tab is tagged - to the In Query tracking option - so the
-  // default of "No category assigned" would show an empty tab and look broken.
-  // Switched on arrival, and switched back on the way out so the other tabs keep
-  // the default they had.
-  useEffect(() => {
-    if (tab === 'inquery') setAssigned('yes')
-    else if (assigned === 'yes') setAssigned('no')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab])
   const [page, setPage] = useState(1)
   const PER_PAGE = 50
   const [syncing, setSyncing] = useState('')     // '' | 'benchmark' | 'invoices' | 'wages'
@@ -310,7 +299,15 @@ export default function BookkeepingPage() {
   function resetFilters() { setMonth(''); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('') }
   function switchTab(t) {
     setTab(t); setSupplier(''); setCodes([]); setCatFilter('')
-    if (t === 'ignored') {           // Overheads: default to Categorised + all months
+    // IN QUERY IS CATEGORISED BY DEFINITION - every row on it is tagged, to the In
+    // Query option - so the usual "No category assigned" default showed an empty tab.
+    // All months too: a query can sit for months and defaulting to last month hides
+    // the old ones, which are the ones that matter.
+    //
+    // Handled HERE rather than in an effect of its own. I first wrote this as a
+    // separate useEffect and it fought this function - it also reset the Overheads
+    // tab's deliberate Categorised default back to No.
+    if (t === 'ignored' || t === 'inquery') {
       setAssigned('yes'); setMonth('')
     } else {
       setAssigned('no'); setMonth(defaultMonthFor(t, data))
