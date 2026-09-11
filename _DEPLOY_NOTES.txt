@@ -1,9 +1,9 @@
-pkg836 - "Your name" takes one person only. Includes pkg811-835.
-==================================================================
+pkg837 - Type-to-search on the Overheads staff picker. Includes pkg811-836.
+=============================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-835. It contains all of them. Forty-three files.
+DEPLOY THIS INSTEAD OF pkg811-836. It contains all of them. Forty-three files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-835)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-836)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -13,58 +13,48 @@ DEPLOY THIS INSTEAD OF pkg811-835. It contains all of them. Forty-three files.
   pages/api/planning-timesheet-csv.js                 (pkg824)
   lib/handoverPdf.js                                  (pkg822)
   pages/api/handover-pdf.js                           (pkg822)
-  components/SearchableSelect.js                      (pkg818)
+  components/SearchableSelect.js                      (pkg818)  <- this one is what
+                                                                   makes pkg837 work
   pages/api/admin/variations-instructed-audit.js      (pkg816 - the pages/api/admin/
                                                        folder does not exist yet)
 
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
+IF components/SearchableSelect.js IS NOT CREATED, THE PLANNER WILL NOT BUILD. It was
+already required by pkg830's project-move picker; this package adds a second use.
+
 
 THE CHANGE
 ===========
-"Insert your name" and "Your name" now take ONE person. Choosing somebody replaces
-the choice rather than adding to it, so picking the wrong name and then the right
-one leaves one name on the form, not two.
+"Select staff..." in the Overheads day modal is now typeable. Type any part of a
+name and the list narrows; arrows move, Enter picks, Escape closes.
 
-They are members fields, which are multi-select, so it was possible to put three
-people in the box for who filled the diary in.
-
-Identified by the same /your name/i rule the auto-fill already uses to decide where
-to drop the logged-in user - not a second rule of my own. Checked against every
-members field in formDefs.js:
-
-    Insert your name                                   single
-    Your name  (x3)                                    single
-    Personnel on site working on behalf of Rock        unchanged, multi
-    Operatives on site                                 unchanged, multi
-    Rock personnel on site                             unchanged, multi
-    Operatives on site on the last day of the project  unchanged, multi
+Same component the variation tracker, the variation builder and the WLA project-move
+already use. A native select does have type-ahead, but it only matches the START of
+the option, so typing a surname on a roster this long found nothing.
 
 
-THE STORED VALUE IS STILL AN ARRAY OF ONE
-===========================================
-It has always been stored that way. Existing submissions, the exports and the
-missing-forms checks all read it as an array, so changing the shape to a bare string
-to suit the UI would have broken every form already submitted.
-
-The only difference is that the array can no longer hold more than one name.
-
-Wording follows: the search box reads "Search for your name..." on those fields, and
-once a name is picked the list says "Pick a different name to change it" rather than
-"Everyone is selected".
+NOT CHANGED, DELIBERATELY
+--------------------------
+The only other operative dropdown in the planner is the installer filter on "Review
+past O/A". That lists only people who actually have an overnight allowance recorded,
+which is a short list - and a search box on six options is friction rather than help.
+Same reasoning as leaving Customer, CM and Estimator as plain selects on the
+variation tracker.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg836
-  612 drill-down header                 -> v836
-  Applied for / Certified drill-down    -> v836
+  13-week cash flow build marker        -> pkg837
+  612 drill-down header                 -> v837
+  Applied for / Certified drill-down    -> v837
 
-Hard refresh. On a phone the Site App may need closing and reopening.
+Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
+pkg836  "Your name" fields take one person only.
 pkg835  Search on Site App Users - people and projects, by job number or name.
 pkg834  Site App Users table full width.
 pkg833  Daily Site Diary crew picker lists only people allocated to that project.

@@ -1120,10 +1120,18 @@ function OverheadsDayModal({ dates = [], data, ops, onClose, onDone }) {
           <div style={{ padding: 14, background: '#faf9fc', borderRadius: 10, marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#6b4ea8', marginBottom: 8 }}>Add staff to the selected {sorted.length === 1 ? 'day' : `${sorted.length} days`}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select value={opId} onChange={e => setOpId(e.target.value)} style={{ ...input, flex: 1, minWidth: 160 }}>
-                <option value="">Select staff...</option>
-                {ops.map(o => <option key={o.id} value={o.id}>{`${o.firstName} ${o.lastName}`.trim() || o.id}</option>)}
-              </select>
+              {/* Type to narrow. The same picker the variation tracker, the builder and
+                  the project-move use - a native select only type-ahead matches the
+                  START of an option, so typing a surname found nothing on a roster
+                  this long. */}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <SearchableSelect
+                  value={opId}
+                  placeholder="Select staff, or type to search..."
+                  emptyLabel="Nobody matches that"
+                  options={ops.map(o => ({ value: o.id, label: `${o.firstName || ''} ${o.lastName || ''}`.trim() || o.id }))}
+                  onChange={(v) => setOpId(v)} />
+              </div>
               <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...input, minWidth: 140 }}>
                 {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
