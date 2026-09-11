@@ -1,7 +1,7 @@
-pkg826 - Water ingress was invisible on the labour PDFs. Includes pkg811-825.
-================================================================================
+pkg827 - "In Query" tab in Bookkeeping. Includes pkg811-826.
+==============================================================
 
-DEPLOY THIS INSTEAD OF pkg811-825. It contains all of them. Thirty-one files.
+DEPLOY THIS INSTEAD OF pkg811-826. It contains all of them. Thirty-three files.
 
 *** FIVE NEW FILES TO CREATE BY HAND ***
 
@@ -16,78 +16,95 @@ DEPLOY THIS INSTEAD OF pkg811-825. It contains all of them. Thirty-one files.
 Everything else exists. Overwrite in place.
 
 
-YOUR QUESTION: YES, BOTH ARE INCLUDED
-=======================================
-assembleWeek folds overheads and water ingress into each person's day cells, and
-the PDF prints every entry in a cell, so they come out alongside the project work.
-Built one to look at rather than reading the code and assuming:
+THE TAB
+========
+Bookkeeping now reads: Costs (Bills) | IN QUERY | Sales Invoices | Direct Wages |
+Overheads | Retention | WIP.
 
-  Alan Clark   Farmstead Drive | Holidays | WI: Leak - Royal Tea | Ops Support |
-               Winnersh (AM)
-
-  Overheads       by category - Holidays, Sick, Internal Time, Ops Support,
-                  Paid Leave, Unpaid Leave
-  Water ingress   by job name
-  Half days       marked (AM) / (PM)
-  Provisional     in blue, confirmed in green
-  Unnamed slots   a "TBC - <project>" row reading "2 unnamed"
-
-ONE DIFFERENCE BETWEEN THE TWO VERSIONS, which is deliberate and worth knowing: the
-ACCOUNTS version drops the "TBC - unnamed" rows and adds the O/A markers and an
-overnight allowance total. Nobody is paid for an unnamed slot, so it has no place on
-a sheet going to accounts. The general Weekly Labour Allocation keeps them, because
-a gap in next week's labour is the thing you want to see.
+Same columns, same month and supplier filters, same Labour/Materials filter and the
+same export as the Costs tab - In Query rows are cost lines, they are just parked.
+A short note at the top of the tab says what it is, so somebody opening it cold does
+not read it as another project.
 
 
-AND A DEFECT THE CHECK TURNED UP
-==================================
-Water ingress was there, but you could not tell it apart from a project.
+WHERE THOSE COSTS WERE GOING BEFORE
+=====================================
+Nowhere new - and that is the point. A tracking option looks exactly like a project
+to everything downstream, because a project IS a tracking option here. So anything
+tagged In Query was already arriving as a project called "In Query" and being
+counted in the Costs tab as project spend.
 
-assembleWeek labels a call-out with a droplet - "<droplet> Leak - Royal Tea" - and
-the PDF sanitiser strips anything above Latin-1 so pdf-lib cannot throw. The droplet
-went with it, and a leak visit printed as a bare job name, identical in appearance
-to a planned project. On screen the planner marks it clearly; on the sheet that goes
-to accounts and out to operatives, it did not.
+They now route to their own tab instead, and out of the Costs figures. A cost parked
+in query is in the books but not yet on a job, and it should not be adding to job
+cost until somebody says which job.
 
-It now reads "WI: Leak - Royal Tea". Mapped before the catch-all strip, the same way
-the sanitiser already handles smart quotes and bullets.
+The tracking option beats the account category, so an In Query line lands in the tab
+whatever code it carries. And a sales invoice tagged In Query is no longer listed as
+a sale against a project.
 
-This affects both labour PDFs. The timesheet CSV from pkg824 was never affected - it
-reads the water-ingress store directly and puts those rows under their own job
-number.
+Matched loosely on the name, because the option is typed by hand in Xero:
+
+    "In Query", "in query", "IN QUERY", "In  Query", " InQuery "   all match
+    "Inquiry", "In Query Ltd", "J228 - Farmstead"                  do not
 
 
-ALSO IN THIS PACKAGE (pkg825)
-------------------------------
-"How far ahead" offers 1 to 6 weeks instead of 1 to 4, and the Accounts report's
-Weeks dropdown with it. No server change was needed - both PDF routes always
-accepted up to 26.
+THE BIT YOU SHOULD KNOW ABOUT
+===============================
+This fixes Bookkeeping. It does NOT fix everywhere else.
 
-Still worth remembering: that control drives the download AND "Send to operatives".
-Choosing 6 emails operatives six weeks of allocation. Say the word if the email
-should stay at four and the two need separate controls.
+Because In Query is a tracking option, it will also be appearing as a PROJECT on
+Project Financials, in the dashboard project list, and anywhere else that builds its
+list from Xero tracking categories. A project with costs and no revenue drags the
+margin figures it sits in.
+
+I have not changed that here. Excluding it from the dashboard moves numbers on
+pages you have spent this week checking, and it should be a deliberate decision
+rather than something that arrives attached to a new tab.
+
+Two questions worth answering before I do:
+
+  1. Should In Query be hidden from Project Financials and the dashboard entirely?
+  2. Are there other non-project tracking options in Xero doing the same job -
+     "Overheads", "Suspense", anything similar? If so the right fix is one list of
+     non-project options, not a special case for this one.
+
+Tell me and it is a contained change in lib/ and pages/api/dashboard.js.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg826
-  612 drill-down header                 -> v826
-  Applied for / Certified drill-down    -> v826
+  13-week cash flow build marker        -> pkg827
+  612 drill-down header                 -> v827
+  Applied for / Certified drill-down    -> v827
 
-Hard refresh after deploying.
+Hard refresh after deploying. The Bookkeeping page reads live, so no cache marker.
+
+
+ALSO IN THIS PACKAGE
+---------------------
+pkg826  Water ingress was printing as a bare job name on both labour PDFs - the
+        droplet was being stripped with the rest of the non-Latin-1 characters. Now
+        reads "WI: <job>".
+pkg825  Weekly Labour Allocation offers up to 6 weeks.
+pkg824  Timesheet CSV from the Planner.
+pkg823  Handover PDF printed raw JSON for nine of fourteen field types; also fixed
+        the Ops view showing only the NAME of a roof type.
+pkg822  Download the Internal Handover Minutes as a PDF.
+pkg821  Calculations can be uploaded without issuing them.
+pkg820  Documents as well as images on variations; PDFs merged in whole.
+pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
+        audit endpoint. Run its GET and read it first.
 
 
 STILL OPEN, ON YOUR WORD
 -------------------------
+  - In Query appearing as a project on Project Financials and the dashboard, above.
   - Release halves are on the Applied-for base, not the Final Account base their own
-    tooltip and the certificate use (pkg798 notes). Material mid-contract. One line.
+    tooltip and the certificate use (pkg798 notes). Material mid-contract.
   - MCD placement flags default TRUE in lib/applications.js, FALSE in
     pages/api/applications.js (pkg797 notes). Moves issued certificates.
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
-  - An hours field on the Planner day cell, if the timesheet CSV is to carry real
-    hours rather than 8 and 4.
-  - Separate week controls for the download and the operative email.
-  - The same "send for approval?" question on the other design pages.
-  - Merging attached PDFs into the handover document, as the variation PDF now does.
+  - An hours field on the Planner day cell, for real hours in the timesheet CSV.
+  - Separate week controls for the labour download and the operative email.

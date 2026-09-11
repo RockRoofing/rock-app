@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 
 // One list of tabs, used by the tab strip and by the export filename. Two copies would
 // drift, and the file somebody saves is the one that has to say what it is.
-const TABS = [['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention'], ['wip', 'WIP']]
+const TABS = [['bills', 'Costs (Bills)'], ['inquery', 'In Query'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention'], ['wip', 'WIP']]
 const TAB_LABELS = Object.fromEntries(TABS)
 // Retention and WIP are windows onto another page. The reconciliation furniture above the
 // tabs - the intro, the accrual warnings, the uncategorised chart and the categorisation
@@ -136,7 +136,7 @@ function BillsUploadModal({ onClose, onUploaded }) {
 // Rows for a given tab (matches the page's tab->data mapping).
 function tabRowsFor(tab, data) {
   if (!data) return []
-  return tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : tab === 'ignored' ? (data.ignored || []) : (data.bills || [])
+  return tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : tab === 'ignored' ? (data.ignored || []) : tab === 'inquery' ? (data.inquery || []) : (data.bills || [])
 }
 // The most recent COMPLETE month (previous calendar month) if that tab has data
 // for it; else the newest month present; else '' (all months).
@@ -229,11 +229,13 @@ export default function BookkeepingPage() {
 
   const rows = useMemo(() => {
     if (!data) return []
-    return tab === 'bills' ? (data.bills || []) : tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : (data.ignored || [])
+    return tab === 'bills' ? (data.bills || []) : tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : tab === 'inquery' ? (data.inquery || []) : (data.ignored || [])
   }, [data, tab])
 
   const isInvoiceTab = tab === 'invoices'
-  const isCostsTab = tab === 'bills'
+  // In Query rows are cost lines with a category, so they want the same
+  // Labour/Materials filter and the same columns as the Costs tab.
+  const isCostsTab = tab === 'bills' || tab === 'inquery'
 
   const months = useMemo(() => [...new Set(rows.map(r => rowMonth(r)).filter(Boolean))].sort().reverse(), [rows])
   const suppliers = useMemo(() => [...new Set(rows.map(r => (r.supplier || r.contact || '').trim()).filter(Boolean))].sort(), [rows])
@@ -495,6 +497,14 @@ export default function BookkeepingPage() {
                 </div>
               </div>
 
+              {tab === 'inquery' && (
+                <div style={{ margin: '0 0 12px', padding: '9px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12.5, color: '#7c2d12' }}>
+                  Costs parked against the <strong>In Query</strong> tracking option in Xero - in the books,
+                  but not yet on a project. They are held out of the Costs tab and out of project spend until
+                  they are re-tagged to the job they belong to.
+                </div>
+              )}
+
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -631,6 +641,9 @@ function ReconPanel({ data, month, tab, onPickMonth, onPickPL }) {
 
   // Uncategorised value per month FOR THE CURRENT TAB only, so the graph reflects
   // the tab you're on (Costs / Sales / Wages).
+  // In Query is not in this list on purpose. Every row in it IS tagged - to the In
+  // Query option - so an "uncategorised" chart over it would always read zero and
+  // say nothing. The tab keeps the Costs chart behind it instead.
   const tabRows = tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : (data.bills || [])
   const uncatByMonth = {}
   for (const r of tabRows) {

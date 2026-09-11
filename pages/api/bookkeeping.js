@@ -98,6 +98,18 @@ export default async function handler(req, res) {
     const wages = []      // Direct Wages tab
     const invoices = []   // Sales Invoices tab
     const ignored = []    // Ignored tab: Ignore-category + untagged overheads
+    const inquery = []    // In Query tab: parked against the In Query tracking option
+
+    // "IN QUERY" IS A TRACKING OPTION, NOT A PROJECT.
+    //
+    // It exists so a cost that is disputed, or that nobody can yet place, can still be
+    // entered in Xero rather than sitting in somebody's inbox. It arrives here looking
+    // exactly like a project, because that is what a tracking option is - so those
+    // lines were landing in the Costs tab and counting as project spend.
+    //
+    // Matched loosely on the NAME: the option is typed by hand in Xero and "In Query",
+    // "in query" and "In  Query" are all the same thing.
+    const isInQuery = (name) => String(name || '').replace(/\s+/g, '').toLowerCase() === 'inquery'
 
     // 1. Categorised items (per-project, read directly above).
     for (const p of perProject) {
@@ -112,11 +124,16 @@ export default async function handler(req, res) {
           hasCode: knownCodes.has(String(l.accountCode)),
           source: l.accountCode === '320' ? 'wages' : 'bills',
         }
-        if (cat === 'ignore' || cat === 'overheads' || cat === 'sales' || cat === 'uncategorised') ignored.push(rec)
+        // The tracking option wins over the account category. A cost parked in query is
+        // parked whatever it is coded to, and it must not be counted as project spend
+        // on the way through.
+        if (isInQuery(project)) inquery.push(rec)
+        else if (cat === 'ignore' || cat === 'overheads' || cat === 'sales' || cat === 'uncategorised') ignored.push(rec)
         else if (rec.source === 'wages') wages.push(rec)
         else bills.push(rec)
       }
       for (const l of (p.invoiceLines || [])) {
+        if (isInQuery(project)) continue   // not a sale against a project
         invoices.push({
           date: l.date || '', month: monthOf(l.date),
           invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
@@ -236,7 +253,7 @@ export default async function handler(req, res) {
       .sort((a, b) => b.diff - a.diff)
 
     res.json({
-      bills, wages, invoices, ignored,
+      bills, wages, invoices, ignored, inquery,
       appCategorised, benchmark,
       categorisation: catConfig,
       knownCodes: [...knownCodes], missingCodes,
