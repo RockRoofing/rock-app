@@ -1,11 +1,11 @@
-pkg816 - The instructed flag, fixed everywhere. Includes pkg811-815.
-======================================================================
+pkg817 - Photos on variations, carried through to every PDF. Includes pkg811-816.
+====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-815. It contains all of them. Twenty-one files.
+DEPLOY THIS INSTEAD OF pkg811-816. It contains all of them. Twenty-one files.
 
 *** ONE NEW FILE AND ONE NEW FOLDER TO CREATE BY HAND ***
 
-  pages/api/admin/variations-instructed-audit.js
+  pages/api/admin/variations-instructed-audit.js      (from pkg816)
 
   The pages/api/admin/ folder does not exist yet - create it, then the file.
 
@@ -13,114 +13,89 @@ Everything else exists. Overwrite in place. Folders with LITERAL square brackets
 pages/api/project/[id]/ and pages/project/.
 
 
-YES - AND IT WAS IN ABOUT TWENTY PLACES
-=========================================
-Your instinct was right, and checking turned up something worse than the original
-bug. `instructed` is stored as a BOOLEAN by the tracker, its modals and Edit Project
-Details, and as the STRING 'yes'/'no' by the Variation Builder. Around twenty
-readers then tested one shape or the other, so roughly half were wrong about any
-given variation - in BOTH directions:
+THE PHOTOS
+===========
+A Photos panel in the Variation Builder, under Clarifications. Add photos, see them
+as thumbnails, click one to open it full size, remove any before saving.
 
-  TRUTHY TESTS (`v.instructed`)          the string 'no' is truthy, so a
-                                         not-instructed variation read as INSTRUCTED
+On a phone the picker opens the camera directly, and it takes several at once.
 
-  STRING TESTS (`v.instructed === 'yes'`) a boolean true failed, so a variation
-                                         instructed from the tracker read as NOT
-                                         instructed
-
-THIS IS WHY YOUR TWO SCREENSHOTS DISAGREED. V14 and V15 really are stored as not
-instructed - the builder withdrew them. The operations report used the correct test
-and told you the truth. Edit Project Details used
-
-    <select value={v.instructed ? 'yes' : 'no'}
-
-so the string 'no' came out truthy and it displayed "Instructed". Project
-Financials did the same thing with `vars.filter(v => v.instructed)` and counted the
-money. Two screens were lying and the one you doubted was right.
+They appear on the variation PDF after the priced work, each with its filename as a
+caption - and because Download, Send to customer and the instruction email all build
+that same PDF through buildVariationPDF, they carry the photos with no change to any
+of those paths.
 
 
-FIXED, AND THE SERIOUS ONES FIRST
------------------------------------
-Three of these were not cosmetic:
+WHERE THEY ARE STORED, AND WHY IT MATTERS
+-------------------------------------------
+On the builder block, as variation.builder.photos.
 
-  settings.js       `if (was.instructed !== 'yes') continue` is the lock that
-                    REFUSES a change to an instructed variation. Against a boolean
-                    it never engaged, so an instructed variation could be edited or
-                    deleted with no refusal at all.
+NOT on variation.attachments, which already exists and looked like the obvious home.
+applicationPdf.js uses that array for something else:
 
-  variation-instruct.js  the guard stopping a customer instructing the same
-                    variation twice. Same test, same failure - a second click on the
-                    link would have recorded a second instruction.
+    const has = Array.isArray(v.attachments) && v.attachments.length > 0
+    if (has || !isInstructed(v) || !v.builder) return v     // ... else generate the
+                                                            // variation PDF into it
 
-  cron/variation-reminders.js  skips variations already instructed. Against a
-                    boolean it did not skip, so the customer was chased to instruct
-                    something they had already instructed.
-
-Plus the display and totals: the project report and its Excel, project financials,
-Edit Project Details, the variation tracker, the CM site forms, the schedule form,
-the project report PDF, the application PDF, and two more inside the builder.
-
-The project-cashflow pair is deliberately untouched: the API normalises once and the
-client reads that contract, which is the pattern the rest of this should have
-followed.
-
-pkg815's builder change is in here too - it now writes a BOOLEAN, which is only safe
-because every reader above was fixed in the same package. On its own it would have
-broken every string test.
+A variation that already has attachments does NOT get its variation PDF generated
+for the application. Putting photos there would have quietly dropped the variation
+document from every application it appeared on, and the photos would have replaced
+it. They live on the builder block instead, and reach the application anyway inside
+the variation PDF.
 
 
-NO LONGER POSSIBLE
--------------------
-pages/api/project/[id]/settings.js is the only write path for variations, and it now
-coerces `instructed` to a boolean on the way in. The stored data converges as records
-are saved and no future reader has to know there were ever two shapes.
+UPLOADS
+--------
+Straight from the browser to Blob storage via @vercel/blob/client and
+/api/blob-upload, which is the route every other upload in the portal takes. Not
+through our own API: serverless request bodies cap at about 4.5MB and two phone
+photos clear that on their own.
 
-The lock's change-signature uses isInstructed too - otherwise an untouched variation
-stored as 'yes' would compare unequal to the same variation now holding true, and the
-lock would refuse a save that changed nothing.
+Compressed first, with the existing lib/compressImage - a phone photo is 3-6MB and
+nothing in a variation PDF needs that. It returns the original untouched for
+anything that is not a raster image, or if compression fails, so an upload never
+breaks because of it.
+
+A photo that fails to upload is named in the error rather than the batch reporting
+"upload failed", which tells you nothing about which one to try again.
+
+An instructed variation is locked, so photos cannot be added or removed once the
+customer has instructed it - same rule as the rest of the builder.
 
 
-AND NO, YOU DO NOT HAVE TO FIX THEM BY HAND
-=============================================
-  pages/api/admin/variations-instructed-audit.js       admin only
+VERIFIED
+---------
+Built the PDF end to end with two real photos - one landscape, one portrait - and
+one deliberately broken URL, then rendered it to images and looked at it.
 
-  GET                          report only, changes nothing
-  POST { "apply": "shape" }    convert every stored string to a boolean
-  POST { "apply": "restore" }  the above, plus re-instruct where there is EVIDENCE
+  landscape photo   scaled to the page width, caption above it
+  portrait photo    too tall for the space left, moved to a fresh page rather than
+                    being squashed or running off the bottom
+  broken URL        prints "[broken.jpg could not be loaded]" and carries on
 
-Two jobs, deliberately separate:
-
-  SHAPE is lossless. 'yes' meant instructed and always did, so it is converted
-  without asking.
-
-  MEANING is not. Once the builder wrote 'no' over an instruction, the record no
-  longer says it was ever instructed, and nothing in it distinguishes "withdrawn by
-  the bug" from "genuinely never instructed". So this does not guess. It looks for
-  evidence:
-
-    - a SENT application whose frozen copy of that variation says instructed. An
-      application that went to the customer that way is proof it was instructed.
-    - the OTHER settings record for the same project saying instructed, where a
-      project is held under both a tracking id and a job number.
-
-  Anything with evidence is listed WITH the evidence and only changed on
-  apply: "restore". Anything that came from the builder, is not instructed, and has
-  no evidence is flagged "review suggested" and never touched automatically -
-  re-instructing those blind would inflate the final account on jobs that were never
-  instructed at all.
-
-Run the GET first and read it. It reports per variation: the project, the number,
-what is stored, the shape fix, any evidence, and the value at stake.
+That last one is deliberate. A photo that will not load must not take the document
+down with it, and it must not vanish silently either - a variation quietly missing
+its evidence, with nothing to say any was meant to be there, is worse than a line
+admitting it.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg816
-  612 drill-down header                 -> v816
-  Applied for / Certified drill-down    -> v816
+  13-week cash flow build marker        -> pkg817
+  612 drill-down header                 -> v817
+  Applied for / Certified drill-down    -> v817
 
-Cache marker varsIdWins_v1 (from pkg815). The audit clears the dashboard cache
-itself when it applies anything. Hard refresh after deploying.
+Hard refresh after deploying.
+
+
+ALSO IN THIS PACKAGE (pkg816)
+------------------------------
+The `instructed` flag fixed across about twenty readers, in both directions, plus
+the three that were not cosmetic: the lock refusing changes to an instructed
+variation, the guard against a customer instructing twice, and the reminder cron
+chasing already-instructed variations. Normalised on write. And the admin audit
+endpoint so the existing data can be repaired without doing it by hand - run the GET
+first and read it before applying anything.
 
 
 STILL OPEN, ON YOUR WORD

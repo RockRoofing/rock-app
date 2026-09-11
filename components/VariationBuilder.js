@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { projectVariations, projectLabel } from '../lib/variationInstruct'
 import { isInstructed } from '../lib/applications'
+import { upload } from '@vercel/blob/client'
+import { compressImage } from '../lib/compressImage'
 
 // ---------------------------------------------------------------------------
 // Variation Builder
@@ -422,6 +424,10 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [header, setHeader] = useState({ varNumber: '', date: todayISO(), requestedBy: '', description: '' })
   const [items, setItems] = useState([])
   const [clar, setClar] = useState(BASE_CLARIFICATIONS.slice())
+  // Site photos attached to this variation. [{ url, name }], same shape as every other
+  // attachment in the portal.
+  const [photos, setPhotos] = useState([])
+  const [photoBusy, setPhotoBusy] = useState('')
   const [editing, setEditing] = useState(null)   // index into items
   const [saving, setSaving] = useState(false)
   const [raised, setRaised] = useState(null)     // the variation just saved
@@ -491,7 +497,42 @@ export default function VariationBuilder({ projects, onSaved }) {
     })
     setItems((b.items || []).map(x => ({ ...x })))
     setClar(b.clarifications?.length ? b.clarifications.slice() : BASE_CLARIFICATIONS.slice())
+    setPhotos(Array.isArray(b.photos) ? b.photos.slice() : [])
     setMsg('')
+  }
+
+  // PHOTO UPLOAD.
+  //
+  // Straight from the browser to Blob storage via @vercel/blob/client, the same route
+  // every other upload in the portal takes. Not through our own API: serverless request
+  // bodies cap at about 4.5MB and a couple of phone photos clear that easily.
+  //
+  // Compressed first - a modern phone photo is 3-6MB and nobody needs that in a
+  // variation PDF. compressImage returns the original untouched if it is not a raster
+  // image or if anything goes wrong, so an upload never fails because of it.
+  async function addPhotos(fileList) {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    setPhotoBusy(`Uploading ${files.length} photo${files.length === 1 ? '' : 's'}...`)
+    const added = []
+    for (const f of files) {
+      try {
+        const toUpload = await compressImage(f)
+        const blob = await upload(f.name || `photo-${Date.now()}.jpg`, toUpload, {
+          access: 'public',
+          handleUploadUrl: '/api/blob-upload',
+          contentType: toUpload.type || f.type || 'image/jpeg',
+        })
+        added.push({ url: blob.url, name: f.name || 'Photo' })
+      } catch (e) {
+        // Report the one that failed rather than the whole batch - with several
+        // photos, "upload failed" tells you nothing about which to try again.
+        setPhotoBusy(`Could not upload ${f.name || 'a photo'}: ${e.message || 'upload failed'}`)
+      }
+    }
+    // Clear the status only on success. Where nothing uploaded, the error set above
+    // stays on screen - that is the whole point of it.
+    if (added.length) { setPhotos(prev => [...prev, ...added]); setPhotoBusy('') }
   }
 
   function newVariation() {
@@ -504,6 +545,7 @@ export default function VariationBuilder({ projects, onSaved }) {
     setHeader({ varNumber: nextSentLabel, date: todayISO(), requestedBy: '', description: '' })
     setItems([])
     setClar(BASE_CLARIFICATIONS.slice())
+    setPhotos([])
     setMsg('')
   }
   // Called orderRef on the record; "Sub-Contract Ref" is the label it prints under.
@@ -635,7 +677,7 @@ export default function VariationBuilder({ projects, onSaved }) {
           date: header.date,
           requestedBy: header.requestedBy,
           subContractRef: project.orderRef || settings.orderRef || settings.customerOrderRef || '',
-          items, clarifications: clar,
+          items, clarifications: clar, photos,
           builtAt: Date.now(),
           // Kept on the variation so the document can say who priced it long after the
           // fact - and so it still says the right person if somebody else edits it later.
@@ -942,6 +984,49 @@ export default function VariationBuilder({ projects, onSaved }) {
             {!lockedByInstruction && (
               <button onClick={() => setClar(prev => [...prev, ''])}
                 style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>+ Add new&hellip;</button>
+            )}
+          </div>
+
+          <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Photos</div>
+              <span style={{ fontSize: 11.5, color: '#8a8a8a' }}>Appended to the PDF, the download and the email</span>
+            </div>
+            {photos.length === 0 && (
+              <div style={{ fontSize: 12.5, color: '#8a8a8a', marginBottom: 8 }}>
+                No photos yet. Site photos are usually what settles whether a variation was needed.
+              </div>
+            )}
+            {photos.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                {photos.map((ph, i) => (
+                  <div key={ph.url + i} style={{ position: 'relative', width: 104 }}>
+                    <a href={ph.url} target="_blank" rel="noopener noreferrer" title={ph.name || 'Photo'}>
+                      <img src={ph.url} alt={ph.name || 'Photo'}
+                        style={{ width: 104, height: 78, objectFit: 'cover', borderRadius: 6, border: `1px solid ${LINE}`, display: 'block' }} />
+                    </a>
+                    <div style={{ fontSize: 10, color: '#8a8a8a', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ph.name || 'Photo'}</div>
+                    {!lockedByInstruction && (
+                      <button onClick={() => setPhotos(prev => prev.filter((_, ix) => ix !== i))} title="Remove this photo"
+                        style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: '50%', border: `1px solid ${LINE}`, background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>&times;</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!lockedByInstruction && (
+              <label style={{ display: 'inline-block', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}>
+                + Add photos
+                {/* capture lets a phone go straight to the camera; multiple keeps a
+                    batch off the roll to one action. Value cleared after each pick so
+                    choosing the same file twice still fires onChange. */}
+                <input type="file" accept="image/*" multiple capture="environment"
+                  onChange={e => { addPhotos(e.target.files); e.target.value = '' }}
+                  style={{ display: 'none' }} />
+              </label>
+            )}
+            {photoBusy && (
+              <span style={{ marginLeft: 10, fontSize: 12, color: photoBusy.startsWith('Could not') ? '#dc2626' : '#8a8a8a' }}>{photoBusy}</span>
             )}
           </div>
 
