@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isInstructed } from '../../lib/applications'
 import { useRouter } from 'next/router'
 import { Shell } from './index'
 import { INK, BRAND, allowedProjects, ProjectPicker, ProjectHeader } from '../../lib/cmSiteApp'
@@ -100,8 +101,8 @@ export default function ScheduleOfWorks() {
                       <div key={i} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: '10px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                           <span style={{ fontWeight: 700, color: INK, fontSize: 14 }}>{v.varNumber || '—'}</span>
-                          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: v.instructed ? '#dcfce7' : '#fef3c7', color: v.instructed ? '#166534' : '#92400e' }}>
-                            {v.instructed ? 'Instructed' : 'Not instructed'}
+                          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: isInstructed(v) ? '#dcfce7' : '#fef3c7', color: isInstructed(v) ? '#166534' : '#92400e' }}>
+                            {isInstructed(v) ? 'Instructed' : 'Not instructed'}
                           </span>
                         </div>
                         <div style={{ fontSize: 13.5, color: '#374151' }}>{v.description || '—'}</div>

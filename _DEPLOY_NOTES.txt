@@ -1,91 +1,126 @@
-pkg814 - Variation PDF wraps long text. Includes pkg811-813.
-==============================================================
+pkg816 - The instructed flag, fixed everywhere. Includes pkg811-815.
+======================================================================
 
-DEPLOY THIS INSTEAD OF pkg811/812/813. It contains all three. Seven files, all exist.
+DEPLOY THIS INSTEAD OF pkg811-815. It contains all of them. Twenty-one files.
 
-  lib/variationPdf.js                         (this change)
-  pages/variations.js                         (pkg813 - add-row removed, button moved)
-  pages/crm.js                                (pkg812 - search from inside a deal)
-  pages/api/project/[id]/cost-comments.js     (pkg811 - project name on the email)
-  pages/project/[id].js                       (pkg811)
-  pages/retention.js                          (marker only)
-  pages/api/business-financials.js            (marker only)
+*** ONE NEW FILE AND ONE NEW FOLDER TO CREATE BY HAND ***
 
-pkg810 first if you have not deployed it.
+  pages/api/admin/variations-instructed-audit.js
 
+  The pages/api/admin/ folder does not exist yet - create it, then the file.
 
-THE FAULT
-==========
-The Variation Description in the header block was drawn as a single line with
-page.drawText, which does not wrap. Anything longer than the column ran straight
-through the divider and over "Requested by", exactly as your screenshot shows.
-
-The item descriptions had the opposite problem and it was worse: they were CUT to
-fit, with
-
-    while (t && f.widthOfTextAtSize(t, size) > w - 5) t = t.slice(0, -1)
-
-so the end of a long description was silently thrown away. No ellipsis, no sign
-anything was missing. A customer reading a priced variation would simply never see
-the rest of it.
-
-The clarifications block was the only part of the file that wrapped correctly.
+Everything else exists. Overwrite in place. Folders with LITERAL square brackets:
+pages/api/project/[id]/ and pages/project/.
 
 
-THE FIX
-========
-One wrapToWidth() helper, used by all three.
+YES - AND IT WAS IN ABOUT TWENTY PLACES
+=========================================
+Your instinct was right, and checking turned up something worse than the original
+bug. `instructed` is stored as a BOOLEAN by the tracker, its modals and Edit Project
+Details, and as the STRING 'yes'/'no' by the Variation Builder. Around twenty
+readers then tested one shape or the other, so roughly half were wrong about any
+given variation - in BOTH directions:
 
-  HEADER   The box now grows to fit the text rather than the text running out of
-           the box. Labels stay on the first line, values flow beneath, and the
-           divider between the two columns is drawn to the new height.
+  TRUTHY TESTS (`v.instructed`)          the string 'no' is truthy, so a
+                                         not-instructed variation read as INSTRUCTED
 
-  ITEMS    The description wraps and the ROW grows with it. Quantity, Unit, Rate
-           and Total stay on the first line. The page break is measured against
-           that row's actual height, so a tall row cannot start too near the bottom
-           and run off the page.
+  STRING TESTS (`v.instructed === 'yes'`) a boolean true failed, so a variation
+                                         instructed from the tracker read as NOT
+                                         instructed
 
-  NARROW   Quantity and Unit are too narrow to wrap into, so they still clip - but
-  COLUMNS  now end in an ellipsis, so a clipped value looks clipped instead of
-           looking complete.
+THIS IS WHY YOUR TWO SCREENSHOTS DISAGREED. V14 and V15 really are stored as not
+instructed - the builder withdrew them. The operations report used the correct test
+and told you the truth. Edit Project Details used
 
-  CLARIF.  Now uses the shared helper instead of its own private copy.
+    <select value={v.instructed ? 'yes' : 'no'}
 
-Wrapping is by MEASURED width, not a character count: at 8pt Helvetica "W" and "i"
-are nothing like the same width, so a character limit either wastes a third of the
-column or overflows it anyway. A single word wider than the column is broken
-mid-word, so a long reference or a pasted URL cannot overflow either.
+so the string 'no' came out truthy and it displayed "Instructed". Project
+Financials did the same thing with `vars.filter(v => v.instructed)` and counted the
+money. Two screens were lying and the one you doubted was right.
 
 
-VERIFIED
----------
-Built the PDF end to end with your exact description and rendered it to an image to
-look at, rather than trusting that it compiled.
+FIXED, AND THE SERIOUS ONES FIRST
+-----------------------------------
+Three of these were not cosmetic:
 
-    header description   -> 3 lines, widest 225.2pt against a 226.3pt column,
-                            nothing crossing the divider, "Requested by: Gareth
-                            Rickerby" untouched in its own cell
-    item description     -> 3 lines, row grown, figures aligned on the first line
-    73-char unbroken
-    token                -> broken across two lines inside the column
-    empty / null         -> one empty line, no crash
+  settings.js       `if (was.instructed !== 'yes') continue` is the lock that
+                    REFUSES a change to an instructed variation. Against a boolean
+                    it never engaged, so an instructed variation could be edited or
+                    deleted with no refusal at all.
+
+  variation-instruct.js  the guard stopping a customer instructing the same
+                    variation twice. Same test, same failure - a second click on the
+                    link would have recorded a second instruction.
+
+  cron/variation-reminders.js  skips variations already instructed. Against a
+                    boolean it did not skip, so the customer was chased to instruct
+                    something they had already instructed.
+
+Plus the display and totals: the project report and its Excel, project financials,
+Edit Project Details, the variation tracker, the CM site forms, the schedule form,
+the project report PDF, the application PDF, and two more inside the builder.
+
+The project-cashflow pair is deliberately untouched: the API normalises once and the
+client reads that contract, which is the pattern the rest of this should have
+followed.
+
+pkg815's builder change is in here too - it now writes a BOOLEAN, which is only safe
+because every reader above was fixed in the same package. On its own it would have
+broken every string test.
+
+
+NO LONGER POSSIBLE
+-------------------
+pages/api/project/[id]/settings.js is the only write path for variations, and it now
+coerces `instructed` to a boolean on the way in. The stored data converges as records
+are saved and no future reader has to know there were ever two shapes.
+
+The lock's change-signature uses isInstructed too - otherwise an untouched variation
+stored as 'yes' would compare unequal to the same variation now holding true, and the
+lock would refuse a save that changed nothing.
+
+
+AND NO, YOU DO NOT HAVE TO FIX THEM BY HAND
+=============================================
+  pages/api/admin/variations-instructed-audit.js       admin only
+
+  GET                          report only, changes nothing
+  POST { "apply": "shape" }    convert every stored string to a boolean
+  POST { "apply": "restore" }  the above, plus re-instruct where there is EVIDENCE
+
+Two jobs, deliberately separate:
+
+  SHAPE is lossless. 'yes' meant instructed and always did, so it is converted
+  without asking.
+
+  MEANING is not. Once the builder wrote 'no' over an instruction, the record no
+  longer says it was ever instructed, and nothing in it distinguishes "withdrawn by
+  the bug" from "genuinely never instructed". So this does not guess. It looks for
+  evidence:
+
+    - a SENT application whose frozen copy of that variation says instructed. An
+      application that went to the customer that way is proof it was instructed.
+    - the OTHER settings record for the same project saying instructed, where a
+      project is held under both a tracking id and a job number.
+
+  Anything with evidence is listed WITH the evidence and only changed on
+  apply: "restore". Anything that came from the builder, is not instructed, and has
+  no evidence is flagged "review suggested" and never touched automatically -
+  re-instructing those blind would inflate the final account on jobs that were never
+  instructed at all.
+
+Run the GET first and read it. It reports per variation: the project, the number,
+what is stored, the shape fix, any evidence, and the value at stake.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg814
-  612 drill-down header                 -> v814
-  Applied for / Certified drill-down    -> v814
+  13-week cash flow build marker        -> pkg816
+  612 drill-down header                 -> v816
+  Applied for / Certified drill-down    -> v816
 
-No new dashboard cache marker. Hard refresh after deploying.
-
-
-WORTH A LOOK AFTER THIS
-------------------------
-The same drawText-without-wrapping pattern will exist in the other PDFs -
-applicationPdf.js in particular has a description column. I have not touched it,
-because you have not reported a problem there and it is a bigger file, but the
-helper is now written and reusable if you want the same treatment.
+Cache marker varsIdWins_v1 (from pkg815). The audit clears the dashboard cache
+itself when it applies anything. Hard refresh after deploying.
 
 
 STILL OPEN, ON YOUR WORD
@@ -97,4 +132,3 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
-  - Whether CRM notes should email you when you tag yourself. Cost comments do now.

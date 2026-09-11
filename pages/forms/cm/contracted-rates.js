@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isInstructed } from '../../../lib/applications'
 import { useRouter } from 'next/router'
 import { Shell } from '../index'
 import { INK, BRAND, useMyProjects, ProjectPicker, ProjectHeader } from '../../../lib/cmSiteApp'
@@ -175,8 +176,8 @@ function VariationsSection({ variations = [] }) {
                 <div style={{ fontWeight: 700, color: INK, fontSize: 13.5, whiteSpace: 'nowrap' }}>{varValue(v) == null ? '—' : money(varValue(v))}</div>
               </div>
               <div style={{ fontSize: 13, color: '#374151', marginTop: 3 }}>{v.description || '—'}</div>
-              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: v.instructed ? '#dcfce7' : '#fef3c7', color: v.instructed ? '#166534' : '#92400e' }}>
-                {v.instructed ? 'Instructed' : 'Not instructed'}
+              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: isInstructed(v) ? '#dcfce7' : '#fef3c7', color: isInstructed(v) ? '#166534' : '#92400e' }}>
+                {isInstructed(v) ? 'Instructed' : 'Not instructed'}
               </span>
             </div>
           ))}

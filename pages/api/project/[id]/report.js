@@ -1,4 +1,5 @@
 import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../../lib/db'
+import { isInstructed } from '../../../../lib/applications'
 import { refreshXeroToken, getXeroProjects, getProjectExpenses, getProjectInvoices } from '../../../../lib/xero'
 import ExcelJS from 'exceljs'
 
@@ -49,7 +50,7 @@ export default async function handler(req, res) {
   const costsAfterDate = costs.filter(c => vDate && c.date > vDate).reduce((s, c) => s + c.amount, 0)
   const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0)
   const contractValue = parseFloat(settings.contractValue || 0)
-  const instructedVars = (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
+  const instructedVars = (settings.variations || []).filter(v => isInstructed(v)).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
   const afa = contractValue + instructedVars
   const currentMargin = afa > 0 ? (afa - costsToDate) / afa : 0
   const remainingToClaim = afa - totalInvoiced
@@ -145,12 +146,12 @@ export default async function handler(req, res) {
     const lab = parseFloat(v.labour || 0)
     const profit = parseFloat(v.profit || 0)
     const total = mat + lab + profit
-    const r = varSheet.addRow([`V${String(i + 1).padStart(2, '0')}`, v.description, mat, lab, profit, total, v.instructed ? 'Instructed' : 'Not Instructed'])
+    const r = varSheet.addRow([`V${String(i + 1).padStart(2, '0')}`, v.description, mat, lab, profit, total, isInstructed(v) ? 'Instructed' : 'Not Instructed'])
     r.getCell(3).numFmt = moneyFormat
     r.getCell(4).numFmt = moneyFormat
     r.getCell(5).numFmt = moneyFormat
     r.getCell(6).numFmt = moneyFormat
-    if (!v.instructed) r.eachCell(c => { c.font = { color: { argb: 'FF888888' } } })
+    if (!isInstructed(v)) r.eachCell(c => { c.font = { color: { argb: 'FF888888' } } })
   })
   const varTotalRow = varSheet.addRow(['', 'Total Instructed', '', '', '', instructedVars])
   varTotalRow.getCell(6).numFmt = moneyFormat

@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true && cached[0].appsIdRecordWins_v1 === true && cached[0].dashFields_v1 === true && cached[0].afaShown_v1 === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0] && cached[0].certifiedPrevCert_v2 === true && cached[0].ret612Match_v1 === true && cached[0].appliedForSent_v1 === true && cached[0].certifiedTypedBox_v1 === true && cached[0].appsBothRecords_v1 === true && cached[0].finalAccountMcdPlacement_v1 === true && cached[0].accountBaseNetOfMcd_v1 === true && cached[0].afaDecomp_v1 === true && cached[0].afaAsIssued_v1 === true && cached[0].afaOneRule_v1 === true && cached[0].afaLiveNotStamp_v1 === true && cached[0].appsIdRecordWins_v1 === true && cached[0].dashFields_v1 === true && cached[0].afaShown_v1 === true && cached[0].varsIdWins_v1 === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -920,13 +920,25 @@ export default async function handler(req, res) {
           if (!byJob.length) return byId
           if (!byId.length) return byJob
           // Both hold rows: merge on variation number so neither is dropped.
+          //
+          // THE ID RECORD'S COPY WINS, and the builder workings are carried across from
+          // whichever copy has them.
+          //
+          // The tiebreak was "prefer the richer record - one built in the builder
+          // carries its workings", which kept the copy WITH a builder block regardless
+          // of which was current. Since the builder record is written once and the
+          // instructed flag is flipped later on a different page, that is exactly
+          // backwards: a stale not-instructed copy outranked the edited one. Same fault
+          // as the applications tiebreak in pkg803 - richer is not newer.
           const seen = new Map()
-          for (const v of [...byJob, ...byId]) {
+          const put = (v) => {
             const k = String(v.varNumber || '').trim().toUpperCase() || Math.random()
             const prev = seen.get(k)
-            // Prefer the richer record - one built in the builder carries its workings.
-            if (!prev || (!prev.builder && v.builder)) seen.set(k, v)
+            // Later writer wins on the fields, but never lose the workings.
+            seen.set(k, prev ? { ...prev, ...v, builder: v.builder || prev.builder || null } : v)
           }
+          for (const v of byJob) put(v)
+          for (const v of byId) put(v)
           return [...seen.values()].sort((a, b) =>
             String(a.varNumber || '').localeCompare(String(b.varNumber || ''), undefined, { numeric: true }))
         })(),
@@ -1019,6 +1031,7 @@ export default async function handler(req, res) {
         appsIdRecordWins_v1: true,
         dashFields_v1: true,
         afaShown_v1: true,
+        varsIdWins_v1: true,
         ret612Match_v1: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,

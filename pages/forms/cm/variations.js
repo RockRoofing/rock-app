@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isInstructed } from '../../../lib/applications'
 import { useRouter } from 'next/router'
 import { Shell } from '../index'
 import { INK, BRAND, useMyProjects, ProjectPicker, ProjectHeader } from '../../../lib/cmSiteApp'
@@ -59,7 +60,7 @@ export default function CmVariations() {
                   <div key={i} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ fontWeight: 700, color: INK, fontSize: 14 }}>Variation {v.varNumber || i + 1}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: v.instructed ? '#16a34a' : '#c2410c' }}>{v.instructed ? 'Instructed' : 'Not instructed'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: isInstructed(v) ? '#16a34a' : '#c2410c' }}>{isInstructed(v) ? 'Instructed' : 'Not instructed'}</div>
                     </div>
                     {v.description && <div style={{ fontSize: 13, color: '#555', marginTop: 6 }}>{v.description}</div>}
                     <div style={{ fontSize: 14, color: INK, marginTop: 8, fontWeight: 600 }}>{money(v.total)}</div>

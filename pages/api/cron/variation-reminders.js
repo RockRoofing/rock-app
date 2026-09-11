@@ -1,4 +1,5 @@
 import { getAllProjectSettings, saveProject, getProject, get } from '../../../lib/db'
+import { isInstructed } from '../../../lib/applications'
 import { createInstructToken, addWorkingDays, projectLabel } from '../../../lib/variationInstruct'
 import { buildVariationPDF } from '../../../lib/variationPdf'
 
@@ -36,7 +37,10 @@ export default async function handler(req, res) {
         const b = v.builder || {}
         if (!b.firstSentAt) continue                 // never sent - nothing to chase
         out.checked++
-        if (v.instructed === 'yes') { out.skipped++; continue }      // already instructed
+        // Already instructed - do not chase the customer for it again. Tested with
+        // isInstructed, or a variation instructed from the tracker (boolean) would
+        // have kept getting reminders.
+        if (isInstructed(v)) { out.skipped++; continue }
         if (b.reminderSentAt) { out.skipped++; continue }            // chased once already
         if (!(b.sentTo || []).length) { out.skipped++; continue }    // nobody to chase
 

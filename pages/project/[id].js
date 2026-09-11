@@ -2065,7 +2065,7 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
               <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
                 <input value={v.varNumber || ''} onChange={e => updateVariation(i, 'varNumber', e.target.value)} placeholder="V01" style={{ ...inputStyle, marginBottom: 0, width: 70, flexShrink: 0 }} />
                 <input value={v.description || ''} onChange={e => updateVariation(i, 'description', e.target.value)} placeholder="Variation description" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
-                <select value={v.instructed ? 'yes' : 'no'} onChange={e => updateVariation(i, 'instructed', e.target.value === 'yes')} style={{ ...inputStyle, marginBottom: 0, width: 130 }}>
+                <select value={isInstructed(v) ? 'yes' : 'no'} onChange={e => updateVariation(i, 'instructed', e.target.value === 'yes')} style={{ ...inputStyle, marginBottom: 0, width: 130 }}>
                   <option value="yes">Instructed</option>
                   <option value="no">Not instructed</option>
                 </select>
@@ -2080,7 +2080,7 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                 ))}
                 <div>
                   <div style={{ fontSize: 10, color: '#888', marginBottom: 2 }}>Total</div>
-                  <div style={{ ...inputStyle, marginBottom: 0, background: '#fff', display: 'flex', alignItems: 'center', fontWeight: 600, color: v.instructed ? '#16a34a' : '#888' }}>{fmtP(total)}</div>
+                  <div style={{ ...inputStyle, marginBottom: 0, background: '#fff', display: 'flex', alignItems: 'center', fontWeight: 600, color: isInstructed(v) ? '#16a34a' : '#888' }}>{fmtP(total)}</div>
                 </div>
               </div>
             </div>

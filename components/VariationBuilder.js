@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { projectVariations, projectLabel } from '../lib/variationInstruct'
+import { isInstructed } from '../lib/applications'
 
 // ---------------------------------------------------------------------------
 // Variation Builder
@@ -542,7 +543,7 @@ export default function VariationBuilder({ projects, onSaved }) {
   const lockedByInstruction = useMemo(() => {
     if (!editingVar) return false
     const v = existingVars.find(x => String(x.varNumber) === String(editingVar))
-    return v?.instructed === 'yes'
+    return isInstructed(v)
   }, [existingVars, editingVar])
 
   const openVar = useMemo(() => {
@@ -612,10 +613,20 @@ export default function VariationBuilder({ projects, onSaved }) {
         // off these and needs no knowledge of the builder.
         varNumber: forceNumber || header.varNumber,
         description: header.description || (items[0]?.description || ''),
-        // NEVER back to 'no'. This wrote 'no' unconditionally, so re-saving an instructed
-        // variation would have quietly withdrawn the customer's instruction - and the
-        // final account with it.
-        instructed: prior?.instructed === 'yes' ? 'yes' : 'no',
+        // NEVER back to not-instructed. This wrote 'no' unconditionally, then was
+        // changed to preserve `prior?.instructed === 'yes'` - which only recognises the
+        // STRING 'yes'.
+        //
+        // Every other writer stores a BOOLEAN: the tracker's dropdown, its add modal,
+        // its edit modal and Edit Project Details all save `=== 'yes'`, i.e. true. So
+        // the test never matched a variation instructed anywhere else, and re-saving it
+        // in the builder withdrew the instruction all over again. The fix was made and
+        // did not work.
+        //
+        // isInstructed() is the one rule for this field and accepts both shapes.
+        // Writing a boolean now too, so the builder stops being the only page in the
+        // codebase that stores this as a string.
+        instructed: isInstructed(prior),
         materials: String(Math.round(totals.materials * 100) / 100),
         labour: String(Math.round(totals.labour * 100) / 100),
         profit: String(Math.round(totals.profit * 100) / 100),
@@ -736,7 +747,7 @@ export default function VariationBuilder({ projects, onSaved }) {
                     <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: sent ? '#dcfce7' : (v.builder ? '#fef9c3' : '#f1f5f9'), color: sent ? '#166534' : (v.builder ? '#a16207' : '#64748b') }}>
                       {sent ? 'SENT' : (v.builder ? 'DRAFT' : 'TRACKER')}
                     </span>
-                    {v.instructed === 'yes' && (
+                    {isInstructed(v) && (
                       <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8' }}>INSTRUCTED</span>
                     )}
                   </div>

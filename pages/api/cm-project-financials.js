@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis'
+import { isInstructed } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { nameMatches, normJobNo } from '../../lib/cmSiteApp'
 import { getOpsProjects } from '../../lib/db'
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
     const settings = (await redis.get(`project:${xeroId}`).catch(() => null)) || {}
     const costCache = (await redis.get(`costs:latest:${xeroId}`).catch(() => null)) || {}
     const vars = Array.isArray(settings.variations) ? settings.variations : []
-    const instructed = vars.filter(v => v.instructed)
+    const instructed = vars.filter(v => isInstructed(v))
     p = {
       xeroId,
       jobNo: no,

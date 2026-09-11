@@ -1,4 +1,5 @@
 import { getProject, saveProject, get } from '../../lib/db'
+import { isInstructed } from '../../lib/applications'
 import { projectLabel } from '../../lib/variationInstruct'
 import { verifyInstructToken } from '../../lib/variationInstruct'
 import { buildVariationPDF } from '../../lib/variationPdf'
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
       value: valueOf(variation),
       // Already instructed: show the confirmation rather than the button, so a second
       // click on the same link cannot record a second instruction.
-      instructed: variation.instructed === 'yes',
+      instructed: isInstructed(variation),
       instruction: b.instruction || null,
     })
   }
@@ -148,7 +149,7 @@ export default async function handler(req, res) {
   if (missing.length) return res.status(400).json({ error: `Please enter your ${missing.join(', ')}.` })
 
   // Already instructed - report it rather than overwriting who did it and when.
-  if (variation.instructed === 'yes') {
+  if (isInstructed(variation)) {
     return res.json({ ok: true, instruction: variation.builder?.instruction || null })
   }
 

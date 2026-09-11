@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { isInstructed } from '../lib/applications'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
@@ -388,7 +389,9 @@ export default function VariationTracker() {
         cm: p.contractsManager || '—',
         varNumber: varNumberOf(v) || '—',
         description: v.description || '—',
-        instructed: v.instructed,
+        // Normalised ONCE here, so every use downstream - the filter, the row
+        // dropdown, the totals - is a plain boolean and cannot disagree.
+        instructed: isInstructed(v),
         materials: fmtN(v.materials),
         labour: fmtN(v.labour),
         profit: fmtN(v.profit),

@@ -1,4 +1,5 @@
 import { saveProject, getProject } from '../../../../lib/db'
+import { isInstructed } from '../../../../lib/applications'
 
 async function clearCache() {
   try {
@@ -36,6 +37,20 @@ export default async function handler(req, res) {
   const incoming = { ...req.body }
   for (const k of OWNED_ELSEWHERE) delete incoming[k]
 
+  // ONE SHAPE FOR `instructed`, ENFORCED AT THE ONLY WRITE PATH.
+  //
+  // The Variation Builder stored the STRING 'yes'/'no'; the tracker, its modals and
+  // Edit Project Details all stored a BOOLEAN. Twenty-odd readers then tested one
+  // shape or the other, so about half of them were wrong about any given variation -
+  // in both directions. The truthy readers counted 'no' as instructed, and the
+  // === 'yes' readers missed every variation instructed from the tracker.
+  //
+  // Coercing here means the stored data converges on a boolean as records are saved,
+  // and no future reader has to know there were ever two shapes.
+  if (Array.isArray(incoming.variations)) {
+    incoming.variations = incoming.variations.map(v => (v && typeof v === 'object') ? { ...v, instructed: isInstructed(v) } : v)
+  }
+
   // A SHRINKING VARIATIONS LIST IS ALMOST ALWAYS A BUG.
   //
   // Variations are only ever added and edited; the one place that deletes them removes a
@@ -62,9 +77,16 @@ export default async function handler(req, res) {
     // AN INSTRUCTED VARIATION CANNOT BE CHANGED. The screen locks it, but the screen is a
     // convenience - this is the control. The customer authorised a scope at a value, and
     // that is what their instruction attaches to.
-    const sig = (v) => JSON.stringify([v.varNumber, v.description, v.materials, v.labour, v.profit, v.instructed])
+    // isInstructed in the signature, not the raw field. With the normalisation above,
+    // an untouched variation stored as the string 'yes' would otherwise compare unequal
+    // to the same variation now carrying boolean true, and the lock would refuse a save
+    // that changed nothing at all.
+    const sig = (v) => JSON.stringify([v.varNumber, v.description, v.materials, v.labour, v.profit, isInstructed(v)])
     for (const was of existing.variations) {
-      if (was.instructed !== 'yes') continue
+      // isInstructed, not === 'yes'. Written as a string by the builder and a
+      // BOOLEAN by every other writer, so this lock silently did nothing on any
+      // variation instructed from the tracker or from Edit Project Details.
+      if (!isInstructed(was)) continue
       const now = incoming.variations.find(v => String(v.varNumber || '').trim().toUpperCase() === String(was.varNumber || '').trim().toUpperCase())
       if (!now) {
         return res.status(409).json({ error: `Refused: ${was.varNumber} has been instructed and cannot be removed.` })
