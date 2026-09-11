@@ -1,9 +1,9 @@
-pkg834 - Site App Users table goes full width. Includes pkg811-833.
-=====================================================================
+pkg835 - Search on Site App Users, by person and by project. Includes pkg811-834.
+===================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-833. It contains all of them. Forty-three files.
+DEPLOY THIS INSTEAD OF pkg811-834. It contains all of them. Forty-three files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-833)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-834)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -20,45 +20,55 @@ DEPLOY THIS INSTEAD OF pkg811-833. It contains all of them. Forty-three files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-THE CHANGE
+THE SEARCH
 ===========
-One word: `wide` on the page's OperationsShell.
+One box, above the table. It matches people and projects at the same time:
 
-The shell already takes that flag and its own comment says it is for full-width
-pages - tables and planning grids - and twenty-five other Operations pages pass it.
-Site App Users did not, so eleven columns were being squeezed into the default
-1100px cap, pushing Projects, Mobile and Email into a sideways scroll that is easy
-to miss on a page which is nothing but a table.
+  PEOPLE     name, company, email, mobile, role and trades
+  PROJECTS   job number OR project name - everybody who can see that job
 
-No new styling, no override of the shell. It just uses the flag that was already
-there for exactly this.
+Project NAMES as well as numbers, so it works whichever way you happen to remember
+the job. projectAccess stores numbers only, so the name is resolved through the
+project list the page already loads for the access picker.
+
+The count beside it reads "4 of 26 users" while a search is on, so a short list is
+obviously a filtered one rather than a page that has lost its data.
+
+
+ONE DECISION
+-------------
+SOMEBODY WITH ACCESS TO EVERYTHING MATCHES EVERY PROJECT SEARCH.
+
+Search "Farmstead" and you get the people explicitly assigned to it AND the managers
+with all-project access - because they can see it too, and the question this page is
+really being asked is "who can see this job?". Leaving them out would answer that
+wrongly.
+
+Checked against the awkward overlap: searching "farmer" returns Eve Farmer by name
+and does NOT drag in Farmstead Drive, and searching "farmstead" returns the project's
+people without returning Eve.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg834
-  612 drill-down header                 -> v834
-  Applied for / Certified drill-down    -> v834
+  13-week cash flow build marker        -> pkg835
+  612 drill-down header                 -> v835
+  Applied for / Certified drill-down    -> v835
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg833  Daily Site Diary crew picker lists only the people allocated to that project,
-        with a "Show everyone" way past it and a fallback to the full roster where
-        nobody is planned on.
-pkg832  View Weekly Labour Allocation pop-out widened and no longer closes on a
-        backdrop click.
-pkg830/831  Click a project in the WLA grid to move an operative-day to another job.
-pkg827-829  In Query tab in Bookkeeping: assignees, comments, approvals, send list
-        and the reviewer page.
+pkg834  Site App Users table full width - the shell's own `wide` flag, which
+        twenty-five other Operations pages already pass and this one did not.
+pkg833  Daily Site Diary crew picker lists only people allocated to that project.
+pkg830-832  Move an operative-day between projects from the WLA grid; the pop-out
+        widened and no longer closes on a backdrop click.
+pkg827-829  In Query tab in Bookkeeping, with assignees, comments, approvals, send
+        list and the reviewer page.
 pkg824-826  Timesheet CSV from the Planner, six-week labour allocation, water
         ingress labelled on the labour PDFs.
-pkg821-823  Calculations held without issuing, handover PDF, handover field
-        rendering.
-pkg816-820  The `instructed` flag fixed across about twenty readers plus its audit
-        endpoint, type-to-search project pickers, documents on variations.
 
 
 STILL OPEN, ON YOUR WORD

@@ -18,6 +18,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [projects, setProjects] = useState([])
+  const [q, setQ] = useState('')
 
   // Distinct company names already on record (used for the autocomplete + de-dupe).
   const knownCompanies = useMemo(() => {
@@ -28,6 +29,39 @@ export default function UsersPage() {
     }
     return [...seen.values()].sort((a, b) => a.localeCompare(b))
   }, [users])
+
+  // SEARCH ON PEOPLE AND ON PROJECTS.
+  //
+  // Typing a name finds the person. Typing a job number or a project name finds
+  // everybody who can see that job - which is the question actually being asked of
+  // this page: "who is on Farmstead Drive?"
+  //
+  // Project NAMES are matched as well as numbers, so it works whichever way you
+  // remember the job. projectAccess holds numbers only, so the name has to be
+  // resolved through the project list first.
+  const filteredUsers = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return users
+
+    // Every job number whose number OR name matches what was typed.
+    const matchingNos = new Set(
+      projects
+        .filter(p => String(p.no || '').toLowerCase().includes(needle) || String(p.name || '').toLowerCase().includes(needle))
+        .map(p => String(p.no))
+    )
+
+    return users.filter(u => {
+      const text = [fullName(u), u.company, u.email, u.phone, u.role, (u.trades || []).join(' ')]
+        .filter(Boolean).join(' ').toLowerCase()
+      if (text.includes(needle)) return true
+      if (!matchingNos.size) return false
+      const pa = u.projectAccess
+      // Somebody with access to everything is on every project, so they match any
+      // project search. Leaving them out would answer "who is on this job?" wrongly.
+      if (pa == null || pa === 'all') return true
+      return (Array.isArray(pa) ? pa : []).some(n => matchingNos.has(String(n)))
+    })
+  }, [users, projects, q])
 
   useEffect(() => { load(); loadProjects() }, [])
   async function loadProjects() {
@@ -101,6 +135,27 @@ export default function UsersPage() {
         </div>
       )}
 
+      {!loading && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 12px' }}>
+          <div style={{ position: 'relative', flex: '1 1 340px', maxWidth: 520 }}>
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search people, or a job number or project name..."
+              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 30px 9px 12px', fontSize: 14, border: '1px solid #e5e5e5', borderRadius: 8, fontFamily: 'inherit' }} />
+            {q && (
+              <button onClick={() => setQ('')} title="Clear"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: 15, lineHeight: 1 }}>&times;</button>
+            )}
+          </div>
+          <span style={{ fontSize: 12.5, color: '#888' }}>
+            {q
+              ? `${filteredUsers.length} of ${users.length} ${users.length === 1 ? 'user' : 'users'}`
+              : `${users.length} ${users.length === 1 ? 'user' : 'users'}`}
+          </span>
+        </div>
+      )}
+
       {loading ? <Loading /> : (
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -108,7 +163,12 @@ export default function UsersPage() {
               {['Name', 'Role', 'Access', 'Company', 'Trade', 'Projects', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {users.map(u => (
+              {filteredUsers.length === 0 && (
+                <tr><td colSpan={11} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 28 }}>
+                  Nobody matches that - neither a name nor a project.
+                </td></tr>
+              )}
+              {filteredUsers.map(u => (
                 <tr key={u.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                   <td style={td}><strong>{fullName(u)}</strong></td>
                   <td style={td}>{u.role || '—'}</td>
