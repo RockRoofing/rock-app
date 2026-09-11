@@ -219,38 +219,59 @@ export default async function handler(req, res) {
         if (!fromKey || !toKey || !date || !opId) return res.status(400).json({ error: 'Missing fromKey/toKey/date/opId' })
         if (fromKey === toKey) return res.json({ ok: true, unchanged: true })
         const alloc = await getAlloc()
-        const fromDay = (alloc[fromKey] && alloc[fromKey][date]) || []
-        const entry = fromDay.find(e => e.opId === opId)
+
+        // A DAY CELL IS NOT ALWAYS AN ARRAY.
+        //
+        // It is the legacy [{opId,half}] on older records and the object
+        // { status, unnamed, entries:[...] } on newer ones. cellEntries() exists for
+        // exactly this and I did not use it - hence "find is not a function" on any
+        // project whose cells had been through the newer path.
+        //
+        // Reading is normalised through cellEntries; WRITING puts the cell back in
+        // the shape it was already in, or an object cell would be flattened to an
+        // array and lose its status and its unnamed count.
+        const putCell = (orig, entries) => (orig && !Array.isArray(orig)) ? { ...orig, entries } : entries
+
+        const fromCell = (alloc[fromKey] || {})[date]
+        const fromEntries = cellEntries(fromCell)
+        const entry = fromEntries.find(e => e.opId === opId)
         if (!entry) return res.status(404).json({ error: 'That allocation is no longer there - reload and try again.' })
         const half = entry.half || 'full'
 
-        // Take it off the old project first, in memory.
-        alloc[fromKey][date] = fromDay.filter(e => e.opId !== opId)
-        if (!alloc[fromKey][date].length) delete alloc[fromKey][date]
-        if (alloc[fromKey] && !Object.keys(alloc[fromKey]).length) delete alloc[fromKey]
+        // Take it off the old project first, in memory, so the clash check below does
+        // not collide with the entry we are moving.
+        const restFrom = fromEntries.filter(e => e.opId !== opId)
+        if (!restFrom.length && !cellUnnamed(fromCell)) {
+          // Nothing left at all - drop the day. An unnamed count is something, so a
+          // cell still carrying one is kept.
+          delete alloc[fromKey][date]
+          if (alloc[fromKey] && !Object.keys(alloc[fromKey]).length) delete alloc[fromKey]
+        } else {
+          alloc[fromKey][date] = putCell(fromCell, restFrom)
+        }
 
         const clash = wouldClash(alloc, toKey, date, opId, half)
         if (clash.clash) return res.status(409).json({ error: 'clash', clashKey: clash.pk })
 
-        const wasOnTarget = Object.values(alloc[toKey] || {}).some(day => (day || []).some(e => e.opId === opId))
+        const wasOnTarget = Object.values(alloc[toKey] || {}).some(c => cellEntries(c).some(e => e.opId === opId))
         alloc[toKey] = alloc[toKey] || {}
-        alloc[toKey][date] = alloc[toKey][date] || []
-        const existing = alloc[toKey][date].find(e => e.opId === opId)
+        const toCell = alloc[toKey][date]
+        const toEntries = cellEntries(toCell).map(e => ({ ...e }))
+        const existing = toEntries.find(e => e.opId === opId)
         if (existing) {
           // MERGE THE HALVES, do not overwrite. `assign` sets half outright, which is
           // right when you are choosing it. Here it would be destructive: moving
           // somebody's MORNING onto a job they are already on in the AFTERNOON would
           // replace the afternoon with the morning and quietly delete half a day.
-          //
-          // Two different halves on one job is a full day.
-          existing.half = (existing.half === half) ? half : 'full'
-        } else alloc[toKey][date].push({ opId, half })
+          existing.half = (existing.half || 'full') === half ? half : 'full'
+        } else toEntries.push({ opId, half })
+        alloc[toKey][date] = putCell(toCell, toEntries)
         await saveAlloc(alloc)
 
         // Same notification behaviour as assign and unassign, so a move does not
         // leave the allocation notices out of step with where people actually are.
         try {
-          const stillOnFrom = Object.values(alloc[fromKey] || {}).some(day => (day || []).some(e => e.opId === opId))
+          const stillOnFrom = Object.values(alloc[fromKey] || {}).some(c => cellEntries(c).some(e => e.opId === opId))
           if (!stillOnFrom && fromKey.startsWith('L:')) {
             const { clearAllocationNotice } = await import('../../lib/ramsNotify')
             clearAllocationNotice({ projectNo: fromKey.slice(2), opId })
