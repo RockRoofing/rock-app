@@ -404,13 +404,26 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, u
 
       {f.type === 'members' && (() => {
         const everyone = (roster && roster.length ? roster.map(o => o.name) : (team || []))
+        // ONE PERSON SIGNS A FORM.
+        //
+        // "Insert your name" / "Your name" is a members field, which is multi-select,
+        // so it was possible to put three people in the box for who filled the diary
+        // in. The same /your name/i rule the auto-fill above already uses to decide
+        // where to drop the logged-in user.
+        //
+        // The value stays an ARRAY of one. It has always been stored that way and
+        // existing submissions, the exports and the missing-forms checks all read it
+        // as one - changing the shape to a bare string to suit the UI would break
+        // every form already submitted.
+        const isSigner = /your name/i.test(f.label || '')
         // Narrowed only where there is something to narrow TO. A project with nobody
         // planned on it would otherwise give an empty picker and an uncompletable
         // diary, which is a worse failure than a long list.
         const narrowed = projectPeople && projectPeople.length ? projectPeople : null
         return <MembersPicker value={value} onChange={onChange}
           people={narrowed || everyone}
-          allPeople={narrowed ? everyone : null} />
+          allPeople={narrowed ? everyone : null}
+          single={isSigner} />
       })()}
 
       {f.type === 'projectusers' && (() => {
@@ -453,7 +466,7 @@ function Choice({ label, selected, onClick, check }) {
 // Searchable multi-select for people (operatives roster). Shows selected as chips,
 // a search box, and a filtered list. Also keeps any pre-selected name that isn't
 // in the list (e.g. an auto-filled name), so nothing is silently dropped.
-function MembersPicker({ value, onChange, people, allPeople }) {
+function MembersPicker({ value, onChange, people, allPeople, single }) {
   const [q, setQ] = useState('')
   // allPeople is only passed when the list has been narrowed to the project. Somebody
   // turns up who was not on the plan often enough that a diary must still be able to
@@ -462,7 +475,12 @@ function MembersPicker({ value, onChange, people, allPeople }) {
   const selected = Array.isArray(value) ? value : (value ? [value] : [])
   const base = (showAll && allPeople) ? allPeople : people
   const all = [...new Set([...(base || []), ...selected])]
-  const toggle = nm => onChange(selected.includes(nm) ? selected.filter(x => x !== nm) : [...selected, nm])
+  // In single mode, choosing somebody REPLACES the choice rather than adding to it -
+  // so picking the wrong name and then the right one leaves one name, not two.
+  const toggle = nm => {
+    if (single) { onChange(selected.includes(nm) ? [] : [nm]); return }
+    onChange(selected.includes(nm) ? selected.filter(x => x !== nm) : [...selected, nm])
+  }
   const filtered = all.filter(nm => !selected.includes(nm) && (!q || nm.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.localeCompare(b))
   return (
     <div>
@@ -487,10 +505,10 @@ function MembersPicker({ value, onChange, people, allPeople }) {
                   : <>Showing the {(people || []).length} on this project. <button onClick={() => setShowAll(true)} style={linkish}>Show everyone</button></>}
               </div>
             )}
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search to add a person…"
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={single ? 'Search for your name…' : 'Search to add a person…'}
               style={{ ...inp, marginBottom: 8 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ fontSize: 13, color: '#aaa', padding: '4px 2px' }}>{q ? 'No matches.' : 'Everyone is selected.'}</div>}
+              {filtered.length === 0 && <div style={{ fontSize: 13, color: '#aaa', padding: '4px 2px' }}>{q ? 'No matches.' : (single ? 'Pick a different name to change it.' : 'Everyone is selected.')}</div>}
               {filtered.map(nm => <Choice key={nm} label={nm} selected={false} check onClick={() => { toggle(nm); setQ('') }} />)}
             </div>
           </>

@@ -1,9 +1,9 @@
-pkg835 - Search on Site App Users, by person and by project. Includes pkg811-834.
-===================================================================================
+pkg836 - "Your name" takes one person only. Includes pkg811-835.
+==================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-834. It contains all of them. Forty-three files.
+DEPLOY THIS INSTEAD OF pkg811-835. It contains all of them. Forty-three files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-834)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-835)
 
   lib/inquery.js
   components/InQueryTable.js
@@ -20,53 +20,57 @@ DEPLOY THIS INSTEAD OF pkg811-834. It contains all of them. Forty-three files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-THE SEARCH
+THE CHANGE
 ===========
-One box, above the table. It matches people and projects at the same time:
+"Insert your name" and "Your name" now take ONE person. Choosing somebody replaces
+the choice rather than adding to it, so picking the wrong name and then the right
+one leaves one name on the form, not two.
 
-  PEOPLE     name, company, email, mobile, role and trades
-  PROJECTS   job number OR project name - everybody who can see that job
+They are members fields, which are multi-select, so it was possible to put three
+people in the box for who filled the diary in.
 
-Project NAMES as well as numbers, so it works whichever way you happen to remember
-the job. projectAccess stores numbers only, so the name is resolved through the
-project list the page already loads for the access picker.
+Identified by the same /your name/i rule the auto-fill already uses to decide where
+to drop the logged-in user - not a second rule of my own. Checked against every
+members field in formDefs.js:
 
-The count beside it reads "4 of 26 users" while a search is on, so a short list is
-obviously a filtered one rather than a page that has lost its data.
+    Insert your name                                   single
+    Your name  (x3)                                    single
+    Personnel on site working on behalf of Rock        unchanged, multi
+    Operatives on site                                 unchanged, multi
+    Rock personnel on site                             unchanged, multi
+    Operatives on site on the last day of the project  unchanged, multi
 
 
-ONE DECISION
--------------
-SOMEBODY WITH ACCESS TO EVERYTHING MATCHES EVERY PROJECT SEARCH.
+THE STORED VALUE IS STILL AN ARRAY OF ONE
+===========================================
+It has always been stored that way. Existing submissions, the exports and the
+missing-forms checks all read it as an array, so changing the shape to a bare string
+to suit the UI would have broken every form already submitted.
 
-Search "Farmstead" and you get the people explicitly assigned to it AND the managers
-with all-project access - because they can see it too, and the question this page is
-really being asked is "who can see this job?". Leaving them out would answer that
-wrongly.
+The only difference is that the array can no longer hold more than one name.
 
-Checked against the awkward overlap: searching "farmer" returns Eve Farmer by name
-and does NOT drag in Farmstead Drive, and searching "farmstead" returns the project's
-people without returning Eve.
+Wording follows: the search box reads "Search for your name..." on those fields, and
+once a name is picked the list says "Pick a different name to change it" rather than
+"Everyone is selected".
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg835
-  612 drill-down header                 -> v835
-  Applied for / Certified drill-down    -> v835
+  13-week cash flow build marker        -> pkg836
+  612 drill-down header                 -> v836
+  Applied for / Certified drill-down    -> v836
 
-Hard refresh after deploying.
+Hard refresh. On a phone the Site App may need closing and reopening.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg834  Site App Users table full width - the shell's own `wide` flag, which
-        twenty-five other Operations pages already pass and this one did not.
+pkg835  Search on Site App Users - people and projects, by job number or name.
+pkg834  Site App Users table full width.
 pkg833  Daily Site Diary crew picker lists only people allocated to that project.
-pkg830-832  Move an operative-day between projects from the WLA grid; the pop-out
+pkg830-832  Move an operative-day between projects from the WLA grid; pop-out
         widened and no longer closes on a backdrop click.
-pkg827-829  In Query tab in Bookkeeping, with assignees, comments, approvals, send
-        list and the reviewer page.
+pkg827-829  In Query tab in Bookkeeping.
 pkg824-826  Timesheet CSV from the Planner, six-week labour allocation, water
         ingress labelled on the labour PDFs.
 
