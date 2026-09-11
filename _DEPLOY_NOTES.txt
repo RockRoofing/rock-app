@@ -1,7 +1,7 @@
-pkg825 - Six weeks on the Weekly Labour Allocation. Includes pkg811-824.
-==========================================================================
+pkg826 - Water ingress was invisible on the labour PDFs. Includes pkg811-825.
+================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-824. It contains all of them. Thirty files.
+DEPLOY THIS INSTEAD OF pkg811-825. It contains all of them. Thirty-one files.
 
 *** FIVE NEW FILES TO CREATE BY HAND ***
 
@@ -16,63 +16,65 @@ DEPLOY THIS INSTEAD OF pkg811-824. It contains all of them. Thirty files.
 Everything else exists. Overwrite in place.
 
 
-THE CHANGE
-===========
-"How far ahead" on the Weekly Labour Allocation now offers 1 to 6 weeks instead of
-1 to 4.
+YOUR QUESTION: YES, BOTH ARE INCLUDED
+=======================================
+assembleWeek folds overheads and water ingress into each person's day cells, and
+the PDF prints every entry in a cell, so they come out alongside the project work.
+Built one to look at rather than reading the code and assuming:
 
-No server change was needed. Both PDF routes have always accepted up to 26 weeks -
-the limit of four was only ever the row of buttons in the modal. With the previous
-week ticked as well that is now up to seven pages.
+  Alan Clark   Farmstead Drive | Holidays | WI: Leak - Royal Tea | Ops Support |
+               Winnersh (AM)
 
-The Weeks dropdown on the Accounts report is raised to 6 at the same time. It is the
-same report over the same data and there is no reason for the two to disagree, which
-also keeps the new timesheet CSV in step - it takes its date range from that
-dropdown.
+  Overheads       by category - Holidays, Sick, Internal Time, Ops Support,
+                  Paid Leave, Unpaid Leave
+  Water ingress   by job name
+  Half days       marked (AM) / (PM)
+  Provisional     in blue, confirmed in green
+  Unnamed slots   a "TBC - <project>" row reading "2 unnamed"
+
+ONE DIFFERENCE BETWEEN THE TWO VERSIONS, which is deliberate and worth knowing: the
+ACCOUNTS version drops the "TBC - unnamed" rows and adds the O/A markers and an
+overnight allowance total. Nobody is paid for an unnamed slot, so it has no place on
+a sheet going to accounts. The general Weekly Labour Allocation keeps them, because
+a gap in next week's labour is the thing you want to see.
 
 
-ONE THING TO BE AWARE OF
-=========================
-That row of buttons drives BOTH the download and "Send to operatives". Choosing 6
-and pressing send will email each operative six weeks of their allocation rather
-than four.
+AND A DEFECT THE CHECK TURNED UP
+==================================
+Water ingress was there, but you could not tell it apart from a project.
 
-That may be exactly what you want, or six weeks out may be too speculative to be
-putting in front of them. I have not invented a separate limit for the email,
-because a download control that quietly means something different when you press the
-button next to it is worse than either choice.
+assembleWeek labels a call-out with a droplet - "<droplet> Leak - Royal Tea" - and
+the PDF sanitiser strips anything above Latin-1 so pdf-lib cannot throw. The droplet
+went with it, and a leak visit printed as a bare job name, identical in appearance
+to a planned project. On screen the planner marks it clearly; on the sheet that goes
+to accounts and out to operatives, it did not.
 
-If the email should stay at four while the download goes to six, say so and it is a
-small change - the two would then need their own controls, clearly labelled.
+It now reads "WI: Leak - Royal Tea". Mapped before the catch-all strip, the same way
+the sanitiser already handles smart quotes and bullets.
 
-The email itself already only sends FUTURE days, so past dates inside the range are
-never emailed regardless.
+This affects both labour PDFs. The timesheet CSV from pkg824 was never affected - it
+reads the water-ingress store directly and puts those rows under their own job
+number.
+
+
+ALSO IN THIS PACKAGE (pkg825)
+------------------------------
+"How far ahead" offers 1 to 6 weeks instead of 1 to 4, and the Accounts report's
+Weeks dropdown with it. No server change was needed - both PDF routes always
+accepted up to 26.
+
+Still worth remembering: that control drives the download AND "Send to operatives".
+Choosing 6 emails operatives six weeks of allocation. Say the word if the email
+should stay at four and the two need separate controls.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg825
-  612 drill-down header                 -> v825
-  Applied for / Certified drill-down    -> v825
+  13-week cash flow build marker        -> pkg826
+  612 drill-down header                 -> v826
+  Applied for / Certified drill-down    -> v826
 
 Hard refresh after deploying.
-
-
-ALSO IN THIS PACKAGE
----------------------
-pkg824  Timesheet CSV from the Planner, in the Accounts report modal. Reproduces
-        your Timesheets workbook layout. Hours are derived from full/half days and
-        the weekend rate from the date - both flagged in those notes.
-pkg823  Handover PDF printed raw JSON for nine of the fourteen field types; every
-        type now has a renderer. Also fixed the Ops view, which was showing only the
-        NAME of a roof type and none of the build-up.
-pkg822  Download the Internal Handover Minutes as a PDF, from Ops and Pre-Contract.
-pkg821  Calculations can be uploaded without issuing them.
-pkg820  Documents as well as images on variations; PDFs merged in whole.
-pkg819  Workings window closes on the x; completeness check moved to the raise.
-pkg818  Type-to-search on the project pickers.
-pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
-        audit endpoint. Run its GET and read it first.
 
 
 STILL OPEN, ON YOUR WORD
@@ -86,5 +88,6 @@ STILL OPEN, ON YOUR WORD
   - A script listing every project holding settings under BOTH keys.
   - An hours field on the Planner day cell, if the timesheet CSV is to carry real
     hours rather than 8 and 4.
+  - Separate week controls for the download and the operative email.
   - The same "send for approval?" question on the other design pages.
   - Merging attached PDFs into the handover document, as the variation PDF now does.
