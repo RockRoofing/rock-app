@@ -1901,6 +1901,104 @@ function LostReasonModal({ schema, me, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
+// SEARCH FROM INSIDE A DEAL.
+//
+// Opening a deal replaces the whole page, nav and all, so the search box in the
+// toolbar is gone the moment you are in one. Getting from one project to another
+// meant going back to the list and starting again.
+//
+// Matches on dealHaystack - the same rule the toolbar search and the filters use, so
+// a project findable from the list is findable from here. That means the company
+// name, the contact and the whole Details card, not just the title.
+//
+// Won and lost projects are included. You are usually looking for one of those.
+function DealSearch({ deals, currentId, onOpenDeal }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+
+  const matches = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return [];
+    // Rank by WHERE it matched. A title match is what you meant; a hit buried in the
+    // scope of works is a long way down the list.
+    const scored = [];
+    for (const d of deals || []) {
+      if (!d || d.id === currentId) continue;
+      const title = String(d.title || '').toLowerCase();
+      const org = String((d.fields || {}).organization || '').toLowerCase();
+      let rank = null;
+      if (title.startsWith(s)) rank = 0;
+      else if (title.includes(s)) rank = 1;
+      else if (org.includes(s)) rank = 2;
+      else if (dealHaystack(d).includes(s)) rank = 3;
+      if (rank != null) scored.push({ d, rank });
+    }
+    scored.sort((a, b) => a.rank - b.rank || String(a.d.title || '').localeCompare(String(b.d.title || '')));
+    return scored.slice(0, 8).map((x) => x.d);
+  }, [q, deals, currentId]);
+
+  useEffect(() => { setHi(0); }, [q]);
+
+  const go = (d) => {
+    if (!d) return;
+    setQ(''); setOpen(false);
+    onOpenDeal(d.id);
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); if (q) { setQ(''); } else { e.currentTarget.blur(); } setOpen(false); return; }
+    if (!matches.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi((i) => (i + 1) % matches.length); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setOpen(true); setHi((i) => (i - 1 + matches.length) % matches.length); }
+    if (e.key === 'Enter') { e.preventDefault(); go(matches[hi] || matches[0]); }
+  };
+
+  return (
+    <div style={{ position: 'relative', minWidth: 280 }}>
+      <input
+        value={q}
+        placeholder="Search projects&#8230;"
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        // Delayed so a click on a result lands before the list unmounts. onMouseDown
+        // on the rows covers the same ground; both, because a stray blur losing the
+        // click is the commonest way a box like this feels broken.
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={onKey}
+        style={{
+          width: '100%', boxSizing: 'border-box', padding: '5px 26px 5px 10px',
+          fontSize: 13, fontFamily: 'inherit', borderRadius: 6,
+          border: '1px solid #444', background: '#1e1e1e', color: '#fff',
+        }} />
+      {q ? (
+        <span onMouseDown={(e) => { e.preventDefault(); setQ(''); }}
+          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#8a8a8a', fontSize: 13 }}>&times;</span>
+      ) : null}
+      {open && q.trim() ? (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 3, boxShadow: '0 6px 18px rgba(0,0,0,.22)', maxHeight: 320, overflowY: 'auto' }}>
+          {matches.length === 0 ? (
+            <div style={{ padding: '9px 11px', fontSize: 12.5, color: C.dim }}>No other project matches that.</div>
+          ) : matches.map((d, i) => (
+            <div key={d.id}
+              onMouseDown={(e) => { e.preventDefault(); go(d); }}
+              onMouseEnter={() => setHi(i)}
+              style={{ padding: '7px 11px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5`, background: i === hi ? C.mention : '#fff', color: C.text }}>
+              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
+              <div style={{ fontSize: 11, color: C.dim, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(d.fields || {}).organization || 'No company'}</span>
+                <span style={{ flexShrink: 0, color: d.status === 'won' ? C.won : d.status === 'lost' ? C.lost : C.dim }}>
+                  {d.status === 'open' ? stageLabel(d.stageId) : (d.status === 'won' ? 'Won' : 'Lost')}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onOpenDeal, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onPinHistory, onRenameDeal, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [mapFor, setMapFor] = useState('');
   const [orgHistoryFor, setOrgHistoryFor] = useState('');
@@ -2084,6 +2182,9 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Left of Won/Lost, so the destructive buttons stay at the far right where
+              they have always been. */}
+          <DealSearch deals={allDeals} currentId={deal.id} onOpenDeal={onOpenDeal} />
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
           <button onClick={() => setLostFor(deal.id)} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}

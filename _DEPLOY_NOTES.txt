@@ -1,62 +1,77 @@
-pkg811 - The mention email now names the project. Deploy on top of pkg810.
-=============================================================================
+pkg812 - Search for another project from inside a deal. Includes pkg811.
+==========================================================================
 
-This is a REISSUED pkg811. The earlier one (the per-recipient delivery report) was
-scrapped once notifications started working, and has been reverted out of my working
-copy so nothing from it rides along here.
+DEPLOY THIS INSTEAD OF pkg811. It contains it. Five files, all exist.
 
-FOUR FILES. All exist. Overwrite in place.
-
-  pages/api/project/[id]/cost-comments.js     (LITERAL square brackets)
-  pages/project/[id].js
+  pages/crm.js                                (the search)
+  pages/api/project/[id]/cost-comments.js     (pkg811 - project name on the email)
+  pages/project/[id].js                       (pkg811)
   pages/retention.js                          (marker only)
   pages/api/business-financials.js            (marker only)
 
 pkg810 first if you have not deployed it.
 
 
-THE FIX
-========
-The email read:
+THE SEARCH
+===========
+A search box in the deal's top bar, left of Won/Lost. Type, and matching projects
+drop down; click one, or press Enter, and it opens.
 
-    ... mentioned you in a comment on a cost on
-    Speedy Asset Services - 7307666662 - project fdbb2ec3-1cb7-498e-864a-82b63b6cf71d
-
-`id` in that endpoint is the Xero tracking option GUID out of the address bar. I
-used it as the project reference, which tells the reader nothing and reads like a
-broken link.
-
-It now says:
-
-    ... mentioned you in a cost comment on
-    J228 - Farmstead Drive - Speedy Asset Services - 7307666662
-
-Same change in the subject line.
+Opening a deal replaces the whole page - nav and all - so the toolbar search
+disappears the moment you are inside one, and getting from one project to another
+meant going back to the list and starting again.
 
 
-HOW THE NAME IS RESOLVED
--------------------------
-Server-side, from the dashboard cache, which already holds jobNo and name against
-xeroId. One read, and the name is not taken on trust from the browser.
+DECISIONS WORTH KNOWING
+------------------------
+IT USES THE SAME MATCHING RULE AS EVERYTHING ELSE. dealHaystack() already defines
+what a CRM search looks at, and its own comment says a search that quietly stops
+covering a field is the kind of fault nobody reports. So this reads it rather than
+listing fields again: title, company, contact, and the whole Details card including
+scope of works and general info.
 
-The page also sends its own label as a FALLBACK, used only if the dashboard cache
-has just been cleared - a sync or a retention save empties it, and an email landing
-mid-rebuild should still name the job.
+RANKED BY WHERE IT MATCHED, not just alphabetically:
 
-    cache hit                       -> J228 - Farmstead Drive - Speedy Asset Services - 7307666662
-    cache empty, page label sent    -> J228 - Farmstead Drive - Speedy Asset Services - 7307666662
-    cache empty, no label at all    -> project <id> - Speedy Asset Services - 7307666662
+    title starts with it   ->  first
+    title contains it      ->  next
+    company contains it    ->  next
+    anywhere else          ->  last
 
-Only the last case can still show a GUID, and it needs the cache to be empty AND
-the page to have no job number, which in practice means a project that is not in
-Xero.
+Searching "oakwood" puts the Oakwood projects above a job that merely mentions
+oakwood in its scope of works. Eight results maximum.
+
+WON AND LOST ARE INCLUDED, with the status shown on the right of each row - open
+deals show their stage instead. When you are hunting for a project from inside
+another one, it is usually an old one.
+
+THE PROJECT YOU ARE ALREADY IN IS EXCLUDED. It is never the answer, and it would
+otherwise sit at the top of its own results.
+
+KEYBOARD. Up and down to move, Enter to open, Escape to clear and then to close.
+Clicks are bound on mousedown, and the blur is delayed, so a click on a result
+cannot be lost to the list closing first - that is the commonest way a box like
+this feels broken.
+
+Verified: current deal excluded, won and lost returned, company matches ranked
+above free-text ones, no match says so rather than showing an empty box.
+
+
+ALSO IN THIS PACKAGE (pkg811)
+------------------------------
+The cost-comment mention email names the project instead of its GUID:
+
+    "... mentioned you in a cost comment on
+     J228 - Farmstead Drive - Speedy Asset Services - 7307666662"
+
+Resolved server-side from the dashboard cache, with the page's own label as a
+fallback for when that cache has just been cleared.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg811
-  612 drill-down header                 -> v811
-  Applied for / Certified drill-down    -> v811
+  13-week cash flow build marker        -> pkg812
+  612 drill-down header                 -> v812
+  Applied for / Certified drill-down    -> v812
 
 No new dashboard cache marker. Hard refresh after deploying.
 
