@@ -58,7 +58,10 @@ export default function FormsMissingPage() {
   const drillRows = useMemo(() => {
     if (!data || drill === null) return { missing: [], done: [], upcoming: [], label: '' }
     const all = data.rows.filter(r => drill === '' || r.formType === drill)
-    const by = (a, b) => a.week.localeCompare(b.week)
+    // Sorted on the date the column now SHOWS. Sorting by week while displaying a
+    // specific date makes a list look unordered.
+    const keyDate = (r) => (r.done ? (r.doneDate || r.dueDate) : r.dueDate) || r.week
+    const by = (a, b) => keyDate(a).localeCompare(keyDate(b))
       || String(a.projectNo).localeCompare(String(b.projectNo), undefined, { numeric: true })
       || FORM_ORDER.indexOf(a.formType) - FORM_ORDER.indexOf(b.formType)
     return {
@@ -217,7 +220,11 @@ export default function FormsMissingPage() {
                         </div>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead><tr style={{ background: '#faf9f7' }}>
-                            <th style={{ ...th, textAlign: 'left' }}>Week</th>
+                            {/* The date this row is actually about, not the Monday of
+                                its week. Completed rows show the date it was done on -
+                                for a diary that is its own Site Diary Date - and
+                                outstanding rows show the date it is needed for. */}
+                            <th style={{ ...th, textAlign: 'left' }}>{title === 'Completed' ? 'Date completed' : 'Date needed'}</th>
                             <th style={{ ...th, textAlign: 'left' }}>Project</th>
                             {drill === '' && <th style={{ ...th, textAlign: 'left' }}>Form</th>}
                             <th style={{ ...th, textAlign: 'left' }}>Responsible</th>
@@ -225,7 +232,13 @@ export default function FormsMissingPage() {
                           <tbody>
                             {list.map((r, i) => (
                               <tr key={i} style={{ borderTop: '1px solid #f2f2f2', background: bg === '#fee2e2' ? '#fffaf7' : '#fff' }}>
-                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{(() => {
+                                  const d = (r.done ? (r.doneDate || r.dueDate) : r.dueDate) || ''
+                                  // No specific date on the obligation - fall back to
+                                  // the week rather than showing a blank cell.
+                                  if (!d) return <span style={{ color: '#999' }}>W/C {parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+                                  return parseISO(d).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: '2-digit' })
+                                })()}</td>
                                 <td style={td}>{r.projectNo}{r.projectName && r.projectName !== r.projectNo ? ` - ${r.projectName}` : ''}</td>
                                 {drill === '' && <td style={td}>{r.formType}{r.day ? <span style={{ color: '#999', fontSize: 11 }}> &middot; {parseISO(r.day).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</span> : ''}</td>}
                                 <td style={td}>{r.responsible}{r.role ? <span style={{ color: '#aaa', fontSize: 11 }}> ({r.role})</span> : ''}</td>

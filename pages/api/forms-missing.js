@@ -1,5 +1,5 @@
 import { get, getOpsProjects, getSubmissionIndex, saveSubmissionIndex, getSubmission, getForms } from '../../lib/db'
-import { loadPreStarts, isPreStartDoneBy } from '../../lib/preStartDone'
+import { loadPreStarts, isPreStartDoneBy, preStartSentAt } from '../../lib/preStartDone'
 import { formDateOf } from '../../lib/formDates'
 
 // Forms "Missing" dashboard data.
@@ -126,11 +126,39 @@ export default async function handler(req, res) {
         const weekDayISOs = Array.from({ length: 7 }, (_, i) => iso(new Date(wStart.getTime() + i * DAY)))
         const inWeek = (d) => d >= wStart && d <= wEnd
 
-        const add = (formType, responsible, role, done) => {
-          rows.push({ week: weekMon, projectNo, projectName, formType, responsible: responsible || '—', role, done: !!done })
+        // dueDate = THE DAY THIS OBLIGATION IS ABOUT, not the Monday of its week.
+        //
+        // Every form type has one: the start or return date for a Pre-Start, the
+        // first day on site for the Start on Site Checklist, the finishing day for a
+        // Works Area Handover, the allocated day for a diary. The week was all that
+        // was carried, so a Pre-Start needed on the Thursday and one needed on the
+        // Monday read identically.
+        //
+        // doneDate = when it was actually completed, which for a diary is its own
+        // Site Diary Date rather than when it was typed up.
+        const add = (formType, responsible, role, done, dueDate, doneDate) => {
+          rows.push({
+            week: weekMon, projectNo, projectName, formType,
+            responsible: responsible || '—', role, done: !!done,
+            dueDate: dueDate || '', doneDate: doneDate || '',
+          })
           byForm[formType].required++
           if (done) byForm[formType].completed++
         }
+
+        // The submission that satisfied an obligation, so the date it carries can be
+        // shown. Same matching as doneFor - one rule, two callers.
+        const subFor = (titleMatch, weekMon2) => {
+          const wS = parseISO(weekMon2); const wE = new Date(wS.getTime() + 7 * DAY)
+          return (subs || []).find(x => {
+            if (!(x.formTitle || '').toLowerCase().includes(titleMatch)) return false
+            const m = (x.projectName || '').includes(projectNo) || (x.projectId || '') === projectNo || (projectName && (x.projectName || '').includes(projectName))
+            if (!m) return false
+            const t = x.submittedAt ? new Date(x.submittedAt) : null
+            return t && t >= wS && t < wE
+          }) || null
+        }
+        const subDate = (x) => x ? (x.formDate || (x.submittedAt ? iso(new Date(x.submittedAt)) : '')) : ''
 
         // PRE-START (CM): project starts OR returns to site within 14 calendar days of the week start.
         const twoWeeks = new Date(wStart.getTime() + 14 * DAY)
@@ -141,11 +169,17 @@ export default async function handler(req, res) {
           // could only ever say Missing. Done as at the END of this week, so a week
           // that closed before the minutes existed is not marked complete after the
           // fact, while minutes issued weeks ago still count for every week since.
-          add('Pre-Start', cm, 'CM', isPreStartDoneBy(preStarts[projectNo], wEnd.getTime()))
+          const trig = triggers.filter(t => t >= wStart && t <= twoWeeks).sort((a, b) => a - b)[0]
+          const psDone = isPreStartDoneBy(preStarts[projectNo], wEnd.getTime())
+          const psAt = preStartSentAt(preStarts[projectNo])
+          add('Pre-Start', cm, 'CM', psDone, trig ? iso(trig) : '', psDone && psAt ? iso(new Date(psAt)) : '')
         }
 
         // START ON SITE CHECKLIST (Supervisor): week containing first allocated day
-        if (inWeek(firstDay)) add('Start on Site Checklist', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'start on site', weekMon))
+        if (inWeek(firstDay)) {
+          const sub = subFor('start on site', weekMon)
+          add('Start on Site Checklist', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'start on site', weekMon), iso(firstDay), subDate(sub))
+        }
 
         // DAILY SITE DIARY (Supervisor): one required per allocated day in the week
         const diaryDays = days.filter(dk => weekDayISOs.includes(dk))
@@ -155,7 +189,10 @@ export default async function handler(req, res) {
           const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('daily site diary') &&
             ((s.projectName || '').includes(projectNo) || (projectName && (s.projectName || '').includes(projectName))) &&
             (s.formDate || (s.submittedAt ? iso(new Date(s.submittedAt)) : '')) === dk)
-          rows.push({ week: weekMon, projectNo, projectName, formType: 'Daily Site Diary', responsible: supervisor || '—', role: 'Supervisor', done, day: dk })
+          // The allocated day IS the date it is needed for, and a completed diary is
+          // matched on its own Site Diary Date, so for a diary the two are the same
+          // date by definition.
+          rows.push({ week: weekMon, projectNo, projectName, formType: 'Daily Site Diary', responsible: supervisor || '—', role: 'Supervisor', done, day: dk, dueDate: dk, doneDate: done ? dk : '' })
           byForm['Daily Site Diary'].required++
           if (done) byForm['Daily Site Diary'].completed++
         }
@@ -163,13 +200,17 @@ export default async function handler(req, res) {
         // WORKS AREA HANDOVER (Supervisor): a finish day in this week followed by a 5+ calendar-day gap
         // before the next visit (or no next visit = project end).
         let wahNeeded = false
+        let wahDay = null
         for (let i = 0; i < dayObjs.length; i++) {
           const d = dayObjs[i]; if (!inWeek(d)) continue
           const next = dayObjs[i + 1] || null
           const gap = next ? Math.round((next - d) / DAY) : Infinity
-          if (gap >= 5) { wahNeeded = true; break }
+          if (gap >= 5) { wahNeeded = true; wahDay = d; break }
         }
-        if (wahNeeded) add('Works Area Handover', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'works area handover', weekMon))
+        if (wahNeeded) {
+          const sub = subFor('works area handover', weekMon)
+          add('Works Area Handover', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'works area handover', weekMon), wahDay ? iso(wahDay) : '', subDate(sub))
+        }
       }
     }
 
@@ -226,7 +267,7 @@ export default async function handler(req, res) {
             ((job.projectNo && job.projectNo !== '—' && ((s.projectName || '').includes(job.projectNo) || (s.projectId || '') === job.projectNo)) || (s.projectName || '').includes(job.name)) &&
             s.submittedAt && new Date(s.submittedAt) >= wStart && new Date(s.submittedAt) < wEnd)
 
-          rows.push({ week: visitWeekMon, projectNo: job.projectNo, projectName: `💧 ${job.name}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk, upcoming: isUpcoming })
+          rows.push({ week: visitWeekMon, projectNo: job.projectNo, projectName: `💧 ${job.name}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk, upcoming: isUpcoming, dueDate: dk, doneDate: done ? dk : '' })
           if (isRequired) {   // happened (actual or past) -> counts in the required tally
             byForm['Water Ingress Report'].required++
             if (done) byForm['Water Ingress Report'].completed++
