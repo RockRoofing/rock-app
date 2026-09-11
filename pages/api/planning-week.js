@@ -77,7 +77,10 @@ export async function assembleWeek(mondayStr) {
         for (const e of entries) {
           byOp[e.opId] = byOp[e.opId] || {}
           byOp[e.opId][dk] = byOp[e.opId][dk] || []
-          byOp[e.opId][dk].push({ projectName: pname, projectAddress: paddr, half: e.half || 'full', status })
+          // projectKey carried through so the View WLA grid can move an allocation
+          // without having to work out which project a NAME refers to - two jobs can
+          // share a name, and a name is not a key.
+          byOp[e.opId][dk].push({ projectKey: pk, projectName: pname, projectAddress: paddr, half: e.half || 'full', status })
         }
         if (unnamed > 0) {
           unnamedByProjDay[pk] = unnamedByProjDay[pk] || {}

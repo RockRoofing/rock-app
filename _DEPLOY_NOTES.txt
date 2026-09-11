@@ -1,82 +1,84 @@
-pkg829 - In Query: status on the row, a visible Approved view, all months.
-============================================================================
+pkg830 - Reassign a project from the Weekly Labour Allocation grid. Includes pkg811-829.
+==========================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-828. It contains all of them. Thirty-nine files.
+DEPLOY THIS INSTEAD OF pkg811-829. It contains all of them. Forty-one files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828)
+*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828/829)
 
-  This feature:
-    lib/inquery.js
-    components/InQueryTable.js
-    pages/api/bookkeeping-inquery.js
-    pages/api/inquery-review.js
-    pages/inquery-review.js
+  lib/inquery.js
+  components/InQueryTable.js
+  pages/api/bookkeeping-inquery.js
+  pages/api/inquery-review.js
+  pages/inquery-review.js
+  pages/api/planning-timesheet-csv.js                 (pkg824)
+  lib/handoverPdf.js                                  (pkg822)
+  pages/api/handover-pdf.js                           (pkg822)
+  components/SearchableSelect.js                      (pkg818)
+  pages/api/admin/variations-instructed-audit.js      (pkg816 - the pages/api/admin/
+                                                       folder does not exist yet)
 
-  Outstanding from earlier:
-    pages/api/planning-timesheet-csv.js                 (pkg824)
-    lib/handoverPdf.js                                  (pkg822)
-    pages/api/handover-pdf.js                           (pkg822)
-    components/SearchableSelect.js                      (pkg818)
-    pages/api/admin/variations-instructed-audit.js      (pkg816 - the
-                                                         pages/api/admin/ folder
-                                                         does not exist yet either)
-
-middleware.js is changed (from pkg828). Everything else exists; overwrite in place.
+middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-1. STATUS CHANGEABLE ON THE ROW
-=================================
-The Status cell is now a dropdown. In Query or Approved, straight from the table.
-Approving a run of invoices is the common job and it should not need a modal opened
-and closed for each one. It still works inside the comments window as well.
+THE CHANGE
+===========
+In View Weekly Labour Allocations, the project name inside a cell is now clickable.
+Click it, pick the project to move it to, and it is moved - the grid updates and so
+does the Gantt behind it.
+
+The picker is the same searchable one the variation tracker and builder use, so you
+can type a job number or part of a name.
 
 
-2. YOUR APPROVED ITEMS ARE NOT GONE - AND NOW IT SAYS SO
-==========================================================
-They were never deleted. The view defaults to In Query, so approving something makes
-it leave that view, and a collapsed dropdown gave no clue where it went. That reads
-as "the row vanished", which is exactly how you read it - and fairly.
+TWO THINGS I HAD TO BE CAREFUL WITH
+=====================================
+THE CELL ALREADY DID SOMETHING. Clicking a cell toggles the Overnight Allowance, and
+that had to keep working. So the PROJECT NAME moves the job, and the space around it
+still toggles O/A. The name is dotted-underlined to show it is clickable.
 
-Two changes:
+Overheads and water-ingress visits are NOT clickable - a Holiday is a category, not a
+project, and a leak visit belongs to its own job list. Neither can be moved onto a
+project here.
 
-  The filter is now a SEGMENTED CONTROL WITH COUNTS, not a dropdown:
-
-      [ In Query (12) ]  [ Approved (3) ]  [ All (15) ]
-
-  "Approved (3)" sitting there in plain sight says both that they still exist and
-  where to find them. The counts are taken before the filter is applied, so they
-  always describe the whole tab rather than the view you happen to be in.
-
-  And while you are on In Query with approvals present, a line appears:
-  "3 approved invoices are hidden by this view - they are not gone. Show them."
-
-They leave the tab for good only when you re-tag them to a project in Xero.
+IT MOVES IN ONE SERVER CALL, not an unassign followed by an assign from the browser.
+Two calls can half-succeed: if the second is refused - a clash, a dropped connection
+- the person is left allocated to nothing and nobody notices until the sheet goes
+out short.
 
 
-3. MONTHS DEFAULTS TO ALL MONTHS
+AND ONE FAULT THE TESTING CAUGHT
 ==================================
-Done, and a fault of mine fixed with it.
+The existing `assign` action sets the half-day outright, which is right when you are
+choosing it. Reusing that for a move was destructive.
 
-The page already had a switchTab() that sets the defaults per tab - Overheads, for
-instance, gets Categorised plus all months. In pkg827 I added the In Query
-categorised default as a SEPARATE useEffect instead of using it.
+Moving somebody's MORNING onto a job they were already on in the AFTERNOON would
+have replaced the afternoon entry with the morning one - quietly deleting half a
+day's allocation.
 
-Two mechanisms for one job, and they fought: switching to Overheads set Categorised,
-then my effect saw a tab that was not In Query, saw Categorised, and set it back to
-No. So pkg827/828 broke the Overheads tab's default.
+Halves now merge instead:
 
-The effect is deleted and In Query now sits alongside Overheads in switchTab -
-Categorised, all months. One mechanism, and Overheads behaves again.
+    already am   + moving in pm    ->  full
+    already am   + moving in am    ->  am    (no change)
+    already full + moving in am    ->  full
 
-All months matters here in its own right: a query can sit for months, and defaulting
-to last month hides the old ones, which are the ones that need chasing.
+A clash with a DIFFERENT project is still refused, and says so: "That person is
+already on another project that day."
+
+
+ALSO
+-----
+planning-week.js now carries projectKey on each entry. The grid was working from the
+project NAME, and two jobs can share a name - a name is not a key.
+
+The grid refreshes without the loading flash, so changing one cell does not blank
+the whole table and throw you back to the top of it.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg829
-  612 drill-down header                 -> v829
-  Applied for / Certified drill-down    -> v829
+  13-week cash flow build marker        -> pkg830
+  612 drill-down header                 -> v830
+  Applied for / Certified drill-down    -> v830
 
 Hard refresh after deploying.
 
@@ -84,8 +86,7 @@ Hard refresh after deploying.
 STILL OPEN, ON YOUR WORD
 -------------------------
   - In Query is a tracking option, so it also appears as a PROJECT on Project
-    Financials and the dashboard, with costs and no revenue. Worth deciding
-    alongside whether other non-project options exist - Suspense, Overheads.
+    Financials and the dashboard, with costs and no revenue.
   - Release halves are on the Applied-for base, not the Final Account base their own
     tooltip and the certificate use (pkg798 notes). Material mid-contract.
   - MCD placement flags default TRUE in lib/applications.js, FALSE in

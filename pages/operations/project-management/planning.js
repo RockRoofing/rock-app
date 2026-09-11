@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import SearchableSelect from '../../../components/SearchableSelect'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, Loading, primaryBtn, ghostBtn, linkBtn } from '../../../components/opsUI'
 
@@ -1172,6 +1173,8 @@ const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace
 // View Weekly Labour Allocations: view a week, mark overnight allowance, download report.
 function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
   const [tab, setTab] = useState('build')             // 'build' | 'review'
+  const [movePick, setMovePick] = useState(null)      // an allocation being moved to another project
+  const [moveMsg, setMoveMsg] = useState('')
   // Week picker: any W/C Monday from 2 years back to 1 year forward.
   const wcOptions = useMemo(() => {
     const base = mondayOf(new Date())
@@ -1204,6 +1207,15 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
   const startMon = parseISO(fromMonISO)
   const weekMondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(startMon.getTime() + i * 7 * 86400000)))
 
+  // Reusable, so a move can refresh WITHOUT the loading flash. Clearing weeksData
+  // first would blank the whole grid and throw you back to the top of it after
+  // changing one cell.
+  async function reloadWeeks(showLoading = true) {
+    if (showLoading) setWeeksData(null)
+    const results = await Promise.all(weekMondays.map(m => fetch(`/api/planning-week?monday=${encodeURIComponent(m)}`).then(r => r.json()).then(week => ({ week })).catch(() => null)))
+    setWeeksData(results.filter(Boolean))
+  }
+
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -1214,6 +1226,24 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
     load()
     return () => { cancelled = true }
   }, [fromMonISO, weeksAhead])
+
+  async function doMove(toKey) {
+    if (!movePick) return
+    setMoveMsg('')
+    try {
+      const d = await fetch('/api/planning', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'move', fromKey: movePick.fromKey, toKey, date: movePick.date, opId: movePick.opId }),
+      }).then(r => r.json())
+      if (d.error === 'clash') { setMoveMsg('That person is already on another project that day.'); return }
+      if (d.error) { setMoveMsg(d.error); return }
+      setMovePick(null)
+      // BOTH views. This grid, and the Gantt behind it - onSaved is the parent's
+      // refresh, and without it the board still shows the old project until reload.
+      await reloadWeeks(false)
+      if (onSaved) onSaved()
+    } catch (e) { setMoveMsg(e.message || 'Could not move it') }
+  }
 
   // All named installers across the loaded weeks.
   const installers = useMemo(() => {
@@ -1423,7 +1453,24 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
                             title="Click to toggle Overnight Allowance"
                             style={{ padding: '4px 5px', verticalAlign: 'top', cursor: isIncluded(r.opId) ? 'pointer' : 'not-allowed', borderLeft: '1px solid #f3f3f1', background: on ? '#f4effc' : '#fff', minWidth: 88 }}>
                             {cell && cell.entries.map((e, ei) => (
-                              <div key={ei} style={{ fontSize: 10.5, lineHeight: 1.25, color: e.overhead ? '#6b4ea8' : (e.status === 'provisional' ? '#2563eb' : '#16a34a'), fontWeight: e.overhead ? 700 : 500 }}>
+                              // CLICK THE PROJECT TO MOVE IT. stopPropagation, because the
+                              // cell itself already toggles the Overnight Allowance - so
+                              // the name changes the job, and the space around it keeps
+                              // doing what it always did.
+                              //
+                              // Only entries with a projectKey. An overhead is a category,
+                              // not a project, and a water-ingress visit belongs to its own
+                              // job list - neither can be moved onto a project here.
+                              <div key={ei}
+                                onClick={ev => { if (e.projectKey) { ev.stopPropagation(); setMovePick({ opId: r.opId, name: r.name, date: dk, fromKey: e.projectKey, fromName: e.projectName, half: e.half }) } }}
+                                title={e.projectKey ? 'Click to move this to another project' : ''}
+                                style={{
+                                  fontSize: 10.5, lineHeight: 1.25, fontWeight: e.overhead ? 700 : 500,
+                                  color: e.overhead ? '#6b4ea8' : (e.status === 'provisional' ? '#2563eb' : '#16a34a'),
+                                  cursor: e.projectKey ? 'pointer' : 'inherit',
+                                  textDecoration: e.projectKey ? 'underline dotted' : 'none',
+                                  textUnderlineOffset: 2,
+                                }}>
                                 {e.projectName}{e.half !== 'full' ? ` (${String(e.half).toUpperCase()})` : ''}
                               </div>
                             ))}
@@ -1439,6 +1486,34 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
           )}
 
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
+
+          {movePick && (
+            <div onClick={() => setMovePick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 460, padding: 20 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Move to another project</div>
+                <div style={{ fontSize: 13, color: '#888', margin: '4px 0 14px' }}>
+                  {movePick.name} &middot; {parseISO(movePick.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
+                  {movePick.half && movePick.half !== 'full' ? ` (${String(movePick.half).toUpperCase()})` : ''}
+                  <br />Currently on <strong>{movePick.fromName}</strong>
+                </div>
+                {/* Same searchable picker as the variation tracker and builder - a
+                    native select on a few hundred projects only type-ahead matches the
+                    start of the option, so the job NAME finds nothing. */}
+                <SearchableSelect
+                  value=""
+                  placeholder="Choose the project to move it to..."
+                  emptyLabel="No project matches that"
+                  options={(data.projects || [])
+                    .filter(p => p.key !== movePick.fromKey)
+                    .map(p => ({ value: p.key, label: p.type === 'negotiated' ? `${p.name} (neg.)` : [p.projectNo, p.name].filter(Boolean).join(' - ') }))}
+                  onChange={(v) => doMove(v)} />
+                {moveMsg && <div style={{ color: '#dc2626', fontSize: 12.5, marginTop: 10 }}>{moveMsg}</div>}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                  <button onClick={() => setMovePick(null)} style={ghostBtn}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end', alignItems: 'center' }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
