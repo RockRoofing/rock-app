@@ -78,6 +78,9 @@ export default function ProjectsPage() {
   function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
 
   async function setStatus(projectNo, status) {
+    // Archiving takes a project out of every live list - the Planner, the Site App,
+    // RAMS, badges - so it is worth a moment's pause. Nothing is lost either way.
+    if (status === 'archived' && !confirm(`Archive ${projectNo}?\n\nIt disappears from the Planner, the Site App and every live list, but nothing is deleted. You can restore it from the Archived filter at any time.`)) { load(); return }
     await fetch('/api/ops-projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-status', projectNo, status }) })
     load()
   }
@@ -102,11 +105,6 @@ export default function ProjectsPage() {
       quantitySurveyor: p.quantitySurveyor, designManager: p.designManager,
       location: p.location, status: p.status,
     })
-  }
-  async function delProject(projectNo) {
-    if (!confirm(`Delete project ${projectNo}? This removes the operations record.`)) return
-    await fetch('/api/ops-projects', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo }) })
-    load()
   }
 
   // ── Detail view ───────────────────────────────────────────────────────────
@@ -194,7 +192,19 @@ export default function ProjectsPage() {
                   </td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => editProject(p)} style={linkBtn}>Edit</button>
-                    {p.manual && <button onClick={() => delProject(p.projectNo)} style={{ ...linkBtn, color: '#dc2626', marginLeft: 10 }}>Delete</button>}
+                    {/* No Delete. A project is ARCHIVED through the Status column, which
+                        is a fourth status alongside Live, Complete and Draft.
+                        
+                        Delete was shown only on manually-added projects, which looked
+                        like a rule and was not one: a manual project given an Internal
+                        Handover afterwards KEEPS manual: true - the IHM upsert spreads
+                        the existing record - so the button appeared on projects with
+                        full minutes behind them, where deleting the ops row would have
+                        left the handover orphaned and the project would come back the
+                        next time that handover was saved. */}
+                    {p.status === 'archived' && (
+                      <button onClick={() => setStatus(p.projectNo, 'active')} style={{ ...linkBtn, marginLeft: 10 }}>Restore</button>
+                    )}
                   </td>
                 </tr>
               ))}

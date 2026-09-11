@@ -1,11 +1,11 @@
-pkg838 - Why one person could not upload a RAMS and you could. Includes pkg811-837.
-=====================================================================================
+pkg839 - Projects are archived, never deleted. Includes pkg811-838.
+=====================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-837. It contains all of them. Forty-six files.
+DEPLOY THIS INSTEAD OF pkg811-838. It contains all of them. Forty-seven files.
 
-*** ELEVEN NEW FILES TO CREATE BY HAND ***
+*** ELEVEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg838)
 
-  lib/uploadFile.js                                   <- NEW in this package
+  lib/uploadFile.js                                   (pkg838)
   lib/inquery.js
   components/InQueryTable.js
   pages/api/bookkeeping-inquery.js
@@ -21,91 +21,99 @@ DEPLOY THIS INSTEAD OF pkg811-837. It contains all of them. Forty-six files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-THE ANSWER: IT IS THE FILE, NOT THE USER
-==========================================
-Their RAMS is bigger than about 4.5MB. Yours is not.
+THE FIX - SMALLER THAN IT LOOKS
+=================================
+Archiving was already three-quarters built. 'archived' was already a status, already
+in the labels, already in the Status filter, already in the row dropdown and already
+in the Add/Edit modal. Nothing needed inventing.
 
-RAMS uploads posted the file's bytes through /api/upload-file - one of our own
-serverless functions. Vercel caps a serverless request body at roughly 4.5MB, and
-over that the PLATFORM rejects the request before any of our code runs.
+What was missing was that Delete still existed alongside it.
 
-That rejection comes back as a PLAIN TEXT body reading "Request Entity Too Large".
-The page then called res.json() on it, which is where
+  DELETE IS GONE from the projects list.
 
-    Unexpected token 'R', "Request En"... is not valid JSON
+  DELETE IS REFUSED BY THE API, with a message saying to archive instead. It
+  previously had NO guard at all - it removed whatever project number it was given.
+  The only thing stopping anyone was a hidden button, and per your last question that
+  button was hidden in the wrong places: a manually-added project KEEPS manual: true
+  after an Internal Handover is completed against it, because the IHM upsert spreads
+  the existing record. So Delete appeared on projects with full minutes behind them.
 
-comes from. The "R" is the R of "Request". The message is a JSON parse error
-standing in for "that file is too big", which is why it told you nothing.
+  RESTORE appears on archived rows, putting them back to Live.
 
-Nothing to do with permissions, the browser or the project. Two people on the same
-screen get different results purely on file size - and a RAMS is a PDF, so it does
-not compress on the way up the way a photo does.
+  ARCHIVING ASKS FIRST, because the project leaves every live list: "It disappears
+  from the Planner, the Site App and every live list, but nothing is deleted. You can
+  restore it from the Archived filter at any time."
 
+  STATUS IS VALIDATED server-side against draft / active / complete / archived. A
+  typo would have set a status no consumer recognises and the project would have
+  vanished from every list with nothing to explain it.
 
-THE FIX
-========
-lib/uploadFile.js - one helper, using @vercel/blob/client, which sends the file
-straight from the browser to Blob storage with only a token passing through us. No
-serverless body limit. The token endpoint already allows PDFs and up to 200MB.
-
-The design pages have used this route all along. Everything else used the capped
-one, which is why Tech Subs and drawing sets upload fine and a RAMS does not.
-
-Switched in this package - the paths that carry DOCUMENTS rather than photos:
-
-    RAMS                                    pages/operations/projects.js
-    Project files (all categories)          components/ProjectFiles.js
-    Handover scope drawings / documents     pages/handover/form.js
-    Procurement & risk row attachments      components/RowAttachments.js
-
-And the error now says what is wrong: "X.pdf is too large to upload. Split it or
-compress it and try again." The handover and row attachments were swallowing upload
-failures to the console entirely - a scope drawing that never uploaded, with nothing
-on screen to say so, is a handover that goes out short.
+  archivedAt and archivedBy are recorded, and cleared on restore.
 
 
-SEVEN PLACES STILL USE THE OLD ROUTE
-======================================
-  pages/operations/project-management/issues.js
-  pages/forms/issue.js
-  pages/forms/deliveries.js
-  pages/forms/fill.js
-  pages/forms/index.js
-  components/PreStartForm.js
-  components/SubmissionModal.js
+WHY ARCHIVING ALREADY WORKS EVERYWHERE
+========================================
+Every consumer of the project list allowlists 'active' and 'draft' rather than
+excluding 'complete'. So a status they have never heard of drops out on its own.
+Checked all of them:
 
-All of those upload PHOTOS, and photos go through compressImage first, so they land
-well under the limit in normal use. They are not broken today.
+    Planner, project process board        draft, active      archived excluded
+    Site badges, RAMS approvals, notices   draft, active      archived excluded
+    RAMS matrix                            draft, active      archived excluded
+    Site App project picker                active             archived excluded
 
-But a Site App user attaching a PDF to an issue or a delivery would hit exactly the
-same wall with exactly the same unreadable message. The helper is written and each
-one is a one-line swap. I have left them because it is seven files across the Site
-App and worth deploying on its own rather than buried under a RAMS fix - say the
-word and it is the next package.
+That is the allowlist paying off - had any of them been written as "not complete",
+archived projects would have carried on appearing and this would have been a much
+larger change.
+
+
+WHY DELETING WAS NEVER RIGHT
+==============================
+The handover minutes, the RAMS, the drawings, the submissions and the planner
+allocations all key off the project number, and none of them were removed with the
+project. Worse, saving that project's handover again simply recreated the record -
+so on an IHM project the button would have appeared to do nothing.
+
+
+FOR BBB "TEST PROJECT 2"
+=========================
+Set its Status to Archived. It leaves the Live list and everywhere else, and stays
+recoverable. Same for anything else sitting in the list that should not be there.
+
+
+ONE THING LEFT ALONE
+=====================
+pages/api/cron/deliveries-notify.js reads the project list, but only to resolve a
+name against a delivery - it decides what to chase from the deliveries themselves.
+An archived project with an outstanding delivery would still be chased. That is
+arguably correct, and changing it is a behaviour change you have not asked for, so
+it is flagged rather than done.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg838
-  612 drill-down header                 -> v838
-  Applied for / Certified drill-down    -> v838
+  13-week cash flow build marker        -> pkg839
+  612 drill-down header                 -> v839
+  Applied for / Certified drill-down    -> v839
 
-Hard refresh after deploying. Ask the person who could not upload to try the same
-file again - it should now go up, however large.
+Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
+pkg838  RAMS upload failure - files over ~4.5MB were rejected by the platform as
+        plain text, which then failed to parse as JSON. Now uploads straight to Blob
+        storage. Seven photo-upload paths still use the old route and are listed in
+        those notes.
 pkg837  Type-to-search on the Overheads staff picker.
 pkg836  "Your name" fields take one person only.
 pkg835  Search on Site App Users - people and projects.
 pkg834  Site App Users table full width.
-pkg833  Daily Site Diary crew picker lists only people on that project.
 
 
 STILL OPEN, ON YOUR WORD
 -------------------------
-  - The seven remaining upload paths, above.
+  - The seven remaining upload paths (pkg838 notes).
   - In Query is a tracking option, so it also appears as a PROJECT on Project
     Financials and the dashboard, with costs and no revenue.
   - Release halves are on the Applied-for base, not the Final Account base their own
@@ -115,4 +123,3 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
-  - An hours field on the Planner day cell, for real hours in the timesheet CSV.

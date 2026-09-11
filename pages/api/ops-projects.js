@@ -48,7 +48,14 @@ export default async function handler(req, res) {
     if (body.action === 'set-status') {
       const idx = projects.findIndex(p => p.projectNo === body.projectNo)
       if (idx < 0) return res.status(404).json({ error: 'Not found' })
+      // Named rather than taken on trust. A typo here would set a status no consumer
+      // recognises, and the project would quietly vanish from every list with nothing
+      // to explain it.
+      const ALLOWED = ['draft', 'active', 'complete', 'archived']
+      if (!ALLOWED.includes(body.status)) return res.status(400).json({ error: `Unknown status. One of: ${ALLOWED.join(', ')}` })
       projects[idx].status = body.status
+      if (body.status === 'archived') { projects[idx].archivedAt = now; projects[idx].archivedBy = body.by || '' }
+      else if (projects[idx].archivedAt) { projects[idx].archivedAt = 0; projects[idx].archivedBy = '' }
       projects[idx].updatedAt = now
       await saveOpsProjects(projects)
       return res.json({ ok: true })
@@ -142,12 +149,27 @@ export default async function handler(req, res) {
     return res.json({ ok: true, projectNo, status: status || 'active' })
   }
 
+  // PROJECTS ARE NOT DELETED. THEY ARE ARCHIVED.
+  //
+  // This used to remove the record outright, with no guard at all - the only thing
+  // stopping it was the Delete button being hidden in the UI, and that button was
+  // shown on exactly the wrong set: manually-added projects, which KEEP manual: true
+  // even after an Internal Handover is completed against them. So the rule was a
+  // hidden button rather than an enforced one, and it was hidden in the wrong places.
+  //
+  // Deleting an ops project never made sense anyway. The handover, the RAMS, the
+  // drawings, the submissions and the planner allocations all key off the project
+  // number and none of them were being removed with it - and saving that project's
+  // handover again would simply recreate the record.
+  //
+  // Archiving is set-status with 'archived'. Every consumer of this list allowlists
+  // 'active' and 'draft', so an archived project drops out of the Planner, the Site
+  // App, RAMS, badges and the process board without any of them needing to know the
+  // status exists.
   if (req.method === 'DELETE') {
-    const { projectNo } = req.body || {}
-    let projects = await getOpsProjects()
-    projects = projects.filter(p => p.projectNo !== projectNo)
-    await saveOpsProjects(projects)
-    return res.json({ ok: true })
+    return res.status(405).json({
+      error: 'Projects are not deleted. Set the status to Archived instead - it comes out of every live list and can be restored at any time.',
+    })
   }
 
   res.status(405).end()
