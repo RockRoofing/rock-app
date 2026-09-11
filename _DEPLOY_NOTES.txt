@@ -1,10 +1,12 @@
-pkg821 - Upload a calculation without issuing it. Includes pkg811-820.
-========================================================================
+pkg822 - Download the Internal Handover Minutes as a PDF. Includes pkg811-821.
+================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-820. It contains all of them. Twenty-four files.
+DEPLOY THIS INSTEAD OF pkg811-821. It contains all of them. Twenty-eight files.
 
-*** TWO NEW FILES TO CREATE BY HAND ***
+*** FOUR NEW FILES TO CREATE BY HAND ***
 
+  lib/handoverPdf.js                                  (new, this package)
+  pages/api/handover-pdf.js                           (new, this package)
   components/SearchableSelect.js                      (from pkg818)
   pages/api/admin/variations-instructed-audit.js      (from pkg816 - the
                                                        pages/api/admin/ folder does
@@ -14,95 +16,78 @@ Everything else exists. Overwrite in place. LITERAL square brackets on
 pages/design/[project]/, pages/api/project/[id]/ and pages/project/.
 
 
-THE CHANGE
+THE BUTTON
 ===========
-+ Add Calculation now asks first:
+"Download PDF" in both places:
 
-    Do you want to send this for approval?
+  PRE-CONTRACT   on the handover form, in the button row beside Meeting Complete
+  OPERATIONS     top right of the Handover tab inside a project
 
-      No - just upload it
-        Held on the project. Nobody is emailed and it shows as "Not issued".
-        You can send it for approval later.
-
-      Yes - send for approval
-        Goes to the customer you choose, and they are emailed.
-
-The approver dropdown only appears once you answer Yes, and the Choose file button
-stays disabled until the question is answered - a default here is a default that
-issues documents to customers by accident.
-
-Same question on Mark superseded, which also forces a new revision.
+Both produce the identical file, because both fetch it from the same endpoint.
 
 
-SENDING IT LATER
------------------
-A held calculation carries a "Send for approval" action on its row. Tick several
-and a "Send N for approval" button appears in the toolbar. Either way you choose the
-approver, and from that point it behaves exactly as an upload-and-issue would have:
-status moves to In Review and the approver is emailed.
+BUILT FROM THE SCHEMA, NOT FROM A LIST OF FIELDS
+--------------------------------------------------
+The PDF renders lib/ihmSchema.js - and the CUSTOM template from admin/templates
+where one has been saved, resolved exactly as /api/templates does it for the form.
+
+That matters more than it sounds. A hand-written list of fields in the PDF would go
+stale the first time somebody added a question in admin/templates, and nobody would
+notice until a handover went out with a section missing. Verified by building one
+against a template with an extra section bolted on: the new question appears with no
+change to the PDF code.
+
+It also means the PDF asks the same questions the meeting worked through, rather
+than the stock schema.
 
 
-WHY IT NEEDED A NEW STATE RATHER THAN JUST A BLANK APPROVER
--------------------------------------------------------------
-The API already tolerated an upload with no approver - it just never emailed anyone.
-But the document was still written as status 'in-review', so a wind load calc you
-only wanted on the project sat there reading "In Review" and telling the customer's
-side "Awaiting customer approval", when it had not been sent to a soul.
+EMPTY FIELDS ARE PRINTED, NOT SKIPPED
+---------------------------------------
+This is the record of a meeting. "Has the warranty period been confirmed? -" is a
+finding. Dropping unanswered fields would make the document read as though the
+question was never asked, which is the opposite of what a handover record is for.
 
-There are three states, so there are now three:
-
-    held        uploaded, not issued, nobody emailed        "Not issued"
-    in-review   with the approver, who has been emailed     "In Review"
-    approved    signed off                                  "Approved"
-
-Held documents are excluded from the "needs approval" count and from the
-"Awaiting customer approval" line, because neither is true of them.
+Unanswered values print as a grey dash so they are distinguishable at a glance from
+answered ones.
 
 
-TWO THINGS GUARDED
--------------------
-SEND-FOR-APPROVAL ONLY MOVES HELD DOCUMENTS. An approved one must not be quietly
-pulled back into review, and one already in review would email the approver a
-second time. Both are refused, by name.
+DETAILS
+--------
+It prints the SAVED record, not what is on screen. On the Pre-Contract form the
+button is greyed until there is a project number to fetch by, and says so if you
+press it early - before the first save there is nothing stored to print.
 
-THE BULK "NOTIFY PROJECT USERS" ACTION NO LONGER SWEEPS THEM UP. It assigned an
-approver to every document that did not have one, which would have issued a held
-calculation as a side effect of notifying somebody about something else.
+Repeatable sections each get their own layout: site contacts as one line per person,
+roof types as a block per type, the risk log numbered, checklists as one line per
+item with its Yes / No / N-A answer.
 
-Verified across the lot:
+Text wraps inside the value column, so a project address or a long note stays in its
+column instead of running across the page.
 
-    held + approver chosen    -> in-review, approver set, emailed
-    held, no approver         -> refused
-    already in review         -> refused, no second email
-    already approved          -> refused, not pulled back
-    superseded                -> refused
-    upload answering No       -> held, no approver, nothing emailed
-    upload answering Yes      -> in-review, approver set, emailed
+Smart quotes and dashes pasted out of Word are converted. pdf-lib throws on anything
+WinAnsi cannot encode, and a curly apostrophe should not fail a download.
+
+A failure returns JSON, not a half-written PDF - otherwise the browser saves a broken
+file and there is nothing to say what went wrong.
+
+Verified against: an entirely empty handover, null data, Word punctuation, a
+half-answered checklist, an empty contacts array, a field holding an unexpected
+object, and a customised template. All produce a document.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg821
-  612 drill-down header                 -> v821
-  Applied for / Certified drill-down    -> v821
+  13-week cash flow build marker        -> pkg822
+  612 drill-down header                 -> v822
+  Applied for / Certified drill-down    -> v822
 
 Hard refresh after deploying.
 
 
-WORTH KNOWING
---------------
-Existing calculations are untouched and keep their current status. Only new uploads
-can be held. If you have old ones sitting in review that were never actually sent,
-they will keep saying In Review - there is no way to tell those apart from genuine
-ones in the data, so I have not tried to guess. Upload a new revision, or leave them.
-
-The same pattern would suit the other design pages - drawings, tech submittals,
-warranties, leak test certs - which all issue on upload in the same way. Say the
-word and they get the same question.
-
-
 ALSO IN THIS PACKAGE
 ---------------------
+pkg821  Calculations can be uploaded without issuing - "Do you want to send this for
+        approval?" - with a Not issued state and a send-later action.
 pkg820  Documents as well as images on variations; PDFs merged in whole.
 pkg819  Workings window closes on the x; completeness check moved to the raise.
 pkg818  Type-to-search on the project pickers.
@@ -121,3 +106,5 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
+  - The same "send for approval?" question on the other design pages - drawings,
+    tech submittals, warranties, leak test certs.

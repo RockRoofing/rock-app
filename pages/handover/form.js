@@ -219,6 +219,16 @@ export default function Handover() {
         <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Meeting Complete'}</button>
         <button onClick={() => save(false)} disabled={saving} style={ghostBtn}>Save as draft</button>
         <button onClick={() => router.push("/handover")} style={ghostBtn}>Cancel</button>
+        {/* Built server-side from the stored record, so it prints what has been SAVED
+            rather than what is on screen. Offered only once there is a project number
+            to fetch by - before the first save there is nothing stored to print. */}
+        <a
+          href={data.projectNo ? `/api/handover-pdf?no=${encodeURIComponent(data.projectNo.trim())}` : undefined}
+          onClick={e => { if (!data.projectNo?.trim()) { e.preventDefault(); setErr('Save the handover first - the PDF is built from the saved record.') } }}
+          title={data.projectNo ? 'Download the saved handover as a PDF' : 'Save it first'}
+          style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', opacity: data.projectNo?.trim() ? 1 : 0.5 }}>
+          Download PDF
+        </a>
         {autoStatus && <span style={{ fontSize: 12.5, color: autoStatus === 'saved' ? '#16a34a' : '#9a958c', alignSelf: 'center' }}>{autoStatus === 'saving' ? 'Auto-saving…' : 'Draft auto-saved'}</span>}
       </div>
     </Wrap>

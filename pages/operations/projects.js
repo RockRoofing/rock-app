@@ -542,6 +542,15 @@ function HandoverReadOnly({ projectNo }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Same file Pre-Contract get from the form. Built server-side from the stored
+          record and the same sections this view renders, so the two cannot drift. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <a href={`/api/handover-pdf?no=${encodeURIComponent(projectNo)}`}
+          title="Download the Internal Handover Minutes as a PDF"
+          style={{ textDecoration: 'none', border: '1px solid #e3e1dc', background: '#fff', color: INK, borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700 }}>
+          Download PDF
+        </a>
+      </div>
       {hasTemplate ? (
         sections.map((section, si) => {
           const rendered = (section.fields || []).map(f => <div key={f.id}>{renderField(f)}</div>).filter(Boolean)
