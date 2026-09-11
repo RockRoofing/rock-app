@@ -11,6 +11,7 @@ const TAB_LABELS = Object.fromEntries(TABS)
 // either of them.
 const VIEW_ONLY_TABS = new Set(['retention', 'wip'])
 import Link from 'next/link'
+import InQueryTable from '../components/InQueryTable'
 import ReportImprovementLink from '../components/ReportImprovementLink'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
@@ -179,6 +180,19 @@ export default function BookkeepingPage() {
   const [codes, setCodes] = useState([])          // multi-select account codes
   const [catFilter, setCatFilter] = useState('') // '' | labour | materials  (Costs tab)
   const [assigned, setAssigned] = useState('no')   // default: No category assigned
+  const [inqStatus, setInqStatus] = useState('query')  // In Query tab: query | approved | both
+
+  // IN QUERY IS CATEGORISED BY DEFINITION.
+  //
+  // Every row on that tab is tagged - to the In Query tracking option - so the
+  // default of "No category assigned" would show an empty tab and look broken.
+  // Switched on arrival, and switched back on the way out so the other tabs keep
+  // the default they had.
+  useEffect(() => {
+    if (tab === 'inquery') setAssigned('yes')
+    else if (assigned === 'yes') setAssigned('no')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
   const [page, setPage] = useState(1)
   const PER_PAGE = 50
   const [syncing, setSyncing] = useState('')     // '' | 'benchmark' | 'invoices' | 'wages'
@@ -497,14 +511,13 @@ export default function BookkeepingPage() {
                 </div>
               </div>
 
-              {tab === 'inquery' && (
-                <div style={{ margin: '0 0 12px', padding: '9px 12px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', fontSize: 12.5, color: '#7c2d12' }}>
-                  Costs parked against the <strong>In Query</strong> tracking option in Xero - in the books,
-                  but not yet on a project. They are held out of the Costs tab and out of project spend until
-                  they are re-tagged to the job they belong to.
-                </div>
-              )}
-
+              {/* In Query has its own table: grouped by invoice, sortable, with an
+                  assignee, a status and a comment thread. None of which the other
+                  tabs have, and all of which would have turned the table below into
+                  a thicket of `tab === 'inquery' &&`. */}
+              {tab === 'inquery' ? (
+                <InQueryTable rows={filtered} statusFilter={inqStatus} onStatusFilterChange={setInqStatus} />
+              ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -544,8 +557,9 @@ export default function BookkeepingPage() {
                   </tbody>
                 </table>
               </div>
+              )}
 
-              {totalPages > 1 && (
+              {tab !== 'inquery' && totalPages > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 }}>
                   <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
                     style={{ ...sel, cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>← Prev</button>

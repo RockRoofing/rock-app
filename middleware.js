@@ -100,6 +100,12 @@ export async function middleware(req) {
     pathname === '/reset-password' ||
     pathname.startsWith('/go/') ||
     pathname === '/rams-approve' ||
+    // The In Query review link goes to people with no portal account - somebody
+    // added to the table by hand. The signed token in the address is the
+    // authentication, and it scopes the response to that one email. Without these
+    // two lines the link bounces to the login page and is useless to them.
+    pathname === '/inquery-review' ||
+    pathname === '/api/inquery-review' ||
     pathname === '/api/rams-token' ||
     pathname === '/api/rams-approvals' ||
     pathname === '/api/download' ||
