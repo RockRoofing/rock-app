@@ -1264,6 +1264,18 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
       .then(() => onSaved && onSaved()).catch(() => {})
   }
 
+  // The CSV covers the same span the report does: the chosen week commencing,
+  // through however many weeks are selected, ending on the Sunday.
+  function downloadCsv() {
+    const from = fromMonISO
+    const end = new Date(parseISO(fromMonISO).getTime() + (weeksAhead * 7 - 1) * 86400000)
+    const to = iso(end)
+    const includeOpIds = installers.filter(r => isIncluded(r.opId)).map(r => r.opId)
+    const qs = new URLSearchParams({ from, to })
+    if (includeOpIds.length) qs.set('opIds', includeOpIds.join(','))
+    window.location.href = `/api/planning-timesheet-csv?${qs.toString()}`
+  }
+
   async function download() {
     setBusy(true); setErr('')
     try {
@@ -1428,8 +1440,15 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
 
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end', alignItems: 'center' }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
+            {/* Same week range and the same ticked installers as the PDF, so the two
+                reports cannot describe different people over different dates. */}
+            <button onClick={downloadCsv} disabled={busy || !weeksData || installers.length === 0}
+              title="One row per person, per day, per rate - the Timesheets layout"
+              style={{ ...ghostBtn, opacity: (busy || !weeksData || !installers.length) ? 0.6 : 1 }}>
+              Download timesheet CSV
+            </button>
             <button onClick={download} disabled={busy || !weeksData || installers.length === 0} style={{ ...primaryBtn, opacity: (busy || !weeksData || !installers.length) ? 0.6 : 1 }}>{busy ? 'Building...' : 'Download report'}</button>
           </div>
         </div>

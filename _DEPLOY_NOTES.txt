@@ -1,10 +1,11 @@
-pkg823 - The handover PDF printed raw JSON. Includes pkg811-822.
-==================================================================
+pkg824 - Timesheet CSV out of the Planner. Includes pkg811-823.
+=================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-822. It contains all of them. Twenty-eight files.
+DEPLOY THIS INSTEAD OF pkg811-823. It contains all of them. Thirty files.
 
-*** FOUR NEW FILES TO CREATE BY HAND ***
+*** FIVE NEW FILES TO CREATE BY HAND ***
 
+  pages/api/planning-timesheet-csv.js                 (new, this package)
   lib/handoverPdf.js                                  (from pkg822)
   pages/api/handover-pdf.js                           (from pkg822)
   components/SearchableSelect.js                      (from pkg818)
@@ -15,83 +16,93 @@ DEPLOY THIS INSTEAD OF pkg811-822. It contains all of them. Twenty-eight files.
 Everything else exists. Overwrite in place.
 
 
-WHAT WENT WRONG
-================
-The schema has fourteen field types. I gave the PDF a case for five of them and let
-the rest fall through to JSON.stringify, which is why your J249 came out with
+YES, IT CAN BE DONE - AND ALMOST ALL OF IT IS ALREADY RECORDED
+================================================================
+Your W.L.A sheet IS the Planner grid, so I expected to be able to produce the names,
+the dates and the jobs and no more. In fact the Planner already holds nearly the
+whole workbook across five stores:
 
-    {"title":"Sales Rep","name":"Colin Sanderson","company":"Renolit",...}
+    ops:planning-allocations   project work, full or half day
+    ops:water-ingress          call-out visits, with their own job names
+    ops:overheads              Holidays, Sick, Paid Leave, Internal Time, Ops Support
+    ops:overnight-allowance    nights away, by person and date
+    ops:operatives-roster      names (Site App users take precedence)
 
-for the manufacturer contacts, the whole roof build-up as a bracketed array, the
-scope drawings as 200-character blob URLs, and the entire procurement schedule and
-live task list as raw objects. A default that dumps JSON looks like it works right
-up until somebody fills the field in.
-
-Every type now has its own case:
-
-  Manufacturer contacts   Colin Sanderson | Sales Rep | Renolit | 07818 336897 | email
-  Scope drawings          the file NAME. A blob URL is noise on a printed document
-                          and is not what anybody reads
-  Roof build-up           the name, the substrate, then one line per layer:
-                            VCL: Renolit, Polythene, 0.25mm
-                            Insulation: Kingspan, TT46, 130mm to 290mm, calc: No
-                          Empty layers are dropped
-  Live tasks              numbered, with owner and close-out date
-  Procurement             numbered by package, with supplier, owner, budget, the
-                          buying notes and any attachments by name
-  Risk log                numbered, with mitigation and owner on their own lines
+Which covers every column: Employee Name, Date, Job No, Job Description, Hours,
+Rate Description - one row per person, per day, per rate.
 
 
-AND THE SCOPE OF WORKS WAS HTML
----------------------------------
-Scope of works is a `long` field, but the form writes it from a rich-text editor, so
-what is stored is markup. It printed as
+WHERE TO FIND IT
+-----------------
+Planner -> the Accounts report modal -> "Download timesheet CSV", beside the
+existing Download report. It uses the SAME week commencing, the same number of
+weeks and the same ticked installers as the PDF, so the two cannot end up
+describing different people over different dates.
 
-    <u style=""><b>5th Floor roof area</b></u><div>Single ply membrane...
-
-Now converted to text. Two details that took a second pass: breaking only on closing
-tags ran the heading into the paragraph after it ("5th Floor roof areaSingle ply
-membrane..."), and breaking on both put a blank line between every line of the
-specification. A closing tag immediately followed by an opening one is collapsed to
-a single break, so consecutive lines sit together and a deliberately empty line
-still comes through as a paragraph break.
+Dates come out as DD/MM/YYYY and the file carries a UTF-8 BOM, so Excel opens it
+in a UK locale without turning dates into text or mangling an accented name.
 
 
-BOTH VIEWS THE SAME - TWO REAL FAULTS IN THE OPS VIEW
-=======================================================
-Checking the two against each other turned up that the Ops read-only view was wrong
-in its own right, independently of the PDF:
-
-1. ROOF TYPES SHOWED ONLY THE NAME. The renderer read r.type, r.area, r.system and
-   r.notes. A roof type has none of those - emptyRoofType() in lib/ihmSchema.js is
-   { name, substrate, rows[] } - so every field but the name came out empty and the
-   entire specification, the layers the meeting sat and agreed, was not displayed at
-   all. It now shows the substrate and one line per layer, the same content as the
-   PDF.
-
-2. SCOPE OF WORKS SHOWED ITS TAGS. Down the template-driven path a `long` field
-   holding markup went through the plain text row, so the Ops view printed the HTML.
-   It now renders as HTML when it looks like HTML, which is what the older
-   non-template path always did.
-
-Pre-Contract see the form itself, which has always rendered these correctly through
-its own editors. Both sides now agree with each other and with the PDF.
+CHECKED AGAINST YOUR WORKBOOK
+-------------------------------
+Ran the logic over William McVeigh's July-August rows. It reproduces them line for
+line, including the two-row days - J246 Standard 8 plus Overnight Allowance 1 on
+22 July - and half days coming out as 4 hours at the Weekend rate on a Saturday.
 
 
-VERIFIED
----------
-Rebuilt the PDF from the exact shapes that produced the gobbledygook on J249 and
-checked the output for JSON artefacts - none. Re-ran the edge cases: empty handover,
-null data, Word punctuation, half-answered checklist, empty contacts array, an
-unexpected object in a field, and a customised template. All still produce a
-document.
+TWO THINGS ARE DERIVED, NOT RECORDED - WORTH KNOWING BEFORE PAYROLL USES IT
+=============================================================================
+1. HOURS. The Planner records a full day or a half day, not a clock. A full day is
+   8 hours and a half day 4. Somebody who actually worked 9.5 hours still reads 8,
+   because the Planner has nowhere to put the 1.5. Your Hours & OA check sheet shows
+   Michael Walker on 31 weekend hours, which is exactly the sort of figure this
+   cannot produce on its own.
+
+   If that matters, the Planner needs an hours field on the day cell. That is a real
+   change, not a tweak, and worth deciding on separately.
+
+2. WEEKEND RATE. Taken from the date being a Saturday or Sunday, which is how the
+   workbook separates it. A weekday paid at a weekend rate cannot be told apart.
+
+
+AND ONE HEURISTIC, FLAGGED
+----------------------------
+An overnight is often the night BEFORE the job - travelling up on a Sunday, or
+staying over at the end of a holiday to start on site the next morning. On those
+days there is no project allocation, so the allowance would land on "Internal time"
+and the cost would never reach the job.
+
+Your workbook does this by hand: 11 August is a Holiday, and the overnight that
+night is booked to J246, where he was the following morning.
+
+So the export uses the job that day, failing that the job within the next three
+days, failing that the day before. It reproduces your 11 August row correctly.
+Anything it still cannot place stays on "Internal time" rather than being guessed
+onto a job, so it shows up to be looked at.
+
+The Planner does not record which job an overnight belongs to. If that should be
+explicit rather than inferred, it is a small addition to the overnight store.
+
+
+OVERHEAD CATEGORIES MAPPED
+---------------------------
+    Holidays       -> Holiday          / Holiday
+    Sick           -> Sick             / Holiday
+    Paid Leave     -> Paid leave       / Standard-Paid leave
+    Unpaid Leave   -> Unpaid leave     / Unpaid
+    Internal Time  -> Office Day       / Standard
+    Ops Support    -> Ops support      / Standard
+
+All under Job No "Internal time", as in the workbook. The mapping is one table at
+the top of the file - tell me if any of those descriptions should read differently
+and it is one line each.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg823
-  612 drill-down header                 -> v823
-  Applied for / Certified drill-down    -> v823
+  13-week cash flow build marker        -> pkg824
+  612 drill-down header                 -> v824
+  Applied for / Certified drill-down    -> v824
 
 Hard refresh after deploying.
 
@@ -106,7 +117,4 @@ STILL OPEN, ON YOUR WORD
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
   - The same "send for approval?" question on the other design pages.
-  - The scope drawings and procurement attachments are named on the handover PDF but
-    not merged into it. The variation PDF now merges attached PDFs whole (pkg820) and
-    the same could be done here, which would make the handover a single document
-    carrying its drawings. Say the word.
+  - Merging attached PDFs into the handover document, as the variation PDF now does.
