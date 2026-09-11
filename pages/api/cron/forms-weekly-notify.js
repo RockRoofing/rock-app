@@ -1,4 +1,5 @@
 import { get, getTeamMembers, getOpsProjects, getSubmissionIndex } from '../../../lib/db'
+import { loadPreStarts, isPreStartDone } from '../../../lib/preStartDone'
 
 // Monday 07:00 forms digest.
 //  - Contracts Manager: Pre-Start needed when a start-on-site or a revisit (return after >1 week off
@@ -97,6 +98,9 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
     (s.formTitle || '').toLowerCase().includes(titleMatch) &&
     ((s.projectName || '').includes(projectNoOrName) || (s.projectId || '') === projectNoOrName))
 
+  // Pre-Start lives in its own store - see lib/preStartDone.js.
+  const preStarts = await loadPreStarts((ops || []).map(p => p.projectNo))
+
   // Build obligations keyed by recipient
   const cmTasks = {}   // cmName -> { preStart:[{name, when}] }
   const supTasks = {}  // supName -> { startOnSite:[], siteDiaryProjects:[], wah:[] }
@@ -117,7 +121,10 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
       // returns: any allocated day following a gap of > 7 days from the previous allocated day
       for (let i = 1; i < dayObjs.length; i++) if ((dayObjs[i] - dayObjs[i - 1]) > 7 * DAY) triggers.push(dayObjs[i])
       for (const t of triggers) {
-        if (t >= weekMon && t <= twoWeeks && !doneFor(pm.projectNo, 'pre-start')) {
+        // NOT doneFor(). Pre-Start Minutes are not a Site App form and are never in
+        // the submission index, so that test always returned false and the Contracts
+        // Manager was chased every Monday for a Pre-Start already issued.
+        if (t >= weekMon && t <= twoWeeks && !isPreStartDone(preStarts[pm.projectNo])) {
           pushCM(pm.cm, { name: `${pm.projectNo} — ${pm.name}`, when: fmt(t) })
         }
       }

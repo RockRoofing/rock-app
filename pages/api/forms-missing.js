@@ -1,4 +1,5 @@
 import { get, getOpsProjects, getSubmissionIndex } from '../../lib/db'
+import { loadPreStarts, isPreStartDoneBy } from '../../lib/preStartDone'
 
 // Forms "Missing" dashboard data.
 // For a given week range, works out the REQUIRED tracked forms per project/week and whether each has
@@ -29,6 +30,12 @@ export default async function handler(req, res) {
       get('ops:hs-matrix-data').then(v => v || {}),
       get('ops:water-ingress').then(v => v || {}),
     ])
+
+    // Pre-Start lives in its own store, not the submission index - see
+    // lib/preStartDone.js. One read per live project.
+    const preStarts = await loadPreStarts((ops || [])
+      .filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft'))
+      .map(p => p.projectNo))
 
     const fromMon = mondayOf(req.query.from ? parseISO(req.query.from) : new Date())
     const toMon = mondayOf(req.query.to ? parseISO(req.query.to) : new Date())
@@ -100,7 +107,11 @@ export default async function handler(req, res) {
         const triggers = [firstDay]
         for (let i = 1; i < dayObjs.length; i++) if ((dayObjs[i] - dayObjs[i - 1]) > 7 * DAY) triggers.push(dayObjs[i])
         if (triggers.some(t => t >= wStart && t <= twoWeeks)) {
-          add('Pre-Start', cm, 'CM', doneFor(projectNo, projectName, 'pre-start', weekMon))
+          // Not doneFor(). A Pre-Start is never in the submission index, so that test
+          // could only ever say Missing. Done as at the END of this week, so a week
+          // that closed before the minutes existed is not marked complete after the
+          // fact, while minutes issued weeks ago still count for every week since.
+          add('Pre-Start', cm, 'CM', isPreStartDoneBy(preStarts[projectNo], wEnd.getTime()))
         }
 
         // START ON SITE CHECKLIST (Supervisor): week containing first allocated day

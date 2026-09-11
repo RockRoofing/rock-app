@@ -1,10 +1,11 @@
-pkg840 - Forms Missing cards open a drill-down. Includes pkg811-839.
-======================================================================
+pkg841 - Pre-Start was never being picked up. You were right. Includes pkg811-840.
+====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-839. It contains all of them. Forty-eight files.
+DEPLOY THIS INSTEAD OF pkg811-840. It contains all of them. Fifty-one files.
 
-*** ELEVEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg838/839)
+*** TWELVE NEW FILES TO CREATE BY HAND ***
 
+  lib/preStartDone.js                                 <- NEW in this package
   lib/uploadFile.js                                   (pkg838)
   lib/inquery.js
   components/InQueryTable.js
@@ -21,62 +22,80 @@ DEPLOY THIS INSTEAD OF pkg811-839. It contains all of them. Forty-eight files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-THE CHANGE
-===========
-Every card at the top of Forms Missing now opens a pop-out listing the forms behind
-its number.
+CONFIRMED, AND IT WAS WORSE THAN THE PAGE
+===========================================
+Pre-Start Minutes live in their own store, one record per project at
+ops:prestart:{projectNo}, filled in from the project page. They are not a Site App
+form and nothing ever writes them to the submission index.
 
-  The % card          every required form across all types
-  Each form card      just that form type
+Both places that check them looked in the submission index:
 
-Inside, they are grouped MISSING first, then Upcoming, then Completed - missing is
-the reason anybody opens this page, so it should not be below a list of things that
-are already done. Each row gives the week, the project, who is responsible, and the
-form type where the view covers all of them.
+    subs.some(s => s.formTitle.toLowerCase().includes('pre-start'))
 
-The cards say "Click to see the forms" underneath. A card that does something should
-look like it does; otherwise the only way to find out is to click one.
+That test could only ever return false. So:
 
+  FORMS MISSING showed every Pre-Start as Missing, however many had been completed.
 
-ONE DECISION THAT MATTERS
-==========================
-THE DRILL-DOWN READS ALL ROWS, NOT THE FILTERED ONES.
+  AND THE MONDAY CRON did the same thing - pages/api/cron/forms-weekly-notify.js
+  uses the identical check, so every Monday the Contracts Manager was emailed
+  "projects that require a Pre-Start Notification" listing Pre-Starts they had
+  already done. That is the half worth fixing first: a page being wrong is
+  irritating, a chaser that cannot be satisfied gets ignored, and then the real ones
+  get ignored with it.
 
-The cards are built from the API's own summary, which knows nothing about the page's
-Status / Form / Responsible filters. Had the pop-out used the filtered list, pressing
-a card reading 12 missing could have shown four - the number you pressed and the
-number you got would disagree, and there would be nothing on screen to explain why.
-
-So the pop-out always matches the card. The filters below carry on applying to the
-table only.
+Both now read the actual store, through one shared rule in lib/preStartDone.js
+rather than each growing its own.
 
 
-ALSO
------
-x and Escape close it, never a backdrop click - the same rule as the other modals.
-Where a form type has nothing required in the chosen weeks it says so rather than
-opening an empty box.
+WHAT COUNTS AS DONE
+====================
+SENT. A Pre-Start is complete once it has been issued - sentAt, or sentManually
+where it went out another way and was marked off. That is the same line the project
+page already draws: at that point the form locks and cannot be edited.
+
+A Pre-Start saved as a draft and not sent still reads as Missing, which is correct -
+it has not gone to anybody.
+
+    never started                        missing
+    saved as a draft, not sent           missing
+    sent                                 done
+    marked sent manually, no timestamp   done  (falls back to the last save)
+
+On the Forms Missing page it is judged AS AT THE END OF EACH WEEK, so minutes issued
+weeks ago count for every week since, while a week that closed before they existed
+is not marked complete after the fact:
+
+    Pre-Start sent 31 Aug, week ending 9 Aug   -> missing
+    Pre-Start sent 31 Aug, week ending 6 Sep   -> complete
+
+
+WHAT TO EXPECT AFTER DEPLOYING
+================================
+The Pre-Start card will jump - it has been reading 0% or near it regardless of the
+real position. The number it shows now is the true one.
+
+Next Monday's email to the Contracts Managers should be materially shorter, and if a
+project still appears on it, that Pre-Start genuinely has not been sent.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg840
-  612 drill-down header                 -> v840
-  Applied for / Certified drill-down    -> v840
+  13-week cash flow build marker        -> pkg841
+  612 drill-down header                 -> v841
+  Applied for / Certified drill-down    -> v841
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg839  Projects are archived, not deleted. Delete removed from the UI and refused
-        by the API, Restore added, status validated server-side.
-pkg838  RAMS uploads over ~4.5MB were rejected by the platform as plain text, which
-        then failed to parse as JSON. Now straight to Blob storage. Seven photo
-        paths still use the old route - listed in those notes.
+pkg840  Forms Missing cards open a drill-down listing the missing and completed
+        forms behind each number.
+pkg839  Projects are archived, not deleted.
+pkg838  RAMS uploads over ~4.5MB failed with an unreadable JSON error - now upload
+        straight to Blob storage.
 pkg837  Type-to-search on the Overheads staff picker.
 pkg836  "Your name" fields take one person only.
-pkg835  Search on Site App Users - people and projects.
 
 
 STILL OPEN, ON YOUR WORD
