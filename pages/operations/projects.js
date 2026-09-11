@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { uploadFile } from '../../lib/uploadFile'
 import { compressImage } from '../../lib/compressImage'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
@@ -966,9 +967,11 @@ function RamsTable({ projectNo }) {
     for (const original of Array.from(list)) {
       const file = await compressImage(original)
       try {
-        const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
-        const ud = await up.json()
-        if (!up.ok || !ud.url) { failed++; lastErr = ud.error || `HTTP ${up.status}`; continue }
+        // Straight to Blob storage. Through /api/upload-file the file's bytes passed
+        // through a serverless function capped at about 4.5MB, so a RAMS PDF over
+        // that was refused by the platform before our code ran - and the rejection
+        // came back as plain text, which then failed to parse as JSON.
+        const ud = await uploadFile(file)
         await fetch('/api/project-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, file: { category: 'rams', name: file.name, url: ud.url, contentType: ud.contentType, size: ud.size } }) })
       } catch (e) { console.error(e); failed++; lastErr = e?.message || String(e) }
     }

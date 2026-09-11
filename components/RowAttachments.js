@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { uploadFile } from '../lib/uploadFile'
 import { createPortal } from 'react-dom'
 
 // Per-row attachments. Uses a full modal (not an inline popover) so it's never
@@ -10,21 +11,19 @@ export default function RowAttachments({ files, onChange, readOnly = false }) {
   const [open, setOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [viewIdx, setViewIdx] = useState(null)
+  // An upload that fails silently leaves somebody believing the quote is attached.
+  const [err, setErr] = useState('')
 
   async function add(fileList) {
     if (!fileList?.length) return
+    setErr('')
     setUploading(true)
     const next = [...list]
     for (const file of Array.from(fileList)) {
       try {
-        const up = await fetch('/api/upload-file', {
-          method: 'POST',
-          headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' },
-          body: file,
-        })
-        const d = await up.json()
-        if (up.ok && d.url) next.push({ url: d.url, name: file.name, type: file.type })
-      } catch (e) { console.error(e) }
+        const d = await uploadFile(file)
+        if (d.url) next.push({ url: d.url, name: file.name, type: file.type })
+      } catch (e) { console.error(e); setErr(e.message || 'Upload failed') }
     }
     onChange(next); setUploading(false)
   }
@@ -57,6 +56,7 @@ export default function RowAttachments({ files, onChange, readOnly = false }) {
                 <input type="file" multiple style={{ display: 'none' }} onChange={e => add(e.target.files)} />
               </label>
             )}
+            {err && <div style={{ marginTop: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '8px 11px', fontSize: 12.5 }}>{err}</div>}
           </div>
         </div>
       )}

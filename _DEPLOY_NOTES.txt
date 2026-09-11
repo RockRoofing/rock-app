@@ -1,10 +1,11 @@
-pkg837 - Type-to-search on the Overheads staff picker. Includes pkg811-836.
-=============================================================================
+pkg838 - Why one person could not upload a RAMS and you could. Includes pkg811-837.
+=====================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-836. It contains all of them. Forty-three files.
+DEPLOY THIS INSTEAD OF pkg811-837. It contains all of them. Forty-six files.
 
-*** TEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg828-836)
+*** ELEVEN NEW FILES TO CREATE BY HAND ***
 
+  lib/uploadFile.js                                   <- NEW in this package
   lib/inquery.js
   components/InQueryTable.js
   pages/api/bookkeeping-inquery.js
@@ -13,60 +14,98 @@ DEPLOY THIS INSTEAD OF pkg811-836. It contains all of them. Forty-three files.
   pages/api/planning-timesheet-csv.js                 (pkg824)
   lib/handoverPdf.js                                  (pkg822)
   pages/api/handover-pdf.js                           (pkg822)
-  components/SearchableSelect.js                      (pkg818)  <- this one is what
-                                                                   makes pkg837 work
+  components/SearchableSelect.js                      (pkg818)
   pages/api/admin/variations-instructed-audit.js      (pkg816 - the pages/api/admin/
                                                        folder does not exist yet)
 
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
-IF components/SearchableSelect.js IS NOT CREATED, THE PLANNER WILL NOT BUILD. It was
-already required by pkg830's project-move picker; this package adds a second use.
+
+THE ANSWER: IT IS THE FILE, NOT THE USER
+==========================================
+Their RAMS is bigger than about 4.5MB. Yours is not.
+
+RAMS uploads posted the file's bytes through /api/upload-file - one of our own
+serverless functions. Vercel caps a serverless request body at roughly 4.5MB, and
+over that the PLATFORM rejects the request before any of our code runs.
+
+That rejection comes back as a PLAIN TEXT body reading "Request Entity Too Large".
+The page then called res.json() on it, which is where
+
+    Unexpected token 'R', "Request En"... is not valid JSON
+
+comes from. The "R" is the R of "Request". The message is a JSON parse error
+standing in for "that file is too big", which is why it told you nothing.
+
+Nothing to do with permissions, the browser or the project. Two people on the same
+screen get different results purely on file size - and a RAMS is a PDF, so it does
+not compress on the way up the way a photo does.
 
 
-THE CHANGE
-===========
-"Select staff..." in the Overheads day modal is now typeable. Type any part of a
-name and the list narrows; arrows move, Enter picks, Escape closes.
+THE FIX
+========
+lib/uploadFile.js - one helper, using @vercel/blob/client, which sends the file
+straight from the browser to Blob storage with only a token passing through us. No
+serverless body limit. The token endpoint already allows PDFs and up to 200MB.
 
-Same component the variation tracker, the variation builder and the WLA project-move
-already use. A native select does have type-ahead, but it only matches the START of
-the option, so typing a surname on a roster this long found nothing.
+The design pages have used this route all along. Everything else used the capped
+one, which is why Tech Subs and drawing sets upload fine and a RAMS does not.
+
+Switched in this package - the paths that carry DOCUMENTS rather than photos:
+
+    RAMS                                    pages/operations/projects.js
+    Project files (all categories)          components/ProjectFiles.js
+    Handover scope drawings / documents     pages/handover/form.js
+    Procurement & risk row attachments      components/RowAttachments.js
+
+And the error now says what is wrong: "X.pdf is too large to upload. Split it or
+compress it and try again." The handover and row attachments were swallowing upload
+failures to the console entirely - a scope drawing that never uploaded, with nothing
+on screen to say so, is a handover that goes out short.
 
 
-NOT CHANGED, DELIBERATELY
---------------------------
-The only other operative dropdown in the planner is the installer filter on "Review
-past O/A". That lists only people who actually have an overnight allowance recorded,
-which is a short list - and a search box on six options is friction rather than help.
-Same reasoning as leaving Customer, CM and Estimator as plain selects on the
-variation tracker.
+SEVEN PLACES STILL USE THE OLD ROUTE
+======================================
+  pages/operations/project-management/issues.js
+  pages/forms/issue.js
+  pages/forms/deliveries.js
+  pages/forms/fill.js
+  pages/forms/index.js
+  components/PreStartForm.js
+  components/SubmissionModal.js
+
+All of those upload PHOTOS, and photos go through compressImage first, so they land
+well under the limit in normal use. They are not broken today.
+
+But a Site App user attaching a PDF to an issue or a delivery would hit exactly the
+same wall with exactly the same unreadable message. The helper is written and each
+one is a one-line swap. I have left them because it is seven files across the Site
+App and worth deploying on its own rather than buried under a RAMS fix - say the
+word and it is the next package.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg837
-  612 drill-down header                 -> v837
-  Applied for / Certified drill-down    -> v837
+  13-week cash flow build marker        -> pkg838
+  612 drill-down header                 -> v838
+  Applied for / Certified drill-down    -> v838
 
-Hard refresh after deploying.
+Hard refresh after deploying. Ask the person who could not upload to try the same
+file again - it should now go up, however large.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
+pkg837  Type-to-search on the Overheads staff picker.
 pkg836  "Your name" fields take one person only.
-pkg835  Search on Site App Users - people and projects, by job number or name.
+pkg835  Search on Site App Users - people and projects.
 pkg834  Site App Users table full width.
-pkg833  Daily Site Diary crew picker lists only people allocated to that project.
-pkg830-832  Move an operative-day between projects from the WLA grid; pop-out
-        widened and no longer closes on a backdrop click.
-pkg827-829  In Query tab in Bookkeeping.
-pkg824-826  Timesheet CSV from the Planner, six-week labour allocation, water
-        ingress labelled on the labour PDFs.
+pkg833  Daily Site Diary crew picker lists only people on that project.
 
 
 STILL OPEN, ON YOUR WORD
 -------------------------
+  - The seven remaining upload paths, above.
   - In Query is a tracking option, so it also appears as a PROJECT on Project
     Financials and the dashboard, with costs and no revenue.
   - Release halves are on the Applied-for base, not the Final Account base their own
@@ -77,4 +116,3 @@ STILL OPEN, ON YOUR WORD
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
   - An hours field on the Planner day cell, for real hours in the timesheet CSV.
-  - Separate week controls for the labour download and the operative email.

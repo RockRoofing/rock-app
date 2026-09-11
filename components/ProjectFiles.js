@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { uploadFile } from '../lib/uploadFile'
 import { compressImage } from '../lib/compressImage'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, linkBtn } from './opsUI'
 
@@ -30,13 +31,7 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
     for (const original of Array.from(fileList)) {
       const file = await compressImage(original)
       try {
-        const up = await fetch('/api/upload-file', {
-          method: 'POST',
-          headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' },
-          body: file,
-        })
-        const ud = await up.json()
-        if (!up.ok || !ud.url) { failed++; lastErr = ud.error || `HTTP ${up.status}`; continue }
+        const ud = await uploadFile(file)
         await fetch('/api/project-files', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectNo, file: { category, name: file.name, url: ud.url, contentType: ud.contentType, size: ud.size } }),

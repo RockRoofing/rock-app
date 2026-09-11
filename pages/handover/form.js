@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { uploadFile } from '../../lib/uploadFile'
 import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -560,10 +561,13 @@ function FilesField({ label, value, onChange }) {
     for (const original of Array.from(files)) {
       const file = await compressImage(original)
       try {
-        const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
-        const d = await up.json()
-        if (up.ok && d.url) next.push({ url: d.url, name: file.name, type: file.type })
-      } catch (e) { console.error(e) }
+        const d = await uploadFile(file)
+        if (d.url) next.push({ url: d.url, name: file.name, type: file.type })
+      } catch (e) {
+        // Was swallowed to the console. A scope drawing that never uploaded, with
+        // nothing on screen to say so, is a handover that goes out short.
+        console.error(e); setErr(e.message || 'Upload failed')
+      }
     }
     onChange(next); setUploading(false)
   }
