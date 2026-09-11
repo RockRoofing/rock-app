@@ -80,7 +80,13 @@ export default function FormsMissingPage() {
       if (fForm && r.formType !== fForm) return false
       if (fPerson && r.responsible !== fPerson) return false
       return true
-    }).sort((a, b) => a.week.localeCompare(b.week) || a.projectNo.localeCompare(b.projectNo, undefined, { numeric: true }) || FORM_ORDER.indexOf(a.formType) - FORM_ORDER.indexOf(b.formType))
+    }).sort((a, b) => {
+      // On the date the column shows, not the week - see the pop-out.
+      const k = (r) => (r.done ? (r.doneDate || r.dueDate) : r.dueDate) || r.week
+      return k(a).localeCompare(k(b))
+        || a.projectNo.localeCompare(b.projectNo, undefined, { numeric: true })
+        || FORM_ORDER.indexOf(a.formType) - FORM_ORDER.indexOf(b.formType)
+    })
   }, [data, showOnly, fForm, fPerson])
 
   return (
@@ -167,7 +173,11 @@ export default function FormsMissingPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
               <thead>
                 <tr style={{ background: '#faf9f7' }}>
-                  <th style={{ ...th, textAlign: 'left' }}>Week</th>
+                  {/* Same as the pop-out: the date the row is about, not the Monday
+                      of its week. The heading cannot change per row here, because the
+                      table mixes completed and missing - so it reads "Date" and each
+                      cell says which it is. */}
+                  <th style={{ ...th, textAlign: 'left' }}>Date</th>
                   <th style={{ ...th, textAlign: 'left' }}>Project</th>
                   <th style={{ ...th, textAlign: 'left' }}>Form</th>
                   <th style={{ ...th, textAlign: 'left' }}>Responsible</th>
@@ -178,9 +188,24 @@ export default function FormsMissingPage() {
                 {rows.length === 0 && <tr><td colSpan={5} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 20 }}>No required forms for this range/filters.</td></tr>}
                 {rows.map((r, i) => (
                   <tr key={i} style={{ borderTop: '1px solid #f2f2f2', background: r.upcoming ? '#f5fbff' : (r.done ? '#fff' : '#fffaf7') }}>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{(() => {
+                      const d = (r.done ? (r.doneDate || r.dueDate) : r.dueDate) || ''
+                      if (!d) return <span style={{ color: '#999' }}>W/C {parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+                      return (
+                        <>
+                          {parseISO(d).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: '2-digit' })}
+                          {/* Which date this is. Without it a mixed list of completed
+                              and missing rows shows two different kinds of date in one
+                              column with nothing to tell them apart. */}
+                          <div style={{ fontSize: 10, color: '#aaa' }}>{r.done ? 'completed' : (r.upcoming ? 'expected' : 'needed')}</div>
+                        </>
+                      )
+                    })()}</td>
                     <td style={td}>{r.projectNo}{r.projectName && r.projectName !== r.projectNo ? ` — ${r.projectName}` : ''}</td>
-                    <td style={td}>{r.formType}{r.day ? <span style={{ color: '#999', fontSize: 11 }}> · {parseISO(r.day).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</span> : ''}</td>
+                    {/* The day used to be tacked on here because the Date column was
+                        only the week. It is the Date column now, so repeating it would
+                        show the same date twice on every diary row. */}
+                    <td style={td}>{r.formType}</td>
                     <td style={td}>{r.responsible}{r.role ? <span style={{ color: '#aaa', fontSize: 11 }}> ({r.role})</span> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}>
                       {r.upcoming
@@ -240,7 +265,7 @@ export default function FormsMissingPage() {
                                   return parseISO(d).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: '2-digit' })
                                 })()}</td>
                                 <td style={td}>{r.projectNo}{r.projectName && r.projectName !== r.projectNo ? ` - ${r.projectName}` : ''}</td>
-                                {drill === '' && <td style={td}>{r.formType}{r.day ? <span style={{ color: '#999', fontSize: 11 }}> &middot; {parseISO(r.day).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</span> : ''}</td>}
+                                {drill === '' && <td style={td}>{r.formType}</td>}
                                 <td style={td}>{r.responsible}{r.role ? <span style={{ color: '#aaa', fontSize: 11 }}> ({r.role})</span> : ''}</td>
                               </tr>
                             ))}

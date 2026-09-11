@@ -1,9 +1,9 @@
-pkg843 - Forms Missing drill-down shows the real date, not the week. Includes pkg811-842.
-===========================================================================================
+pkg844 - Same date column on the Forms Missing table itself. Includes pkg811-843.
+===================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-842. It contains all of them. Fifty-three files.
+DEPLOY THIS INSTEAD OF pkg811-843. It contains all of them. Fifty-three files.
 
-*** THIRTEEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg842)
+*** THIRTEEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg842/843)
 
   lib/formDates.js            lib/preStartDone.js       lib/uploadFile.js
   lib/inquery.js              lib/handoverPdf.js        components/InQueryTable.js
@@ -18,62 +18,51 @@ middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 THE CHANGE
 ===========
-The W/C column in the pop-out is replaced by the date the row is actually about, and
-the heading changes with the section:
+The Week column on the main table is now the same date column as the pop-out: the
+date the form was completed, or the date it is needed for.
 
-    Missing / Upcoming    "Date needed"       the date it is needed for
-    Completed             "Date completed"    the date it was done on - and for a
-                                              diary that is its own Site Diary Date
+ONE DIFFERENCE FROM THE POP-OUT, and it is deliberate. The pop-out is already split
+into Missing / Upcoming / Completed sections, so each can head its column "Date
+needed" or "Date completed". The main table mixes all three in one list, so a single
+heading cannot be honest about it.
 
-Shown as "Mon 17 Aug 26" rather than a week commencing.
+So the column reads "Date" and each cell says underneath which kind it is:
 
+    Mon 17 Aug 26      Sun 18 Aug 26       Tue 25 Aug 26
+    needed             completed           expected
 
-EVERY FORM TYPE HAS A REAL DATE - IT JUST WAS NOT BEING CARRIED
-=================================================================
-Only the Monday of the week was on the row, so a Pre-Start needed on the Thursday and
-one needed on the Monday read identically. Each obligation now carries the day it
-relates to:
-
-    Pre-Start                 the start or return-to-site date that triggered it
-    Start on Site Checklist   the first allocated day on site
-    Works Area Handover       the finishing day before the 5-day gap
-    Daily Site Diary          the allocated day
-    Water Ingress Report      the visit day
-
-And where it is done, the date it was done:
-
-    Pre-Start                 when the minutes were sent
-    Start on Site / WAH       the submission's own date, falling back to when it was
-                              submitted
-    Daily Site Diary          its Site Diary Date - which, since pkg842 matches a
-                              diary on that date, is the same day it was needed for
+Without that, a mixed list shows two different kinds of date in one column with
+nothing to tell them apart - which is worse than the week it replaced.
 
 
 ALSO
 -----
-The lists now SORT on the date being shown. Sorting by week while displaying a
-specific date makes a list look unordered.
+The table now SORTS on the date shown rather than the week, the same as the pop-out.
 
-Where an obligation genuinely has no specific date, the cell falls back to "W/C
-17 Aug 26" in grey rather than showing an empty box.
+The day used to be tacked onto the Form column for diaries, because the date column
+was only the week. It is the date column now, so that has gone - otherwise every
+diary row showed the same date twice. Removed from the pop-out as well.
+
+An obligation with no specific date still falls back to a grey "W/C 17 Aug 26".
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg843
-  612 drill-down header                 -> v843
-  Applied for / Certified drill-down    -> v843
+  13-week cash flow build marker        -> pkg844
+  612 drill-down header                 -> v844
+  Applied for / Certified drill-down    -> v844
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg842  Diaries scored on the Site Diary Date rather than the submission date, with
-        a one-off lazy backfill for diaries already submitted.
-pkg841  Pre-Start was never picked up - own store, not the submission index - so it
-        always read Missing AND the Monday cron chased Contracts Managers for
-        Pre-Starts already sent.
+pkg843  The same column in the pop-out, and every obligation given the date it is
+        actually about - the start date for a Pre-Start, the first day on site for
+        Start on Site, the finishing day for a Works Area Handover.
+pkg842  Diaries scored on the Site Diary Date rather than the submission date.
+pkg841  Pre-Start was never picked up at all - and the Monday cron chased Contracts
+        Managers for Pre-Starts already sent.
 pkg840  Forms Missing cards open the drill-down.
 pkg839  Projects are archived, not deleted.
 pkg838  RAMS uploads over ~4.5MB failed with an unreadable JSON error.
@@ -91,6 +80,4 @@ STILL OPEN, ON YOUR WORD
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
   - An hours field on the Planner day cell, for real hours in the timesheet CSV.
-  - Multi-tenancy. See HANDOVER-MULTI-TENANCY.md - the 48 files that create their own
-    Redis client are the crux, and closing them is worth doing on its own merits
-    before any tenancy exists.
+  - Multi-tenancy. See HANDOVER-MULTI-TENANCY.md.
