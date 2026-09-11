@@ -1,7 +1,7 @@
-pkg820 - Documents as well as images, and PDFs merged in whole. Includes pkg811-819.
-======================================================================================
+pkg821 - Upload a calculation without issuing it. Includes pkg811-820.
+========================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-819. It contains all of them. Twenty-two files.
+DEPLOY THIS INSTEAD OF pkg811-820. It contains all of them. Twenty-four files.
 
 *** TWO NEW FILES TO CREATE BY HAND ***
 
@@ -11,93 +11,105 @@ DEPLOY THIS INSTEAD OF pkg811-819. It contains all of them. Twenty-two files.
                                                        not exist yet either)
 
 Everything else exists. Overwrite in place. LITERAL square brackets on
-pages/api/project/[id]/ and pages/project/.
+pages/design/[project]/, pages/api/project/[id]/ and pages/project/.
 
 
 THE CHANGE
 ===========
-"Add photos" is now "Add documents / images", and the panel is "Documents & images".
++ Add Calculation now asks first:
 
-  IMAGES   drawn onto the page as before, captioned with the file name.
-  PDFs     their pages are COPIED IN WHOLE. A supplier quote or a marked-up drawing
-           arrives as part of the variation document rather than as a link the
-           customer has to go and find. The file name is printed at the top of its
-           first page so it is clear which attachment they are looking at.
+    Do you want to send this for approval?
 
-Everything still flows through buildVariationPDF, so Download, Send to customer and
-the instruction email all carry them without any of those paths changing.
+      No - just upload it
+        Held on the project. Nobody is emailed and it shows as "Not issued".
+        You can send it for approval later.
 
+      Yes - send for approval
+        Goes to the customer you choose, and they are emailed.
 
-DETAILS WORTH KNOWING
-----------------------
-THE CAMERA ATTRIBUTE IS GONE. The input carried capture="environment", which sends
-a phone straight to the camera and hides the file browser. That is right for photos
-and wrong the moment a PDF is allowed, because a camera cannot produce one. The
-camera is still one tap away inside the normal picker.
+The approver dropdown only appears once you answer Yes, and the Choose file button
+stays disabled until the question is answered - a default here is a default that
+issues documents to customers by accident.
 
-A PDF DOES NOT RENDER IN AN <img>. It shows a broken-image icon, which reads as
-"this upload failed". Anything that is not an image now gets a labelled tile with
-its extension instead, and the thumbnail strip says underneath which of the two it
-is: "merged into the PDF", or "listed, not merged".
-
-FILE TYPE IS READ FROM THE NAME, not a stored mime type. Records written by pkg817
-carry no type at all, so anything keyed on that would have come out unknown for
-every attachment already uploaded.
-
-THE STORAGE KEY IS STILL builder.photos. It is the wrong name now, but it is what
-pkg817 wrote and variations already hold it - renaming it would strand those.
-
-A PDF THAT WILL NOT PARSE says so on the page rather than being skipped, the same
-as one that will not download. A variation quietly missing its evidence, with
-nothing to say any was meant to be there, is worse than a line admitting it.
+Same question on Mark superseded, which also forces a new revision.
 
 
-VERIFIED
----------
-Built end to end with five attachments and rendered the result to look at:
-
-  an image                 drawn, captioned
-  a TWO-PAGE PDF           both pages merged in, name on the first
-  a second image           drawn on a fresh page, captioned
-  a broken URL             "[missing.pdf could not be loaded]", in red
-  an .xlsx                 "[schedule.xlsx - attached to the variation, not shown
-                           here]", in grey
+SENDING IT LATER
+-----------------
+A held calculation carries a "Send for approval" action on its row. Tick several
+and a "Send N for approval" button appears in the toolbar. Either way you choose the
+approver, and from that point it behaves exactly as an upload-and-issue would have:
+status moves to In Review and the approver is emailed.
 
 
-ONE THING I HAVE NOT DONE
---------------------------
-A Word file or a spreadsheet cannot be merged into a PDF, so it is listed by name
-and nothing more - which means it does NOT reach the customer. The picker still
-accepts them, because having them on the variation in the portal is useful even
-when they cannot be printed into the document.
+WHY IT NEEDED A NEW STATE RATHER THAN JUST A BLANK APPROVER
+-------------------------------------------------------------
+The API already tolerated an upload with no approver - it just never emailed anyone.
+But the document was still written as status 'in-review', so a wind load calc you
+only wanted on the project sat there reading "In Review" and telling the customer's
+side "Awaiting customer approval", when it had not been sent to a soul.
 
-If they should actually go out, the right answer is to attach them to the EMAIL
-alongside the PDF - variation-send.js already builds an attachments array, so it is
-a contained change. Say the word. Until then, anything that must reach the customer
-should go on as a PDF or an image.
+There are three states, so there are now three:
+
+    held        uploaded, not issued, nobody emailed        "Not issued"
+    in-review   with the approver, who has been emailed     "In Review"
+    approved    signed off                                  "Approved"
+
+Held documents are excluded from the "needs approval" count and from the
+"Awaiting customer approval" line, because neither is true of them.
+
+
+TWO THINGS GUARDED
+-------------------
+SEND-FOR-APPROVAL ONLY MOVES HELD DOCUMENTS. An approved one must not be quietly
+pulled back into review, and one already in review would email the approver a
+second time. Both are refused, by name.
+
+THE BULK "NOTIFY PROJECT USERS" ACTION NO LONGER SWEEPS THEM UP. It assigned an
+approver to every document that did not have one, which would have issued a held
+calculation as a side effect of notifying somebody about something else.
+
+Verified across the lot:
+
+    held + approver chosen    -> in-review, approver set, emailed
+    held, no approver         -> refused
+    already in review         -> refused, no second email
+    already approved          -> refused, not pulled back
+    superseded                -> refused
+    upload answering No       -> held, no approver, nothing emailed
+    upload answering Yes      -> in-review, approver set, emailed
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg820
-  612 drill-down header                 -> v820
-  Applied for / Certified drill-down    -> v820
+  13-week cash flow build marker        -> pkg821
+  612 drill-down header                 -> v821
+  Applied for / Certified drill-down    -> v821
 
 Hard refresh after deploying.
 
 
+WORTH KNOWING
+--------------
+Existing calculations are untouched and keep their current status. Only new uploads
+can be held. If you have old ones sitting in review that were never actually sent,
+they will keep saying In Review - there is no way to tell those apart from genuine
+ones in the data, so I have not tried to guess. Upload a new revision, or leave them.
+
+The same pattern would suit the other design pages - drawings, tech submittals,
+warranties, leak test certs - which all issue on upload in the same way. Say the
+word and they get the same question.
+
+
 ALSO IN THIS PACKAGE
 ---------------------
-pkg819  Workings window closes on the x whatever state it is in; the completeness
-        check moved to the raise, where it names the unfinished item. "+ Raise new
-        variation" now only appears when a variation is open.
-pkg818  Type-to-search on the three project pickers.
+pkg820  Documents as well as images on variations; PDFs merged in whole.
+pkg819  Workings window closes on the x; completeness check moved to the raise.
+pkg818  Type-to-search on the project pickers.
 pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
-        audit endpoint to repair existing data. Run its GET and read it first.
-pkg814  Long text wraps on the variation PDF.
-pkg813  Tracker add-row removed, Add Variation moved into the filter box.
-pkg812  Search from inside a CRM deal.
-pkg811  Cost-comment emails name the project.
+        audit endpoint. Run its GET and read it first.
+pkg811-814  Variation PDF wrapping, tracker tidy-up, CRM deal search, cost-comment
+        emails naming the project.
 
 
 STILL OPEN, ON YOUR WORD

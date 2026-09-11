@@ -257,6 +257,9 @@ export default async function handler(req, res) {
   if (body.action === 'add') {
     const f = body.file || {}
     if (!f.url) return res.status(400).json({ error: 'No file' })
+    // Explicit, not inferred from whether an approver came through. An approver sent
+    // by accident should not issue a document to a customer.
+    const sendForApproval = body.sendForApproval === true
     const doc = {
       id: rid('calc'), familyId: rid('fam'), revision: 'A',
       title: (body.title || f.name || 'Calculation').trim(),
@@ -264,14 +267,47 @@ export default async function handler(req, res) {
       thumbUrl: isImg(f) ? f.url : '',
       uploadedBy: acc.user.name || 'User', uploadedAt: Date.now(),
       superseded: false, markup: null, comments: [],
-      status: 'in-review', constructionIssue: false,
-      approverId: body.approverId || '', approvedAt: 0, approvedBy: '', approvalRecord: null,
+      // HELD vs IN-REVIEW.
+      //
+      // A calculation could only be uploaded by naming a customer approver, so a wind
+      // load calc you simply wanted on the project went up marked 'in-review' with
+      // nobody actually reviewing it - it read as "awaiting customer approval" when it
+      // had not been sent to anybody.
+      //
+      // 'held' means uploaded and not issued. Nothing is emailed, no approver is set,
+      // and it can be sent for approval later with the send-for-approval action.
+      status: sendForApproval ? 'in-review' : 'held', constructionIssue: false,
+      approverId: sendForApproval ? (body.approverId || '') : '', approvedAt: 0, approvedBy: '', approvalRecord: null,
     }
     docs = [doc, ...docs]
     await set(RKEY(no), docs)
-    await notifyApprover(no, doc)
+    if (sendForApproval) await notifyApprover(no, doc)
     try { await calcRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
+  }
+
+  // SEND HELD CALCULATIONS FOR APPROVAL.
+  //
+  // The other half of uploading without issuing. Takes one or many, sets the approver,
+  // moves them to in-review and emails the approver exactly as an upload-and-issue
+  // would have done.
+  //
+  // Only 'held' documents move. An approved one must not be quietly pulled back into
+  // review, and one already in review would email the approver a second time.
+  if (body.action === 'send-for-approval') {
+    const ids = Array.isArray(body.ids) ? body.ids : (body.id ? [body.id] : [])
+    const approverId = String(body.approverId || '')
+    if (!ids.length) return res.status(400).json({ error: 'Nothing selected' })
+    if (!approverId) return res.status(400).json({ error: 'Choose who should approve these.' })
+    const moving = docs.filter(d => ids.includes(d.id) && d.status === 'held' && !d.superseded)
+    if (!moving.length) return res.status(400).json({ error: 'Those are already issued or approved.' })
+    const movingIds = new Set(moving.map(d => d.id))
+    docs = docs.map(d => movingIds.has(d.id) ? { ...d, status: 'in-review', approverId } : d)
+    await set(RKEY(no), docs)
+    // Email once per document, the same route an issued upload takes.
+    for (const d of docs) if (movingIds.has(d.id)) { try { await notifyApprover(no, d) } catch {} }
+    try { await calcRecordPendingDoc(no) } catch {}
+    return res.json({ ok: true, docs, sent: moving.length })
   }
 
   // Add a new revision of an existing drawing. Marks the family superseded, adds next letter.
@@ -280,6 +316,7 @@ export default async function handler(req, res) {
     if (!f.url) return res.status(400).json({ error: 'No file' })
     const base = docs.find(d => d.id === body.id)
     if (!base) return res.status(404).json({ error: 'Calculation not found' })
+    const sendForApproval = body.sendForApproval === true
     const fam = base.familyId
     const famDocs = docs.filter(d => d.familyId === fam)
     const nextRev = revLetter(famDocs.length)
@@ -291,12 +328,12 @@ export default async function handler(req, res) {
       thumbUrl: isImg(f) ? f.url : '',
       uploadedBy: acc.user.name || 'User', uploadedAt: Date.now(),
       superseded: false, markup: null, comments: [],
-      status: 'in-review', constructionIssue: false,
-      approverId: body.approverId || base.approverId || '', approvedAt: 0, approvedBy: '', approvalRecord: null,
+      status: sendForApproval ? 'in-review' : 'held', constructionIssue: false,
+      approverId: sendForApproval ? (body.approverId || base.approverId || '') : '', approvedAt: 0, approvedBy: '', approvalRecord: null,
     }
     docs = [doc, ...docs]
     await set(RKEY(no), docs)
-    await notifyApprover(no, doc)
+    if (sendForApproval) await notifyApprover(no, doc)
     try { await calcRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
   }
@@ -363,7 +400,9 @@ export default async function handler(req, res) {
     }
     // Assign chosen approvers to all current (non-superseded) drawings that don't have one.
     if (approverIds.length === 1) {
-      docs = docs.map(d => (!d.superseded && !d.approverId) ? { ...d, approverId: approverIds[0] } : d)
+      // Not held ones. They were deliberately kept back, and assigning an approver to
+      // them here would issue them as a side effect of notifying somebody else.
+      docs = docs.map(d => (!d.superseded && !d.approverId && d.status !== 'held') ? { ...d, approverId: approverIds[0] } : d)
       await set(RKEY(no), docs)
     }
     return res.json({ ok: true, sent, docs })

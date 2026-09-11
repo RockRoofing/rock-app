@@ -26,6 +26,8 @@ export default function CalculationsPage() {
   const [unread, setUnread] = useState([])
   const [selected, setSelected] = useState({})
   const [uploading, setUploading] = useState(false)
+  // Sending held calculations for approval, after the event.
+  const [sendPick, setSendPick] = useState(null)
   const [err, setErr] = useState('')
   const [approverPick, setApproverPick] = useState(null)   // { mode, id?, approverId }
   const [notifyOpen, setNotifyOpen] = useState(false)
@@ -33,6 +35,8 @@ export default function CalculationsPage() {
   const revRef = useRef()
   const revForId = useRef(null)
   const pendingApprover = useRef('')
+  // Whether this upload is being issued, decided in the modal before the file picker.
+  const pendingSend = useRef(false)
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
   useEffect(() => {
@@ -75,7 +79,7 @@ export default function CalculationsPage() {
     try {
       for (const file of Array.from(list)) {
         const blob = await uploadOne(file)
-        await post({ action: 'add', title: file.name.replace(/\.[^.]+$/, ''), approverId: pendingApprover.current || '', file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } })
+        await post({ action: 'add', title: file.name.replace(/\.[^.]+$/, ''), approverId: pendingApprover.current || '', sendForApproval: pendingSend.current, file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } })
       }
     } catch (e) { setErr(e && e.message ? e.message : 'Upload failed') }
     if (addRef.current) addRef.current.value = ''
@@ -89,7 +93,7 @@ export default function CalculationsPage() {
     try {
       const file = list[0]
       const blob = await uploadOne(file)
-      await post({ action: 'add-revision', id: forId, approverId: pendingApprover.current || '', file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } })
+      await post({ action: 'add-revision', id: forId, approverId: pendingApprover.current || '', sendForApproval: pendingSend.current, file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } })
     } catch (e) { setErr(e && e.message ? e.message : 'Upload failed') }
     if (revRef.current) revRef.current.value = ''
     revForId.current = null; pendingApprover.current = ''
@@ -97,12 +101,15 @@ export default function CalculationsPage() {
   }
 
   const docFor = (id) => docs.find(d => d.id === id)
-  function startAdd() { setApproverPick({ mode: 'add', approverId: '' }) }
+  function startAdd() { setApproverPick({ mode: 'add', approverId: '', send: null }) }
   // Mark superseded == upload a new revision (mandatory). Same picker + file flow.
-  function startSupersede(id) { setApproverPick({ mode: 'revision', id, approverId: docFor(id)?.approverId || '' }) }
+  function startSupersede(id) { setApproverPick({ mode: 'revision', id, approverId: docFor(id)?.approverId || '', send: null }) }
   function confirmApprover() {
     const p = approverPick; if (!p) return
-    pendingApprover.current = p.approverId || ''
+    if (p.send === true && !p.approverId) { setErr('Choose who should approve it, or upload without sending.'); return }
+    setErr('')
+    pendingApprover.current = p.send === true ? (p.approverId || '') : ''
+    pendingSend.current = p.send === true
     setApproverPick(null)
     if (p.mode === 'add') { if (addRef.current) addRef.current.click() }
     else { revForId.current = p.id; if (revRef.current) revRef.current.click() }
@@ -159,7 +166,8 @@ export default function CalculationsPage() {
   for (const f of families) if (!f.current && f.older.length) { f.current = f.older[0]; f.older = f.older.slice(1) }
 
   const currentDocs = families.map(f => f.current).filter(Boolean)
-  const anyNeedApproval = currentDocs.some(d => d.status !== 'approved')
+  // Held is not "needing approval" - nobody has been asked yet.
+  const anyNeedApproval = currentDocs.some(d => d.status !== 'approved' && d.status !== 'held')
   const allApproved = currentDocs.length > 0 && !anyNeedApproval
   const constructionCount = currentDocs.filter(d => d.constructionIssue).length
   const reviewCount = currentDocs.length - constructionCount
@@ -178,6 +186,8 @@ export default function CalculationsPage() {
   // Bulk Construction Issue (internal). Flips to unmark when everything ticked is already
   // marked, so a mistaken "mark all" is one click to undo.
   const selectedCurrent = currentDocs.filter(d => selected[d.id])
+  // Of the ticked rows, the ones that have never been sent.
+  const heldSelected = selectedCurrent.filter(d => d.status === 'held')
   const selectedCurrentCount = selectedCurrent.length
   const bulkCiOn = !(selectedCurrentCount > 0 && selectedCurrent.every(d => d.constructionIssue))
   async function markSelectedConstruction() {
@@ -207,6 +217,14 @@ export default function CalculationsPage() {
             {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
             {canEdit && <button onClick={markSelectedConstruction} disabled={!selectedCurrentCount} style={{ ...btnGhost, color: '#2563eb', borderColor: '#bfdbfe', opacity: selectedCurrentCount ? 1 : 0.5 }}>{bulkCiOn ? 'Mark Construction Issue' : 'Unmark Construction Issue'} ({selectedCurrentCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
+            {/* Only when there is something held to send, so the toolbar does not carry
+                a button that cannot do anything on most projects. */}
+            {canEdit && heldSelected.length > 0 && (
+              <button onClick={() => setSendPick({ ids: heldSelected.map(d => d.id), approverId: '' })}
+                style={{ ...btnGhost, color: '#15803d', borderColor: '#bbf7d0' }}>
+                Send {heldSelected.length} for approval
+              </button>
+            )}
             {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Calculation'}</button>}
           </div>
         </div>
@@ -245,9 +263,13 @@ export default function CalculationsPage() {
                         <div title={d.title || d.name} style={{ fontSize: 13, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title || d.name}</div>
                         <div style={{ marginTop: 6, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 700, color: '#4338ca', background: '#eef2ff', borderRadius: 6, padding: '1px 7px', fontSize: 11.5 }}>Rev {d.revision}</span>
+                          {/* Three states, not two. "In Review" on something nobody has
+                              been sent is a lie the page used to tell. */}
                           {d.status === 'approved'
                             ? <span style={{ color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '1px 9px', fontSize: 11.5, fontWeight: 700 }}>&#10003; Approved</span>
-                            : <span style={{ color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '1px 9px', fontSize: 11.5, fontWeight: 700 }}>In Review</span>}
+                            : d.status === 'held'
+                              ? <span title="Uploaded but not sent to anyone" style={{ color: '#6b7280', background: '#f1f2f4', borderRadius: 20, padding: '1px 9px', fontSize: 11.5, fontWeight: 700 }}>Not issued</span>
+                              : <span style={{ color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '1px 9px', fontSize: 11.5, fontWeight: 700 }}>In Review</span>}
                           {d.constructionIssue && <span style={{ color: '#2563eb', background: '#dbeafe', borderRadius: 20, padding: '1px 9px', fontSize: 11.5, fontWeight: 700 }}>Construction Issue</span>}
                           {olderCount > 0 && <span style={{ fontSize: 11, color: '#999' }}>{olderCount} old rev{olderCount === 1 ? '' : 's'}</span>}
                         </div>
@@ -259,11 +281,12 @@ export default function CalculationsPage() {
                         {canEdit && (
                           <div style={{ marginTop: 6, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid #f2f2f2', paddingTop: 6 }}>
                             <button onClick={() => toggleConstruction(d.id, !d.constructionIssue)} style={linkBtn}>{d.constructionIssue ? 'Unmark Constr.' : 'Construction Issue'}</button>
+                            {d.status === 'held' && <button onClick={() => setSendPick({ ids: [d.id], approverId: '' })} style={{ ...linkBtn, color: '#15803d', fontWeight: 700 }}>Send for approval</button>}
                             <button onClick={() => startSupersede(d.id)} style={linkBtn}>Mark superseded</button>
                             <button onClick={() => del(d.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>
                           </div>
                         )}
-                        {!canEdit && !canApprove(d) && d.status !== 'approved' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#9a3412' }}>Awaiting customer approval</div>}
+                        {!canEdit && !canApprove(d) && d.status !== 'approved' && d.status !== 'held' && <div style={{ marginTop: 6, fontSize: 11.5, color: '#9a3412' }}>Awaiting customer approval</div>}
                       </div>
                     </div>
                   </div>
@@ -280,15 +303,80 @@ export default function CalculationsPage() {
         <div onClick={() => setApproverPick(null)} style={modalWrap}>
           <div onClick={e => e.stopPropagation()} style={modalCard}>
             <h3 style={{ margin: '0 0 4px', fontSize: 17, color: INK }}>{approverPick.mode === 'add' ? 'Add Calculation' : 'Mark superseded - upload new revision'}</h3>
-            <p style={{ fontSize: 13, color: '#8a857c', marginTop: 0 }}>{approverPick.mode === 'add' ? 'Choose the customer who needs to review and approve this drawing.' : 'Marking a calculation superseded requires a new revision. Choose the approver, then pick the new drawing file.'}</p>
+            <p style={{ fontSize: 13, color: '#8a857c', marginTop: 0 }}>
+              {approverPick.mode === 'add'
+                ? 'Do you want to send this for approval?'
+                : 'Marking a calculation superseded requires a new revision. Do you want to send the new revision for approval?'}
+            </p>
+            {/* THE QUESTION COMES FIRST. It used to go straight to "choose the customer
+                who needs to approve this", so a wind load calc you only wanted on the
+                project had no route in that did not issue it to somebody. */}
+            <div style={{ display: 'grid', gap: 8, margin: '10px 0 4px' }}>
+              {[
+                { v: false, t: 'No - just upload it', d: 'Held on the project. Nobody is emailed and it shows as Not issued. You can send it for approval later.' },
+                { v: true, t: 'Yes - send for approval', d: 'Goes to the customer you choose below and they are emailed.' },
+              ].map(o => (
+                <label key={String(o.v)} style={{
+                  display: 'flex', gap: 9, alignItems: 'flex-start', padding: '9px 11px', cursor: 'pointer',
+                  border: `1px solid ${approverPick.send === o.v ? '#15803d' : '#e3e3e3'}`,
+                  background: approverPick.send === o.v ? '#f0fdf4' : '#fff', borderRadius: 8,
+                }}>
+                  <input type="radio" name="calcsend" checked={approverPick.send === o.v}
+                    onChange={() => setApproverPick({ ...approverPick, send: o.v })} style={{ marginTop: 3 }} />
+                  <span>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: INK, display: 'block' }}>{o.t}</span>
+                    <span style={{ fontSize: 12, color: '#8a857c' }}>{o.d}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {approverPick.send === true && (
+              <div style={{ marginTop: 6 }}>
+                <label style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>Approver (customer)</label>
+                <select value={approverPick.approverId} onChange={e => setApproverPick({ ...approverPick, approverId: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginTop: 4 }}>
+                  <option value="">Select a customer...</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button onClick={() => setApproverPick(null)} style={btnGhost}>Cancel</button>
+              {/* Nothing happens until the question is answered - a default here is a
+                  default that issues documents to customers by accident. */}
+              <button onClick={confirmApprover} disabled={approverPick.send === null}
+                style={{ ...btnPrimary, opacity: approverPick.send === null ? 0.5 : 1, cursor: approverPick.send === null ? 'default' : 'pointer' }}>
+                Choose file...
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sendPick && (
+        <div onClick={() => setSendPick(null)} style={modalWrap}>
+          <div onClick={e => e.stopPropagation()} style={modalCard}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, color: INK }}>Send for approval</h3>
+            <p style={{ fontSize: 13, color: '#8a857c', marginTop: 0 }}>
+              {sendPick.ids.length === 1
+                ? 'This calculation is held on the project and has not been sent to anyone. Choose who should approve it.'
+                : `${sendPick.ids.length} calculations are held on the project. Choose who should approve them.`}
+            </p>
             <label style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>Approver (customer)</label>
-            <select value={approverPick.approverId} onChange={e => setApproverPick({ ...approverPick, approverId: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginTop: 4 }}>
+            <select value={sendPick.approverId} onChange={e => setSendPick({ ...sendPick, approverId: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginTop: 4 }}>
               <option value="">Select a customer...</option>
               {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={() => setApproverPick(null)} style={btnGhost}>Cancel</button>
-              <button onClick={confirmApprover} style={btnPrimary}>Choose file...</button>
+              <button onClick={() => setSendPick(null)} style={btnGhost}>Cancel</button>
+              <button
+                onClick={async () => {
+                  const d = await post({ action: 'send-for-approval', ids: sendPick.ids, approverId: sendPick.approverId })
+                  if (d) { setSendPick(null); load() }
+                }}
+                disabled={!sendPick.approverId}
+                style={{ ...btnPrimary, opacity: sendPick.approverId ? 1 : 0.5, cursor: sendPick.approverId ? 'pointer' : 'default' }}>
+                Send{sendPick.ids.length > 1 ? ` ${sendPick.ids.length}` : ''} for approval
+              </button>
             </div>
           </div>
         </div>
