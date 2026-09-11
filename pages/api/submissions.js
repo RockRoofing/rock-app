@@ -1,7 +1,9 @@
 import {
   getSubmissionIndex, saveSubmissionIndex,
   getSubmission, saveSubmission, deleteSubmission,
+  getForms,
 } from '../../lib/db'
+import { formDateOf } from '../../lib/formDates'
 
 // Allow larger bodies (photos are URLs, but signatures/answers can add up).
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } }
@@ -57,6 +59,18 @@ export default async function handler(req, res) {
         flagCount: (full.flags || []).length,
         draft: full.draft,
         submittedAt: now,
+        // THE DATE THE FORM IS ABOUT. A Daily Site Diary written up on Friday for
+        // Monday belongs to Monday, and Forms Missing scores it on this rather than
+        // on when it was typed. Resolved SERVER-SIDE from the form definition so it
+        // cannot drift if the client changes, and stored on the index because the
+        // index deliberately holds no answers.
+        formDate: await (async () => {
+          try {
+            const forms = await getForms()
+            const def = (forms || []).find(f => f.id === full.formId)
+            return formDateOf(def, full.answers)
+          } catch { return '' }
+        })(),
       })
       await saveSubmissionIndex(idx)
 

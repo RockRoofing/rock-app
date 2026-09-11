@@ -1,11 +1,12 @@
-pkg841 - Pre-Start was never being picked up. You were right. Includes pkg811-840.
-====================================================================================
+pkg842 - Site diaries scored on the Site Diary Date. Includes pkg811-841.
+============================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-840. It contains all of them. Fifty-one files.
+DEPLOY THIS INSTEAD OF pkg811-841. It contains all of them. Fifty-three files.
 
-*** TWELVE NEW FILES TO CREATE BY HAND ***
+*** THIRTEEN NEW FILES TO CREATE BY HAND ***
 
-  lib/preStartDone.js                                 <- NEW in this package
+  lib/formDates.js                                    <- NEW in this package
+  lib/preStartDone.js                                 (pkg841)
   lib/uploadFile.js                                   (pkg838)
   lib/inquery.js
   components/InQueryTable.js
@@ -22,80 +23,68 @@ DEPLOY THIS INSTEAD OF pkg811-840. It contains all of them. Fifty-one files.
 middleware.js is changed (pkg828). Everything else exists; overwrite in place.
 
 
-CONFIRMED, AND IT WAS WORSE THAN THE PAGE
-===========================================
-Pre-Start Minutes live in their own store, one record per project at
-ops:prestart:{projectNo}, filled in from the project page. They are not a Site App
-form and nothing ever writes them to the submission index.
+THE CHANGE
+===========
+A Daily Site Diary is now matched to the day using its own "Site Diary Date"
+answer, not the moment it was submitted.
 
-Both places that check them looked in the submission index:
+It read:
 
-    subs.some(s => s.formTitle.toLowerCase().includes('pre-start'))
+    s.submittedAt && iso(new Date(s.submittedAt)) === dk
 
-That test could only ever return false. So:
+So a Monday diary written up on Tuesday morning counted as TUESDAY'S - Monday showed
+missing, and Tuesday showed complete before Tuesday had happened. Anyone writing up
+the week on a Friday produced four missing days and one day doing the work of five.
 
-  FORMS MISSING showed every Pre-Start as Missing, however many had been completed.
-
-  AND THE MONDAY CRON did the same thing - pages/api/cron/forms-weekly-notify.js
-  uses the identical check, so every Monday the Contracts Manager was emailed
-  "projects that require a Pre-Start Notification" listing Pre-Starts they had
-  already done. That is the half worth fixing first: a page being wrong is
-  irritating, a chaser that cannot be satisfied gets ignored, and then the real ones
-  get ignored with it.
-
-Both now read the actual store, through one shared rule in lib/preStartDone.js
-rather than each growing its own.
+Same rule pages/forms/fill.js already uses to pre-select the crew from the Gantt for
+the diary date, hoisted into lib/formDates.js. A form that pre-fills from a date is
+now scored on the same date.
 
 
-WHAT COUNTS AS DONE
-====================
-SENT. A Pre-Start is complete once it has been issued - sentAt, or sentManually
-where it went out another way and was marked off. That is the same line the project
-page already draws: at that point the form locks and cannot be edited.
+THE AWKWARD PART, AND HOW IT IS HANDLED
+=========================================
+The submission index deliberately holds NO answers - "so listing is cheap" - so the
+diary date simply was not available to the page.
 
-A Pre-Start saved as a draft and not sent still reads as Missing, which is correct -
-it has not gone to anybody.
+  GOING FORWARD: the date is resolved when the form is submitted and stored on the
+  index entry as formDate. Resolved SERVER-SIDE from the form definition rather than
+  sent by the browser, so it cannot drift if the client changes.
 
-    never started                        missing
-    saved as a draft, not sent           missing
-    sent                                 done
-    marked sent manually, no timestamp   done  (falls back to the last save)
+  ALREADY SUBMITTED: backfilled lazily. The first time Forms Missing runs, any diary
+  in range without a formDate is read once, its date pulled out, and written back to
+  the index. The cost is paid a single time per submission and never again.
 
-On the Forms Missing page it is judged AS AT THE END OF EACH WEEK, so minutes issued
-weeks ago count for every week since, while a week that closed before they existed
-is not marked complete after the fact:
+  The backfill is keyed on the property being ABSENT, not falsy. A diary whose date
+  question was left blank resolves to '' and must not be re-read on every load.
 
-    Pre-Start sent 31 Aug, week ending 9 Aug   -> missing
-    Pre-Start sent 31 Aug, week ending 6 Sep   -> complete
+  A diary with no date answer at all still falls back to the submission date, so
+  nothing gets worse than it is today.
 
+The backfill is bounded to submissions within 30 days either side of the weeks being
+viewed, so opening the page never walks the whole index.
 
-WHAT TO EXPECT AFTER DEPLOYING
-================================
-The Pre-Start card will jump - it has been reading 0% or near it regardless of the
-real position. The number it shows now is the true one.
-
-Next Monday's email to the Contracts Managers should be materially shorter, and if a
-project still appears on it, that Pre-Start genuinely has not been sent.
+Verified: a diary dated Monday and submitted Tuesday now marks MONDAY complete.
+Before this change Monday read missing and Tuesday read complete.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg841
-  612 drill-down header                 -> v841
-  Applied for / Certified drill-down    -> v841
+  13-week cash flow build marker        -> pkg842
+  612 drill-down header                 -> v842
+  Applied for / Certified drill-down    -> v842
 
-Hard refresh after deploying.
+Hard refresh after deploying. The first load of Forms Missing over a wide date range
+will be a little slower while the backfill runs; after that it is normal.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg840  Forms Missing cards open a drill-down listing the missing and completed
-        forms behind each number.
+pkg841  Pre-Start was never picked up - it lives in its own store, not the
+        submission index, so it always read Missing AND the Monday cron chased
+        Contracts Managers for Pre-Starts already sent.
+pkg840  Forms Missing cards open a drill-down of the forms behind each number.
 pkg839  Projects are archived, not deleted.
-pkg838  RAMS uploads over ~4.5MB failed with an unreadable JSON error - now upload
-        straight to Blob storage.
-pkg837  Type-to-search on the Overheads staff picker.
-pkg836  "Your name" fields take one person only.
+pkg838  RAMS uploads over ~4.5MB failed with an unreadable JSON error.
 
 
 STILL OPEN, ON YOUR WORD
@@ -110,3 +99,6 @@ STILL OPEN, ON YOUR WORD
   - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
     application of ANY status.
   - A script listing every project holding settings under BOTH keys.
+  - The Monday cron matches the other forms on submission date too. Start on Site
+    and Works Area Handover are one-offs so it matters less, but if those should
+    also use a date answered on the form, the helper is now written.

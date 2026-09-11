@@ -1,5 +1,6 @@
-import { get, getOpsProjects, getSubmissionIndex } from '../../lib/db'
+import { get, getOpsProjects, getSubmissionIndex, saveSubmissionIndex, getSubmission, getForms } from '../../lib/db'
 import { loadPreStarts, isPreStartDoneBy } from '../../lib/preStartDone'
+import { formDateOf } from '../../lib/formDates'
 
 // Forms "Missing" dashboard data.
 // For a given week range, works out the REQUIRED tracked forms per project/week and whether each has
@@ -30,6 +31,35 @@ export default async function handler(req, res) {
       get('ops:hs-matrix-data').then(v => v || {}),
       get('ops:water-ingress').then(v => v || {}),
     ])
+
+    // BACKFILL THE DIARY DATE ONTO OLDER INDEX ENTRIES.
+    //
+    // The index deliberately carries no answers, so submissions written before this
+    // change have no formDate. Rather than leaving them scored on the wrong day
+    // forever, each one is read ONCE, its Site Diary Date pulled out, and written
+    // back to the index - so the cost is paid a single time per submission and never
+    // again.
+    //
+    // Keyed on the property being ABSENT, not falsy. A diary whose date question was
+    // left blank resolves to '' and must not be re-fetched on every page load.
+    try {
+      const from30 = parseISO(iso(new Date(mondayOf(req.query.from ? parseISO(req.query.from) : new Date()).getTime() - 30 * DAY)))
+      const to30 = new Date(mondayOf(req.query.to ? parseISO(req.query.to) : new Date()).getTime() + 30 * DAY)
+      const needing = (subs || []).filter(s =>
+        /daily site diary/i.test(s.formTitle || '') && s.formDate === undefined && s.submittedAt
+        && new Date(s.submittedAt) >= from30 && new Date(s.submittedAt) <= to30)
+      if (needing.length) {
+        const forms = await getForms()
+        await Promise.all(needing.map(async (s) => {
+          try {
+            const full = await getSubmission(s.id)
+            const def = (forms || []).find(f => f.id === s.formId)
+            s.formDate = formDateOf(def, full && full.answers) || ''
+          } catch { s.formDate = '' }
+        }))
+        await saveSubmissionIndex(subs)
+      }
+    } catch { /* a failed backfill just means the fallback below is used */ }
 
     // Pre-Start lives in its own store, not the submission index - see
     // lib/preStartDone.js. One read per live project.
@@ -120,9 +150,11 @@ export default async function handler(req, res) {
         // DAILY SITE DIARY (Supervisor): one required per allocated day in the week
         const diaryDays = days.filter(dk => weekDayISOs.includes(dk))
         for (const dk of diaryDays) {
+          // SCORED ON THE SITE DIARY DATE, not on when it was typed in. Falls back to
+          // the submission date only where the form carries no date answer at all.
           const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('daily site diary') &&
             ((s.projectName || '').includes(projectNo) || (projectName && (s.projectName || '').includes(projectName))) &&
-            s.submittedAt && iso(new Date(s.submittedAt)) === dk)
+            (s.formDate || (s.submittedAt ? iso(new Date(s.submittedAt)) : '')) === dk)
           rows.push({ week: weekMon, projectNo, projectName, formType: 'Daily Site Diary', responsible: supervisor || '—', role: 'Supervisor', done, day: dk })
           byForm['Daily Site Diary'].required++
           if (done) byForm['Daily Site Diary'].completed++
