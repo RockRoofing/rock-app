@@ -1,7 +1,7 @@
-pkg819 - The workings window closes when you want it to. Includes pkg811-818.
-===============================================================================
+pkg820 - Documents as well as images, and PDFs merged in whole. Includes pkg811-819.
+======================================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-818. It contains all of them. Twenty-two files.
+DEPLOY THIS INSTEAD OF pkg811-819. It contains all of them. Twenty-two files.
 
 *** TWO NEW FILES TO CREATE BY HAND ***
 
@@ -14,67 +14,84 @@ Everything else exists. Overwrite in place. LITERAL square brackets on
 pages/api/project/[id]/ and pages/project/.
 
 
-1. THE WORKINGS WINDOW NOW CLOSES
-===================================
-The x closes it, always. So does Escape. Whatever you have entered stays on the
-item - every keystroke in that window is already pushed up by its auto-save, so a
-part-priced item just sits on the list part-priced until you come back to it.
+THE CHANGE
+===========
+"Add photos" is now "Add documents / images", and the panel is "Documents & images".
 
-Save & close still asks for everything, because choosing to finish an item is a
-different act from choosing to come back to it. It is no longer a dead grey button
-either: press it while something is outstanding and it tells you what, rather than
-sitting there disabled with no explanation, which is what made the window feel
-stuck.
+  IMAGES   drawn onto the page as before, captioned with the file name.
+  PDFs     their pages are COPIED IN WHOLE. A supplier quote or a marked-up drawing
+           arrives as part of the variation document rather than as a link the
+           customer has to go and find. The file name is printed at the top of its
+           first page so it is clear which attachment they are looking at.
 
-THE CHECK HAS NOT GONE, IT HAS MOVED TO WHERE IT BELONGS. You cannot RAISE a
-variation with an unfinished item on it - that is the moment it reaches a customer,
-and an item with no mark-up is priced at cost. The message names the item:
-
-    "Additional VCL still needs a mark-up %. Open its workings to finish it."
-    "3 items are unfinished: Additional VCL, Flashings, item 4. Open the workings
-     on each to finish them."
-
-Unfinished items are also flagged on the item row itself, so you can see what is
-outstanding while looking at the list rather than finding out when you try to raise.
-
-One rule, itemIssues(), used by both the window and the raise. It lived only inside
-the window before, which is precisely why the window was the thing that had to
-refuse - the check had nowhere else to happen.
-
-A mark-up of 0% counts as finished. Zero is a decision; blank is not.
+Everything still flows through buildVariationPDF, so Download, Send to customer and
+the instruction email all carry them without any of those paths changing.
 
 
-2. "+ RAISE NEW VARIATION"
-===========================
-You are right that it did nothing - on a fresh builder the blank variation is
-already on screen next to it.
+DETAILS WORTH KNOWING
+----------------------
+THE CAMERA ATTRIBUTE IS GONE. The input carried capture="environment", which sends
+a phone straight to the camera and hides the file browser. That is right for photos
+and wrong the moment a PDF is allowed, because a camera cannot produce one. The
+camera is still one tap away inside the normal picker.
 
-It is not simply deleted, because it did have one job. If you open an existing
-variation from the list on the left and then want to start a new one instead,
-that button was the only way back. Without it you would be stuck editing whatever
-you last clicked.
+A PDF DOES NOT RENDER IN AN <img>. It shows a broken-image icon, which reads as
+"this upload failed". Anything that is not an image now gets a labelled tile with
+its extension instead, and the thumbnail strip says underneath which of the two it
+is: "merged into the PDF", or "listed, not merged".
 
-So it now appears ONLY when you have a variation open, reads "Start a new variation
-instead", and is a quiet outline button rather than a big black one. On a fresh
-builder - your screenshot - there is no button at all.
+FILE TYPE IS READ FROM THE NAME, not a stored mime type. Records written by pkg817
+carry no type at all, so anything keyed on that would have come out unknown for
+every attachment already uploaded.
 
-If you would rather it went entirely, say so and I will take it out; you would then
-get back to a blank variation by reloading the page.
+THE STORAGE KEY IS STILL builder.photos. It is the wrong name now, but it is what
+pkg817 wrote and variations already hold it - renaming it would strand those.
+
+A PDF THAT WILL NOT PARSE says so on the page rather than being skipped, the same
+as one that will not download. A variation quietly missing its evidence, with
+nothing to say any was meant to be there, is worse than a line admitting it.
+
+
+VERIFIED
+---------
+Built end to end with five attachments and rendered the result to look at:
+
+  an image                 drawn, captioned
+  a TWO-PAGE PDF           both pages merged in, name on the first
+  a second image           drawn on a fresh page, captioned
+  a broken URL             "[missing.pdf could not be loaded]", in red
+  an .xlsx                 "[schedule.xlsx - attached to the variation, not shown
+                           here]", in grey
+
+
+ONE THING I HAVE NOT DONE
+--------------------------
+A Word file or a spreadsheet cannot be merged into a PDF, so it is listed by name
+and nothing more - which means it does NOT reach the customer. The picker still
+accepts them, because having them on the variation in the portal is useful even
+when they cannot be printed into the document.
+
+If they should actually go out, the right answer is to attach them to the EMAIL
+alongside the PDF - variation-send.js already builds an attachments array, so it is
+a contained change. Say the word. Until then, anything that must reach the customer
+should go on as a PDF or an image.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg819
-  612 drill-down header                 -> v819
-  Applied for / Certified drill-down    -> v819
+  13-week cash flow build marker        -> pkg820
+  612 drill-down header                 -> v820
+  Applied for / Certified drill-down    -> v820
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
+pkg819  Workings window closes on the x whatever state it is in; the completeness
+        check moved to the raise, where it names the unfinished item. "+ Raise new
+        variation" now only appears when a variation is open.
 pkg818  Type-to-search on the three project pickers.
-pkg817  Photos on variations, appended to the PDF, download and email.
 pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
         audit endpoint to repair existing data. Run its GET and read it first.
 pkg814  Long text wraps on the variation PDF.

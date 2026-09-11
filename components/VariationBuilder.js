@@ -47,6 +47,19 @@ const UNITS = ['m2', 'm', 'nr', 'item']
 // Where the rate actually comes from. Materials and labour are priced line by line, waste
 // is added to materials only, and the margin is applied to the lot - which is why the
 // variation's "profit" figure is a product of the workings rather than something typed.
+// WHAT KIND OF ATTACHMENT IS IT.
+//
+// Decided from the file name and the url rather than a stored mime type, because the
+// records written before documents were allowed carry no type at all and would all
+// have come out as "unknown".
+const extOf = (f) => {
+  const m = /\.([a-z0-9]{1,5})($|\?|#)/i.exec(String((f && f.name) || (f && f.url) || ''))
+  return m ? m[1].toUpperCase() : ''
+}
+const isPdfFile = (f) => extOf(f) === 'PDF' || String((f && f.url) || '').startsWith('data:application/pdf')
+const isImageFile = (f) => ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'HEIC', 'BMP'].includes(extOf(f))
+  || String((f && f.url) || '').startsWith('data:image/')
+
 // WHAT AN ITEM STILL NEEDS BEFORE IT CAN GO TO A CUSTOMER.
 //
 // Module scope because two places ask: the workings window, and the raise. It used to
@@ -539,7 +552,7 @@ export default function VariationBuilder({ projects, onSaved }) {
   async function addPhotos(fileList) {
     const files = Array.from(fileList || [])
     if (!files.length) return
-    setPhotoBusy(`Uploading ${files.length} photo${files.length === 1 ? '' : 's'}...`)
+    setPhotoBusy(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`)
     const added = []
     for (const f of files) {
       try {
@@ -549,11 +562,11 @@ export default function VariationBuilder({ projects, onSaved }) {
           handleUploadUrl: '/api/blob-upload',
           contentType: toUpload.type || f.type || 'image/jpeg',
         })
-        added.push({ url: blob.url, name: f.name || 'Photo' })
+        added.push({ url: blob.url, name: f.name || 'Attachment' })
       } catch (e) {
         // Report the one that failed rather than the whole batch - with several
         // photos, "upload failed" tells you nothing about which to try again.
-        setPhotoBusy(`Could not upload ${f.name || 'a photo'}: ${e.message || 'upload failed'}`)
+        setPhotoBusy(`Could not upload ${f.name || 'a file'}: ${e.message || 'upload failed'}`)
       }
     }
     // Clear the status only on success. Where nothing uploaded, the error set above
@@ -1057,25 +1070,38 @@ export default function VariationBuilder({ projects, onSaved }) {
 
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Photos</div>
-              <span style={{ fontSize: 11.5, color: '#8a8a8a' }}>Appended to the PDF, the download and the email</span>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Documents &amp; images</div>
+              <span style={{ fontSize: 11.5, color: '#8a8a8a' }}>Appended to the PDF, the download and the email. PDFs are merged in whole.</span>
             </div>
             {photos.length === 0 && (
               <div style={{ fontSize: 12.5, color: '#8a8a8a', marginBottom: 8 }}>
-                No photos yet. Site photos are usually what settles whether a variation was needed.
+                Nothing attached yet. Site photos, a supplier quote, a marked-up drawing - whatever
+                settles why the variation was needed and what it is priced from.
               </div>
             )}
             {photos.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                 {photos.map((ph, i) => (
                   <div key={ph.url + i} style={{ position: 'relative', width: 104 }}>
-                    <a href={ph.url} target="_blank" rel="noopener noreferrer" title={ph.name || 'Photo'}>
-                      <img src={ph.url} alt={ph.name || 'Photo'}
-                        style={{ width: 104, height: 78, objectFit: 'cover', borderRadius: 6, border: `1px solid ${LINE}`, display: 'block' }} />
+                    {/* An <img> pointed at a PDF renders as a broken image icon, which
+                        reads as "this upload failed". Anything that is not an image
+                        gets a labelled tile instead. */}
+                    <a href={ph.url} target="_blank" rel="noopener noreferrer" title={ph.name || 'Attachment'}>
+                      {isImageFile(ph) ? (
+                        <img src={ph.url} alt={ph.name || 'Image'}
+                          style={{ width: 104, height: 78, objectFit: 'cover', borderRadius: 6, border: `1px solid ${LINE}`, display: 'block' }} />
+                      ) : (
+                        <div style={{ width: 104, height: 78, borderRadius: 6, border: `1px solid ${LINE}`, background: '#f8f9fa', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                          <span style={{ fontSize: 20 }} aria-hidden="true">{'\u{1F4C4}'}</span>
+                          <span style={{ fontSize: 9.5, fontWeight: 700, color: '#6b7280' }}>{extOf(ph) || 'FILE'}</span>
+                        </div>
+                      )}
                     </a>
-                    <div style={{ fontSize: 10, color: '#8a8a8a', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ph.name || 'Photo'}</div>
+                    <div style={{ fontSize: 10, color: '#8a8a8a', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ph.name || 'Attachment'}</div>
+                    {isPdfFile(ph) && <div style={{ fontSize: 9, color: '#16a34a' }}>merged into the PDF</div>}
+                    {!isImageFile(ph) && !isPdfFile(ph) && <div style={{ fontSize: 9, color: '#c2410c' }}>listed, not merged</div>}
                     {!lockedByInstruction && (
-                      <button onClick={() => setPhotos(prev => prev.filter((_, ix) => ix !== i))} title="Remove this photo"
+                      <button onClick={() => setPhotos(prev => prev.filter((_, ix) => ix !== i))} title="Remove this attachment"
                         style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: '50%', border: `1px solid ${LINE}`, background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>&times;</button>
                     )}
                   </div>
@@ -1084,11 +1110,14 @@ export default function VariationBuilder({ projects, onSaved }) {
             )}
             {!lockedByInstruction && (
               <label style={{ display: 'inline-block', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}>
-                + Add photos
-                {/* capture lets a phone go straight to the camera; multiple keeps a
-                    batch off the roll to one action. Value cleared after each pick so
-                    choosing the same file twice still fires onChange. */}
-                <input type="file" accept="image/*" multiple capture="environment"
+                + Add documents / images
+                {/* No `capture` attribute. It forces a phone straight to the camera and
+                    hides the file browser, which is right for photos and wrong the
+                    moment a PDF is allowed - the camera cannot produce one. The camera
+                    is still one tap away inside the normal picker.
+                    Value cleared after each pick so choosing the same file twice still
+                    fires onChange. */}
+                <input type="file" accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx" multiple
                   onChange={e => { addPhotos(e.target.files); e.target.value = '' }}
                   style={{ display: 'none' }} />
               </label>
