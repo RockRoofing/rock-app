@@ -1,87 +1,84 @@
-pkg818 - Type-to-search on the project pickers. Includes pkg811-817.
-======================================================================
+pkg819 - The workings window closes when you want it to. Includes pkg811-818.
+===============================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-817. It contains all of them. Twenty-two files.
+DEPLOY THIS INSTEAD OF pkg811-818. It contains all of them. Twenty-two files.
 
 *** TWO NEW FILES TO CREATE BY HAND ***
 
-  components/SearchableSelect.js                      (new, this package)
-  pages/api/admin/variations-instructed-audit.js      (new, from pkg816 -
-                                                       the pages/api/admin/ folder
-                                                       does not exist yet either)
+  components/SearchableSelect.js                      (from pkg818)
+  pages/api/admin/variations-instructed-audit.js      (from pkg816 - the
+                                                       pages/api/admin/ folder does
+                                                       not exist yet either)
 
-Everything else exists. Overwrite in place. Folders with LITERAL square brackets:
+Everything else exists. Overwrite in place. LITERAL square brackets on
 pages/api/project/[id]/ and pages/project/.
 
 
-THE CHANGE
-===========
-Three project pickers now filter as you type:
+1. THE WORKINGS WINDOW NOW CLOSES
+===================================
+The x closes it, always. So does Escape. Whatever you have entered stays on the
+item - every keystroke in that window is already pushed up by its auto-save, so a
+part-priced item just sits on the list part-priced until you come back to it.
 
-  Variation Tracker    the Project filter in the filter box
-  Variation Tracker    the Project field in the Add Variation modal
-  Variation Builder    the project selector at the top
+Save & close still asks for everything, because choosing to finish an item is a
+different act from choosing to come back to it. It is no longer a dead grey button
+either: press it while something is outstanding and it tells you what, rather than
+sitting there disabled with no explanation, which is what made the window feel
+stuck.
 
-Type any part of the job number or the name and the list narrows. Arrow keys move,
-Enter picks, Escape closes. Clicking the field clears the box so the whole list is
-there again - you are choosing, not editing what is already chosen.
+THE CHECK HAS NOT GONE, IT HAS MOVED TO WHERE IT BELONGS. You cannot RAISE a
+variation with an unfinished item on it - that is the moment it reaches a customer,
+and an item with no mark-up is priced at cost. The message names the item:
 
+    "Additional VCL still needs a mark-up %. Open its workings to finish it."
+    "3 items are unfinished: Additional VCL, Flashings, item 4. Open the workings
+     on each to finish them."
 
-WHY NOT JUST LEAVE THE NATIVE SELECT
---------------------------------------
-Browsers do have type-ahead on a <select>, but it only matches the START of the
-option text. Every option here reads "J228 - Farmstead Drive", so typing "Farmstead"
-matches nothing at all - and the job name is how people remember a job. Typing the
-number worked; typing the name did not, which is the half that is missing rather
-than the half that is there.
+Unfinished items are also flagged on the item row itself, so you can see what is
+outstanding while looking at the list rather than finding out when you try to raise.
 
-Matching is anywhere in the label, and a prefix match ranks first, so "J228" puts
-J228 at the top rather than some other job that mentions it.
+One rule, itemIssues(), used by both the window and the raise. It lived only inside
+the window before, which is precisely why the window was the thing that had to
+refuse - the check had nowhere else to happen.
 
-    ""         all options
-    "farm"     J228 - Farmstead Drive, J250 - Farmstead Annexe
-    "J228"     J228 - Farmstead Drive
-    "warwick"  J194 - Warwick Road      <- name match, not a prefix
-    "zz"       No project matches that
-
-
-ONE COMPONENT, NOT THREE
--------------------------
-components/SearchableSelect.js is shared by all three. Three separate dropdowns is
-how they end up behaving differently from one another - which is the fault behind a
-good deal of what has been fixed this week.
-
-Customer, CM, Estimator and Instructed? are deliberately left as plain selects. They
-are short lists and a native select is quicker on those; a search box on a list of
-six is friction, not help.
+A mark-up of 0% counts as finished. Zero is a decision; blank is not.
 
 
-A DETAIL
----------
-The list closes on a click anywhere outside it, tracked on the document rather than
-with onBlur. onBlur alone does not work here: the list sits inside the same box, so
-clicking an option blurs the input first and the list would close before the click
-landed on it.
+2. "+ RAISE NEW VARIATION"
+===========================
+You are right that it did nothing - on a fresh builder the blank variation is
+already on screen next to it.
+
+It is not simply deleted, because it did have one job. If you open an existing
+variation from the list on the left and then want to start a new one instead,
+that button was the only way back. Without it you would be stuck editing whatever
+you last clicked.
+
+So it now appears ONLY when you have a variation open, reads "Start a new variation
+instead", and is a quiet outline button rather than a big black one. On a fresh
+builder - your screenshot - there is no button at all.
+
+If you would rather it went entirely, say so and I will take it out; you would then
+get back to a blank variation by reloading the page.
 
 
 MARKERS
 --------
-  13-week cash flow build marker        -> pkg818
-  612 drill-down header                 -> v818
-  Applied for / Certified drill-down    -> v818
+  13-week cash flow build marker        -> pkg819
+  612 drill-down header                 -> v819
+  Applied for / Certified drill-down    -> v819
 
 Hard refresh after deploying.
 
 
 ALSO IN THIS PACKAGE
 ---------------------
-pkg817  Photos on variations in the builder, appended to the PDF and so carried by
-        Download, Send to customer and the instruction email.
+pkg818  Type-to-search on the three project pickers.
+pkg817  Photos on variations, appended to the PDF, download and email.
 pkg816  The `instructed` flag fixed across about twenty readers, plus the admin
-        audit endpoint to repair the existing data. Run its GET and read it before
-        applying anything.
-pkg814  Long text wraps on the variation PDF instead of running over the column.
-pkg813  Variation Tracker add-row removed, Add Variation moved into the filter box.
+        audit endpoint to repair existing data. Run its GET and read it first.
+pkg814  Long text wraps on the variation PDF.
+pkg813  Tracker add-row removed, Add Variation moved into the filter box.
 pkg812  Search from inside a CRM deal.
 pkg811  Cost-comment emails name the project.
 

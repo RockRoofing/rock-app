@@ -47,6 +47,22 @@ const UNITS = ['m2', 'm', 'nr', 'item']
 // Where the rate actually comes from. Materials and labour are priced line by line, waste
 // is added to materials only, and the margin is applied to the lot - which is why the
 // variation's "profit" figure is a product of the workings rather than something typed.
+// WHAT AN ITEM STILL NEEDS BEFORE IT CAN GO TO A CUSTOMER.
+//
+// Module scope because two places ask: the workings window, and the raise. It used to
+// live only inside the window, which is why the window was the thing that refused to
+// close - the check had nowhere else to happen.
+export function itemIssues(d) {
+  const priced = (rows) => (rows || []).some(r => n(r.qty) > 0 && n(r.rate) > 0)
+  const missing = []
+  if (!String((d && d.description) || '').trim()) missing.push('a description')
+  if (!(n(d && d.qty) > 0)) missing.push('a quantity')
+  if (!(d && d.unit)) missing.push('a unit')
+  if (!d || d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))) missing.push('a mark-up %')
+  if (!priced(d && d.materials) && !priced(d && d.labour)) missing.push('at least one materials or labour line')
+  return missing
+}
+
 function WorkingsModal({ item, onSave, onClose, readOnly = false }) {
   const [d, setD] = useState(() => ({
     description: item.description || '',
@@ -94,17 +110,23 @@ function WorkingsModal({ item, onSave, onClose, readOnly = false }) {
   // Every one of these ends up on a document going to a customer. A line with no
   // description, no quantity or no unit is not a priced item, and an item with neither
   // materials nor labour behind it is priced from nothing.
-  const priced = (rows) => (rows || []).some(r => n(r.qty) > 0 && n(r.rate) > 0)
-  const missing = []
-  if (!String(d.description || '').trim()) missing.push('a description')
-  if (!(n(d.qty) > 0)) missing.push('a quantity')
-  if (!d.unit) missing.push('a unit')
-  if (d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))) missing.push('a mark-up %')
-  if (!priced(d.materials) && !priced(d.labour)) missing.push('at least one materials or labour line')
+  const missing = itemIssues(d)
   const needsMarkup = d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))
   const incomplete = missing.length > 0
 
-  const tryClose = () => {
+  // THE X ALWAYS CLOSES. It used to refuse while anything was outstanding, so an item
+  // you had started and wanted to leave for later trapped you in the window until you
+  // invented a mark-up. Nothing is lost by closing: every keystroke is already pushed
+  // up by the auto-save above, so a part-priced item stays part-priced on the list.
+  //
+  // The check has not gone, it has moved to where it belongs - you cannot RAISE a
+  // variation with an unfinished item on it, which is the point at which it would
+  // reach a customer.
+  const tryClose = () => { onClose() }
+
+  // Save & close still asks for the lot. Choosing to finish the item is different from
+  // choosing to come back to it.
+  const saveAndClose = () => {
     if (readOnly) { onClose(); return }
     if (incomplete) { alert(`This item still needs ${missing.join(', ')}.`); return }
     onSave(calc(d)); onClose()
@@ -123,7 +145,7 @@ function WorkingsModal({ item, onSave, onClose, readOnly = false }) {
             <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Workings{readOnly ? ' (instructed - view only)' : ''}</h3>
             <div style={{ fontSize: 12.5, color: '#888' }}>Price the item up. The rate on the variation is worked out from what you enter here.</div>
           </div>
-          <button onClick={tryClose} title="Close - your workings are saved"
+          <button onClick={tryClose} title="Close. Your workings are kept, finished or not."
             style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
         </div>
 
@@ -214,11 +236,14 @@ function WorkingsModal({ item, onSave, onClose, readOnly = false }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, justifyContent: 'flex-end' }}>
           <span style={{ fontSize: 12, color: incomplete ? '#dc2626' : (saved ? GREEN : '#aaa') }}>
-            {incomplete ? `Still needs ${missing.join(', ')}` : (saved ? 'Saved' : 'Saves as you type')}
+            {incomplete ? `Still needs ${missing.join(', ')} - you can close and come back to it` : (saved ? 'Saved' : 'Saves as you type')}
           </span>
-          <button onClick={tryClose} disabled={incomplete}
+          {/* Enabled either way. A disabled button with no explanation is the thing
+              that makes a window feel stuck; this one says what is outstanding when
+              you press it. */}
+          <button onClick={saveAndClose}
             title={incomplete ? `Still needs ${missing.join(', ')}` : 'Save and close'}
-            style={{ background: incomplete ? '#e5e7eb' : GREEN, color: incomplete ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: incomplete ? 'default' : 'pointer' }}>
+            style={{ background: incomplete ? '#e5e7eb' : GREEN, color: incomplete ? '#6b7280' : '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
             Save &amp; close
           </button>
         </div>
@@ -617,6 +642,24 @@ export default function VariationBuilder({ projects, onSaved }) {
   async function save(forceNumber) {
     if (!project) { setMsg('Pick a project first.'); return false }
     if (!items.length) { setMsg('Add at least one item.'); return false }
+    // THE GATE THAT USED TO BE ON THE WORKINGS WINDOW.
+    //
+    // An item can be left half priced while you go and find a rate. It cannot be sent
+    // to a customer that way - an item with no mark-up is priced at cost, and that is
+    // a mistake that reaches them as a number they will hold us to.
+    //
+    // Named by item, because "an item is incomplete" on a variation with six of them
+    // is not something you can act on.
+    const unfinished = items
+      .map((it, i) => ({ n: i + 1, label: it.description || `item ${i + 1}`, missing: itemIssues(it) }))
+      .filter(x => x.missing.length)
+    if (unfinished.length) {
+      const first = unfinished[0]
+      setMsg(unfinished.length === 1
+        ? `${first.label} still needs ${first.missing.join(', ')}. Open its workings to finish it.`
+        : `${unfinished.length} items are unfinished: ${unfinished.map(x => x.label).join(', ')}. Open the workings on each to finish them.`)
+      return false
+    }
     // Who asked for it. It reaches the customer on the document - "Requested by -" is the
     // first thing a QS queries, because a variation nobody asked for is one they will not
     // pay for.
@@ -803,12 +846,22 @@ export default function VariationBuilder({ projects, onSaved }) {
               )
             })}
           </div>
-          <div style={{ padding: 10, borderTop: `1px solid ${LINE}` }}>
-            <button onClick={newVariation}
-              style={{ width: '100%', background: INK, color: '#fff', border: 'none', borderRadius: 7, padding: '9px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              + Raise new variation
-            </button>
-          </div>
+          {/* "+ Raise new variation" used to sit here permanently, and on a fresh
+              builder it did nothing you could see - the blank variation was already
+              on screen beside it.
+
+              It only ever had an effect in one situation: you had opened an existing
+              variation from this list and wanted to start a new one instead. So it
+              now appears only in that situation, and says what it does. Without it
+              you would be stuck editing whatever you last clicked. */}
+          {editingVar && (
+            <div style={{ padding: 10, borderTop: `1px solid ${LINE}` }}>
+              <button onClick={newVariation}
+                style={{ width: '100%', background: '#fff', color: INK, border: `1px solid ${LINE}`, borderRadius: 7, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                Start a new variation instead
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ minWidth: 0 }}>
@@ -936,7 +989,18 @@ export default function VariationBuilder({ projects, onSaved }) {
                 {items.map((it, i) => (
                   <tr key={i}>
                     <td style={{ ...td, fontWeight: 700, color: '#dc2626' }}>{i + 1}</td>
-                    <td style={td}>{it.description || <span style={{ color: '#c2410c' }}>no description - open the workings</span>}</td>
+                    <td style={td}>
+                      {it.description || <span style={{ color: '#c2410c' }}>no description - open the workings</span>}
+                      {/* Shown on the row, so an unfinished item is obvious while you
+                          are looking at the list rather than only when you try to
+                          raise it. */}
+                      {itemIssues(it).length > 0 && (
+                        <div style={{ fontSize: 10.5, color: '#c2410c', marginTop: 2 }}
+                          title={`Still needs ${itemIssues(it).join(', ')}`}>
+                          Unfinished - needs {itemIssues(it).join(', ')}
+                        </div>
+                      )}
+                    </td>
                     <td style={td}>{n(it.qty)}</td>
                     <td style={td}>{it.unit}</td>
                     <td style={{ ...td, textAlign: 'right' }}>{money(it.rate)}</td>
