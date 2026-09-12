@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { businessToday, businessNow } from '../../../lib/businessDate'
 import SearchableSelect from '../../../components/SearchableSelect'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, Loading, primaryBtn, ghostBtn, linkBtn } from '../../../components/opsUI'
@@ -113,7 +114,7 @@ export default function PlanningPage() {
   const [rams, setRams] = useState({})   // projectKey -> { opId: true } (RAMS sign-offs)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('day')          // 'day' | 'week'
-  const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
+  const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(businessNow()))
   const [historic, setHistoric] = useState(false)
   const [filters, setFilters] = useState({ project: '', installers: [], from: '', to: '' })
   const [completedShown, setCompletedShown] = useState([])   // selected completed/archived project keys to show
@@ -350,7 +351,7 @@ export default function PlanningPage() {
     const msg = `Paste ${clipboard.cells.length} day${clipboard.cells.length === 1 ? '' : 's'} of labour onto ${proj?.name || 'this project'} starting ${fmtDMY(anchor)}?` + (overwriting ? '\n\nSome target days already have labour and will be overwritten.' : '')
     if (!window.confirm(msg)) return
     setPasting(true)
-    const todayKey = iso(new Date())
+    const todayKey = businessToday()
     const clashes = []
     try {
       for (const t of targets) {
@@ -383,7 +384,7 @@ export default function PlanningPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
         <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Planning</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
+          <button onClick={() => setWeekModal(iso(mondayOf(businessNow())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
           <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
           <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
@@ -391,7 +392,7 @@ export default function PlanningPage() {
           </div>
           <button onClick={() => setHistoric(h => {
               const next = !h
-              setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0)))
+              setAnchorMonday(mondayOf(addDays(businessNow(), next ? -14 : 0)))
               return next
             })} title="Show past weeks (opens 2 weeks ago; use the back arrows to go further into the past)"
             style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
@@ -399,7 +400,7 @@ export default function PlanningPage() {
           </button>
           <button onClick={() => shift(historic ? -1 : -12)} disabled={historic && !canGoBack} style={{ ...ghostBtn, opacity: (historic && !canGoBack) ? 0.4 : 1 }} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
           <button onClick={goBack4} style={ghostBtn} title="Go back 4 weeks (each press moves 4 more weeks into the past)">&laquo; Back 4 weeks</button>
-          <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
+          <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(businessNow())) }} style={ghostBtn}>Today</button>
           <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
         </div>
       </div>
@@ -616,7 +617,7 @@ function MultiSelect({ options, selected, onChange, placeholder = 'Select', minW
 
 function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta, ops = [], onClashes, readOnly = false }) {
   const meta = data.meta[p.key] || {}
-  const _today = new Date(); const todayCellKey = iso(_today)
+  const todayCellKey = businessToday()
   const [start, setStart] = useState(meta.startDate || '')
   const [compl, setCompl] = useState(meta.completionDate || '')
   useEffect(() => { setStart(meta.startDate || ''); setCompl(meta.completionDate || '') }, [meta.startDate, meta.completionDate])
@@ -637,8 +638,10 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
   let projectHasLabour = false
   let projectHasNamedLabour = false
   let ganttHasSupervisor = false
-  const today = new Date()
-  const todayKey = iso(today)
+  const todayKey = businessToday()
+  // Week windows derive from the business date, not the browser's. Midday so a
+  // DST shift cannot move the weekday.
+  const today = new Date(todayKey + 'T12:00:00')
 
   // Week windows for the historic-actual rule.
   const thisMon = mondayOf(today)
@@ -782,7 +785,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
 // ── Water Ingress row: one permanent row; each day shows total headcount across all WI visits ──
 function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
   const wi = data.waterIngress || {}
-  const todayKey = iso(new Date())
+  const todayKey = businessToday()
   const headcount = (dk) => (wi[dk] || []).reduce((s, v) => s + (v.entries ? v.entries.length : 0) + (Number(v.unnamed) || 0), 0)
   const visitCount = (dk) => (wi[dk] || []).length
   // Combined status for a day's visits -> use the shared cellColours scheme.
@@ -912,7 +915,7 @@ function WIVisitEditor({ date, visit, data, ops, comp = {}, onCancel, onSaved, r
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
-  const todayKey = iso(new Date())
+  const todayKey = businessToday()
   const isPast = date < todayKey
 
   function selectProject(no) {
@@ -1185,12 +1188,12 @@ function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
   const [moveMsg, setMoveMsg] = useState('')
   // Week picker: any W/C Monday from 2 years back to 1 year forward.
   const wcOptions = useMemo(() => {
-    const base = mondayOf(new Date())
+    const base = mondayOf(businessNow())
     const opts = []
     for (let i = -104; i <= 52; i++) opts.push(iso(new Date(base.getTime() + i * 7 * 86400000)))
     return opts
   }, [])
-  const [fromMonISO, setFromMonISO] = useState(iso(mondayOf(new Date())))
+  const [fromMonISO, setFromMonISO] = useState(iso(mondayOf(businessNow())))
   const [weeksAhead, setWeeksAhead] = useState(1)     // number of weeks from the chosen W/C
   const [weeksData, setWeeksData] = useState(null)
   const [included, setIncluded] = useState(null)      // Set of opIds to show (null = all, set once loaded)
@@ -1806,7 +1809,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, ramsSi
   const opTrades = (id) => { const o = opList.find(x => x.id === id); return (o?.trades || []).join(', ') }
   const dateObjs = dates.map(parseISO).sort((a, b) => a - b)
   // Actual is only valid when EVERY selected date is before today.
-  const todayKey = iso(new Date())
+  const todayKey = businessToday()
   const allPast = dates.length > 0 && dates.every(dk => dk < todayKey)
   const anyFuture = dates.some(dk => dk >= todayKey)
   // If a preloaded status is 'actual' but the selection isn't all-past, fall back to confirmed.

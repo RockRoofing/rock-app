@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { businessNow } from '../../lib/businessDate'
 import OperationsShell, { PageHeading } from '../../components/OperationsShell'
 import { INK, GOLD, Loading, ghostBtn, th, td } from '../../components/opsUI'
 
@@ -11,7 +12,7 @@ const wcLabel = (m) => `W/C ${parseISO(m).toLocaleDateString('en-GB', { day: '2-
 const FORM_ORDER = ['Pre-Start', 'Start on Site Checklist', 'Daily Site Diary', 'Works Area Handover', 'Water Ingress Report']
 
 export default function FormsMissingPage() {
-  const thisMon = iso(mondayOf(new Date()))
+  const thisMon = iso(mondayOf(businessNow()))
   const [fromMon, setFromMon] = useState(thisMon)
   const [toMon, setToMon] = useState(thisMon)
   const [data, setData] = useState(null)
@@ -21,7 +22,7 @@ export default function FormsMissingPage() {
   const [fPerson, setFPerson] = useState('')
 
   const wcOptions = useMemo(() => {
-    const base = mondayOf(new Date()); const opts = []
+    const base = mondayOf(businessNow()); const opts = []
     for (let i = -104; i <= 52; i++) opts.push(iso(new Date(base.getTime() + i * 7 * DAY)))
     return opts
   }, [])

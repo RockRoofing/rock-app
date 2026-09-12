@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { businessToday, businessNow } from '../lib/businessDate'
 import Head from 'next/head'
 import CommercialNav from '../components/CommercialNav'
 import { computeApplicationSummary, resolveAppDates } from '../lib/applications'
@@ -37,7 +38,7 @@ export default function ProjectCashflow() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('day')            // 'day' | 'week'
-  const [anchorMonday, setAnchorMonday] = useState(mondayOf(new Date()))
+  const [anchorMonday, setAnchorMonday] = useState(mondayOf(businessNow()))
   const [historic, setHistoric] = useState(false)
   const [sel, setSel] = useState(null)               // { key, dates:Set<iso> }
   // Which project the horizontal cash rows are limited to. null = everything.
@@ -129,7 +130,8 @@ export default function ProjectCashflow() {
   // prediction can still be read against what actually happened.
   // Declared ABOVE the memos that read it - a const is not hoisted, so leaving it further
   // down was a temporal dead zone that throws on first render.
-  const todayKey = iso(new Date())
+  // The business's today, not the viewer's browser clock. See lib/businessDate.js.
+  const todayKey = businessToday()
 
   const supersededIds = useMemo(() => {
     const out = new Set()
@@ -404,12 +406,12 @@ export default function ProjectCashflow() {
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button onClick={() => setView(v => v === 'day' ? 'week' : 'day')} style={ghostBtn}>{view === 'day' ? 'Week view' : 'Day view'}</button>
-              <button onClick={() => setHistoric(h => { const next = !h; setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0))); return next })}
+              <button onClick={() => setHistoric(h => { const next = !h; setAnchorMonday(mondayOf(addDays(businessNow(), next ? -14 : 0))); return next })}
                 style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
                 {historic ? '✓ Historic' : 'Historic'}
               </button>
               <button onClick={() => shift(historic ? -1 : -12)} style={ghostBtn} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
-              <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
+              <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(businessNow())) }} style={ghostBtn}>Today</button>
               <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
             </div>
           </div>

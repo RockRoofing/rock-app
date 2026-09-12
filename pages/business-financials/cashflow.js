@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { businessToday } from '../../lib/businessDate'
+import { businessToday, businessNow } from '../../lib/businessDate'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -552,7 +552,7 @@ export default function CashFlow() {
     const openBank = startCash !== ''
       ? Number(startCash)
       : (hasManualBank ? manualBankTotal : (data.cashAtBank || 0))
-    const start = mondayOf(new Date())
+    const start = mondayOf(businessNow())
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
     // Which account codes count as overheads, from the same list the API builds the

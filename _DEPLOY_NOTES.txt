@@ -1,97 +1,111 @@
-pkg852 - The last two. lib/db.js is now the ONLY way into Redis.
-================================================================
+pkg853 - One business date for every "today" and every week anchor
+==================================================================
 
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING,
-except the build marker, which is the point of it being here.
+FIRST, A CORRECTION TO WHAT I TOLD YOU
+--------------------------------------
+I said six pages mixed a UTC "today" with a local "today". That was a crude
+grep and it overstated it. The accurate position:
+
+  - cashflow.js was the ONLY file comparing two different todays against each
+    other. That one is real and was fixed in pkg851.
+  - retention.js, retentions-due.js, monthly.js, invoices.js and
+    project/[id].js use UTC consistently. Their local-date helpers format
+    dates the user picked, not today. Not a divergence. Still on the list, but
+    minor - UTC is the same for every viewer, so it is only wrong for the hour
+    between UK midnight and 1am during BST.
+
+What IS serious is a different thing, which that grep missed.
 
 
-FILES (2)
+THE ACTUAL FAULT IN THIS PACKAGE
+--------------------------------
+Six sites took "today" from the browser's clock, and nine more anchored a WEEK
+from it with mondayOf(new Date()). Those give a different answer depending on
+where the person is sitting.
+
+The one that matters most: cashflow.js line 555.
+
+    const start = mondayOf(new Date())      // the 13-week window START
+
+pkg851 fixed the two todays in that file and MISSED this. Viewed from a
+timezone ahead of London, on a Sunday evening UK time, that is already Monday
+locally - so the whole 13-week window starts a week early and every figure in
+it is for the wrong thirteen weeks. My omission; this closes it.
+
+Also fixed: the Planner's current-day column and week windows, the project
+cash flow's week anchor and Today button, and the Missing Forms week on both
+the Operations page and the CM Site App.
+
+
+THE FIX
+-------
+lib/businessDate.js gains businessNow(): a Date sitting at MIDDAY on the
+business's today. Midday rather than midnight so a daylight-saving shift of an
+hour cannot move the anchor onto the previous or next day - a week anchor that
+jumps once a year is the kind of fault nobody ever traces.
+
+Every mondayOf(new Date()) becomes mondayOf(businessNow()).
+Every iso(new Date()) becomes businessToday().
+
+After this there is no viewer-local "today" left anywhere outside pages/api.
+Verified by grep.
+
+
+FILES (6)
 ---------
-pages/api/business-financials.js
-pages/api/cron/deep-sync.js
+lib/businessDate.js                               MODIFIED - adds businessNow()
+pages/business-financials/cashflow.js             SUPERSEDES the pkg851 version
+pages/project-cashflow.js
+pages/operations/project-management/planning.js
+pages/operations/forms-missing.js
+pages/forms/cm/missing-forms.js
 
-New files to create by hand: none.
+lib/businessDate.js already exists from pkg851. No new files to create by hand.
 
-
-49 OF 49 CONVERTED
-------------------
-After this deploys, exactly one file in the whole application creates a Redis
-connection: lib/db.js. Verified by grep across every .js file in the repo -
-one result, lib/db.js itself.
-
-That was the point of pkg843 to pkg852. Tenant resolution now goes in ONE
-function, getClient(), and every one of the 190 API routes follows it
-automatically. Nothing can quietly read the wrong customer's data by holding
-its own connection, because nothing holds its own connection.
+NOTE: cashflow.js here REPLACES the copy you deployed in pkg851. It contains
+everything pkg851 did plus the line 555 fix. Deploy this one over it.
 
 
-BUILD MARKER
+WHAT SHOULD LOOK DIFFERENT
+--------------------------
+On a machine set to UK time, which yours is: NOTHING, with one exception.
+The 13-week cash flow window start was already correct for a UK clock, so that
+figure should not move.
+
+The exception is anyone viewing from a machine set to a non-UK timezone. For
+them the Planner's "today" column, the week windows and the cash flow window
+were wrong and will now be right.
+
+
+CHECKS I RAN
 ------------
-business-financials.js carries it, so it moves for the first time since pkg844:
-
-        build: 'pkg844'  ->  build: 'pkg852'
-
-That is why the 13-week cash flow still said 844 through five packages. The
-marker only moves when the file holding it is in the package. From now on it is
-a real deploy check again for anything touching business-financials.js.
-
-
-WHAT CHANGED
-------------
-business-financials.js  1694 lines, four edits:
-   - getClient imported
-   - local getRedis() deleted
-   - line 119  redis  = await getClient()
-   - line 448  redis2 = await getClient()
-   - build marker
-   Both clients were already two calls to the same helper. They still are.
-
-deep-sync.js  399 lines, three edits: import, deleted helper, one line.
-
-Nothing else in either file moved.
-
-
-CHECKS I RAN BEFORE PACKAGING
------------------------------
-- esbuild compile on both: 0 errors
-- key strings diffed old vs new: business-financials.js has 57 distinct keys,
-  deep-sync.js has 13. None lost, none added, in either.
-- Promise.all destructuring in business-financials.js checked explicitly. Seven
-  of them, with 3, 7, 6, 3, 21, 2 and 3 names. Identical before and after.
-  That file has a history of a name count drifting from a key count, so it was
-  worth proving rather than assuming.
-- full text diff read on both
-- final grep across the whole repo: one file creates a Redis client, lib/db.js
+- esbuild compile on all 6: 0 errors
+- grep for iso(new Date()), isoDay(new Date()) and mondayOf(new Date())
+  across every page and component: zero results outside pages/api
+- confirmed each file uses both of what it imports - no unused imports, no
+  undefined identifiers
+- checked the variables left behind after each edit: _today in planning.js
+  became unused and was removed; `today` is still used for the week windows and
+  now derives from the business date
+- no new non-ASCII characters in any file
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Business Financials - Monthly. Revenue and overheads for the current month
-   against your baseline.
-2. Business Financials - Margin. Revenue (FY).
-3. Business Financials - Balance Sheet and Invoice Finance pages both load.
-4. 13-week cash flow - the build marker should now read pkg852. Closing balance
-   should NOT have moved from your post-pkg851 reading.
-5. VAT - the estimate and filed figures still show.
-6. deep-sync is a nightly cron. Check tomorrow morning that the overnight sync
-   ran and the figures updated.
-
-Item 4 is worth care given where the last hour has gone. pkg851 fixed the
-timezone split; this package should not move that number at all.
+1. 13-week cash flow - the closing balance should be UNCHANGED from your
+   post-pkg851 reading. If it moves, tell me, because on a UK clock it should
+   not.
+2. Planner - today's column is highlighted on the right day, and the week
+   shown is the current week.
+3. Project cash flow - the Today button returns to the current week.
+4. Operations > Missing Forms, and the same view in the CM Site App - both
+   show the current week.
 
 
-WHAT IS NOT DONE YET
---------------------
-Still outstanding from the conversation, in no particular order:
-
-- A guard so a 50th direct connection cannot appear. The strongest version:
-  once tenancy is in, lib/db.js gets its credentials from the tenant registry
-  and the global Redis env vars are removed, so any file opening its own
-  connection finds nothing and fails loudly. Nothing to deploy yet - it belongs
-  with tenant resolution.
-- The same UTC/local "today" split in five more pages: retention.js,
-  project/[id].js, retentions-due.js, invoices.js, monthly.js.
-- pages/scorecard.js, the unlinked page holding a third version of the GP
-  margin rule. Your call whether to delete it.
-- Then the real work: locale helper, tenant registry, platform admin, module
-  gates, public token scoping, per-tenant crons, provisioning.
+STILL ON THE LIST
+-----------------
+The 14 pages using UTC as "today". Minor, viewer-independent, wrong for one
+hour a night during BST and correct once the clocks go back. Worth doing, not
+urgent. They are also the files where a per-tenant timezone will eventually
+matter, so I would fold them into the locale work rather than spend a package
+on them now.

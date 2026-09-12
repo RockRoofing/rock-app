@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { businessNow } from '../../../lib/businessDate'
 import { useRouter } from 'next/router'
 import { Shell } from '../index'
 import { INK, BRAND, fmtDate, useMyProjects } from '../../../lib/cmSiteApp'
@@ -24,7 +25,7 @@ export default function CmMissingForms() {
     try { setUser(JSON.parse(s)) } catch {}
     setReady(true)
     // Default: this week (Mon) .. next week (Mon) — matches the portal's forward-looking view.
-    const thisMon = mondayOf(new Date())
+    const thisMon = mondayOf(businessNow())
     const nextMon = new Date(thisMon.getTime() + 7 * DAY)
     setFrom(iso(thisMon)); setTo(iso(nextMon))
   }, [])
