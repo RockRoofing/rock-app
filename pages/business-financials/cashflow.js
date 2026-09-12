@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
+import { businessToday } from '../../lib/businessDate'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -16,7 +17,10 @@ const inpS = { padding: '5px 7px', border: '1px solid #ddd', borderRadius: 6, fo
 
 // Receivables are keyed by invoice number - the same key invoice:meta uses for expected
 // dates, so an exclusion and a date always refer to the same invoice.
-const todayISO = new Date().toISOString().slice(0, 10)
+// The business's today, in the business's timezone - not the viewer's, and not
+// UTC. See lib/businessDate.js. A function, not a const: a const is computed
+// once when the page loads and a tab left open overnight keeps yesterday.
+const todayISO = () => businessToday()
 
 // DATE CELL WITH A DRAFT.
 //
@@ -803,7 +807,7 @@ export default function CashFlow() {
     const salesSpent = (fc) => {
       if (isApplied(fc)) return true
       const bound = fc.valDate || fc.to || ''
-      return !!(bound && bound < todayISO)
+      return !!(bound && bound < todayISO())
     }
 
     // CARRY THE VARIANCE FORWARD, PER PROJECT.
@@ -969,7 +973,10 @@ export default function CashFlow() {
     })
 
     // Weeks to delay every receipt by. 0 = the plan as entered.
-    const todayIso = isoDay(new Date())
+    // Was isoDay(new Date()) - the VIEWER'S local date, while todayISO above was
+    // the UTC date. Two todays in one file, different for 12 hours a day from
+    // New Zealand. One rule now.
+    const todayIso = todayISO()
     const riskDays = (Number(finance.riskWeeks) || 0) * 7
     // INVOICE FINANCE DRAWN - a liability repaid out of collections.
     //
@@ -2496,9 +2503,9 @@ export default function CashFlow() {
                                   {x.pending && (
                                     <div style={{ fontSize: 9.5, color: '#7c3aed', fontWeight: 700 }}>certified, invoice not yet in Xero</div>
                                   )}
-                                  {!x.pending && x.due && x.due < todayISO && (
+                                  {!x.pending && x.due && x.due < todayISO() && (
                                     <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 700 }}>
-                                      {Math.round((Date.parse(todayISO) - Date.parse(x.due)) / 86400000)} days overdue
+                                      {Math.round((Date.parse(todayISO()) - Date.parse(x.due)) / 86400000)} days overdue
                                     </div>
                                   )}
                                   {x.offset ? <div style={{ fontSize: 9.5, color: '#b45309' }}>+{x.offset}d - this customer pays late</div> : null}
@@ -3101,7 +3108,7 @@ export default function CashFlow() {
               for (const i of (data.receivables || [])) if (!excluded[invKey(i)]) add(i.contact, 'invoices', i.amountDue || 0)
               for (const r of retEvents) add(r.customer || r.name, 'retention', r.amount || 0)
               for (const fc of (data.projForecasts || [])) {
-                const fut = (fc.salesSchedule || []).filter(x => x.date && x.date >= todayISO).reduce((a, x) => a + (x.amount || 0), 0)
+                const fut = (fc.salesSchedule || []).filter(x => x.date && x.date >= todayISO()).reduce((a, x) => a + (x.amount || 0), 0)
                 add(fc.customer || fc.projectName, 'forecast', fut)
               }
               const list = Object.values(by)
@@ -3206,7 +3213,7 @@ export default function CashFlow() {
                       const eff = r.expectedDate || r.dueDate || ''
                       // Overdue with NO expected date - it lands in week 1 whether or not
                       // that is realistic, so it needs one.
-                      const isOverdue = eff && eff < todayISO && !r.expectedDate
+                      const isOverdue = eff && eff < todayISO() && !r.expectedDate
                       return (
                         <tr key={k || i} style={{ borderBottom: '1px solid #f2f0ec', background: off ? '#fafafa' : (isOverdue ? '#fffbeb' : 'transparent'), opacity: off ? 0.55 : 1 }}>
                           <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.contact || ''}>{r.contact || '-'}</td>
@@ -3290,7 +3297,7 @@ export default function CashFlow() {
                           // being paid in week 1 whether or not that is realistic. It
                           // needs a date confirming rather than sitting there.
                           const effDate = billOverrides[b.id] || b.payDate || b.dueDate || ''
-                          const isOverdue = effDate && effDate < todayISO && !overridden
+                          const isOverdue = effDate && effDate < todayISO() && !overridden
                           const off = !!excluded[b.id]
                           return (
                             <tr key={b.id || i} style={{ borderBottom: '1px solid #f2f0ec', background: off ? '#fafafa' : (isOverdue ? '#fffbeb' : 'transparent'), opacity: off ? 0.55 : 1 }}>

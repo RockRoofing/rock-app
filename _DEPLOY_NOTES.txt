@@ -1,84 +1,112 @@
-pkg850 - dashboard.js (step 7 of 8)
-===================================
+pkg851 - One "today", in the business's timezone
+================================================
 
-ONE FILE.  pages/api/dashboard.js
+THIS ONE DOES CHANGE A NUMBER. Deliberately. Read the last section before you
+deploy it.
 
-On its own deliberately. This is the single most-read file in the app - it
-feeds Project Financials, the Budget Tracker, Retention, WIP, the CRM GP card
-and the 13-week cash flow. If a number moves after this, there is exactly one
-file it can be.
-
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
+Not part of the conversion. That finishes at pkg852.
 
 
-REQUIRES pkg843 (lib/db.js) TO BE LIVE.
+NEW FILE TO CREATE BY HAND IN GITHUB
+------------------------------------
+  lib/businessDate.js          <-- DOES NOT EXIST YET, create it
+
+Then replace:
+  pages/business-financials/cashflow.js
 
 
-NEW FILES TO CREATE BY HAND IN GITHUB
--------------------------------------
-None.
+THE FAULT
+---------
+cashflow.js held TWO definitions of "today":
 
-Running total: 47 of 49 converted. TWO REMAIN (pkg851):
-  pages/api/business-financials.js  1694 lines
-  pages/api/cron/deep-sync.js        399 lines
+  line 19    const todayISO = new Date().toISOString().slice(0, 10)   // UTC
+  line 972   const todayIso = isoDay(new Date())                      // viewer's
+                                                                      // LOCAL date
+
+Same word, same file, two answers. Proven at the moment of building this
+package:
+
+  instant                2026-09-12T23:05Z
+  todayISO   (UTC)       2026-09-12
+  todayIso   (NZ local)  2026-09-13     <- one day apart, right now
+
+In the UK these agree for 23 hours a day, which is why this has never been
+seen. Viewed from New Zealand, UTC+12, they are DIFFERENT DATES FOR TWELVE
+HOURS OF EVERY DAY.
+
+todayISO decides what counts as already past, so it decides what money falls
+inside the 13 weeks: line 806 whether an application period has been earned,
+3104 which scheduled sales are still future, 3209 and 3293 what is overdue.
+Move the date by a day and money moves in or out of the window. None of it
+touches Outstanding Invoices, which is a position and does not care what day
+it is. That is exactly the asymmetry you spotted.
+
+SECOND FAULT ON THE SAME LINE: todayISO was a module-scope const, computed ONCE
+when the page loaded and never again. A tab left open overnight kept yesterday's
+date indefinitely while the other today kept moving.
 
 
-WHAT CHANGED
+THE FIX
+-------
+New lib/businessDate.js exports businessToday(tz). It returns YYYY-MM-DD for
+now in the BUSINESS'S timezone, currently Europe/London, whoever is looking and
+wherever they are.
+
+That is the right rule. A valuation date, a payment date and a VAT date are
+facts about the business. A figure must not change because someone opened it
+from a different country.
+
+In cashflow.js:
+  - todayISO is now a FUNCTION, so it cannot go stale on an open tab
+  - all six read sites call todayISO()
+  - line 972's todayIso now calls the same function instead of the local-date
+    helper
+
+23 changed lines. Nothing else in the file moved.
+
+Built with Intl.formatToParts rather than a locale string, because locale
+output varies by runtime and a date silently coming out DD/MM is the same class
+of bug this file exists to end. Falls back to UTC if Intl is unavailable -
+wrong by at most a day, never undefined, which is the failure that actually
+breaks a comparison.
+
+
+CHECKS I RAN
 ------------
-Three edits. Nothing else in 1075 lines moved.
-
-  1. getClient added to the existing lib/db import on line 1
-  2. the local getRedis() helper deleted
-  3. one line: const redis = await getRedis()  ->  await getClient()
-
-The "if (!redis) return 500" guard went with it, because getClient() cannot
-return null.
-
-dashboard.js passes the client into syncRegistry() from lib/projectRegistry.js.
-Checked: that uses only .set. The file itself uses only .get (13 times) and
-.set (once). All on the shared client.
+- esbuild compile on both files: 0 errors
+- no bare todayISO left anywhere - all six sites call it
+- no new non-ASCII characters
+- ran the old and new rules against the same instant across three timezones and
+  confirmed the old two disagree and the new one does not
 
 
-THE 12 KEYS IT TOUCHES, all verified unchanged
-----------------------------------------------
-  comment:{id}                 invoiced:lines:{id}
-  costs:latest:{id}            invoiced:lines:__UNASSIGNED__
-  costs:lines:{id}             ops:projects
-  dashboard:cache              retention:entries
-  invoiced:latest:{id}         wip:adjustments:{id}
-  wip:latest:{id}              wip:adjustments:{p.xeroId}
+WHAT TO EXPECT - THIS WILL MOVE THE CLOSING BALANCE
+---------------------------------------------------
+For roughly twelve hours of your day in NZ, the cash flow has been evaluating
+"has this period passed" against the WRONG DAY. Correcting that moves the
+number, and the new number is the right one.
 
-Listed in full because a mistyped key here would not error - it would return
-nothing, a total would quietly become zero, and the page would still render.
-That is the whole reason for the baseline sheet.
+Before deploying, note the closing balance. After deploying, note it again.
+A change is expected and correct. Tell me the two figures.
 
-
-CHECKS I RAN BEFORE PACKAGING
------------------------------
-- esbuild compile: 0 errors
-- all 12 key strings extracted and diffed old vs new: identical, none lost,
-  none added
-- full text diff read: the three edits above and nothing else
-- every redis operation used (.get, .set) confirmed present on the shared client
-- syncRegistry(), the only helper handed the client, checked for its operations
+The cleanest confirmation that it is now stable: check it again around 12:05
+NZ time. Under the old code the number would shift at that point, as UTC
+crossed into the next day. Under the new code it will not.
 
 
-WHAT TO CLICK AFTER DEPLOYING
------------------------------
-This is the one to go through the whole baseline sheet for. Nearly every row
-on it comes through this file.
+STILL TO FIX - the same split exists in five more pages
+-------------------------------------------------------
+  pages/retention.js
+  pages/project/[id].js
+  pages/business-financials/retentions-due.js
+  pages/business-financials/invoices.js
+  pages/business-financials/monthly.js
 
-Priority order:
-1. Project Financials - project count, and gross margin and total costs on
-   your largest live project.
-2. Retention - 612, Applied For, Certified.
-3. WIP - Total WIP and Profit in WIP.
-4. 13-week cash flow - closing balance, final week. Check the build marker
-   changed first.
-5. CRM GP margin card - and open the drill-down, the totals row should still
-   match the card (that was pkg846).
-6. Outstanding Invoices - Total due (unpaid).
-7. Operations - live project count.
+Each mixes a UTC today and a local today in one file. retention.js is the one
+I would do next, since retention dates drive money. Say when and they go in
+their own packages - not folded into the conversion work.
 
-If a figure has moved, tell me which one and what it was. With one file in the
-package the cause is findable quickly.
+Wider count, for the record: 14 pages take "today" from the viewer's clock in
+UTC, and 34 build dates from the viewer's local clock. Those all become
+per-tenant timezone questions later. businessDate.js is where that setting will
+live - pass the tenant's timezone in, change no caller.
