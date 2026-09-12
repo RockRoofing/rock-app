@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap } from '../../lib/xero'
 import { normCategory, defaultCategoryFor } from './account-categorisation'
 
@@ -25,15 +26,6 @@ import { normCategory, defaultCategoryFor } from './account-categorisation'
 //
 // Live-fetched on each load (no persistence): ~6 Xero calls, one per month.
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
@@ -52,7 +44,7 @@ export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   try {
-    const redis = await getRedis()
+    const redis = await getClient()
     const catConfig = redis
       ? (await redis.get('config:account-categorisation').then(v => v || {}).catch(() => ({})))
       : {}

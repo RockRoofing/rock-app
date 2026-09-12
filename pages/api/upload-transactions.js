@@ -1,19 +1,11 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject } from '../../lib/db'
+import { getClient } from '../../lib/db'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '10mb' } }
 }
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const ACCOUNT_CODE_MAP = {
   'CIS Labour Expense': '321',
@@ -81,8 +73,7 @@ export default async function handler(req, res) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true })
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+    const redis = await getClient()
 
     // Admin-configured account categorisation (labour / materials / ignore),
     // keyed by account code AND name. Defaults apply for anything not configured.

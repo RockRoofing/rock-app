@@ -1,20 +1,12 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
 import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 function parseCSVLine(line) {
   const out = []; let cur = '', q = false
@@ -71,8 +63,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'This does not look like a Xero Bills export (missing LineAmount / AccountCode / TrackingOption1 columns).' })
     }
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+    const redis = await getClient()
 
     // Account categorisation config (admin-managed) + seen-accounts recording.
     const catConfig = (await redis.get('config:account-categorisation').catch(() => null)) || {}

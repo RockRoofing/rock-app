@@ -1,16 +1,8 @@
 import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../lib/db'
+import { getClient } from '../../../lib/db'
 import { resolveGrossAfa, isInstructed } from '../../../lib/applications'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 export default async function handler(req, res) {
   const { id } = req.query
@@ -30,7 +22,7 @@ export default async function handler(req, res) {
     const tenantId = tokens.tenant_id
     if (!tenantId) return res.status(500).json({ error: 'No tenant ID' })
 
-    const redis = await getRedis()
+    const redis = await getClient()
 
     // Get project identity — try dashboard cache first, then Xero API
     let cp = null

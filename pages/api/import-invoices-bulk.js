@@ -1,17 +1,9 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { invoiceLineKey, mergeDedupe } from '../../lib/costDedupe'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 // RFC-4180-ish CSV line parser (handles quoted fields with commas + "" escapes).
 function parseCSVLine(line) {
@@ -138,8 +130,7 @@ export default async function handler(req, res) {
       }
     } catch (e) { console.error('tracking lookup failed:', e.message) }
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+    const redis = await getClient()
 
     const now = new Date().toISOString()
     const summary = []

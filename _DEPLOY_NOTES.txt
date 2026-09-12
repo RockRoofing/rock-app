@@ -1,103 +1,102 @@
-pkg846 - GP margin drill-down: show what the headline is actually made of
-=========================================================================
+pkg847 - Route the next 10 files through lib/db.js (step 4 of 5)
+================================================================
 
-ONE FILE:  pages/scorecard-crm.js
+WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-Not part of the multi-tenancy conversion. That continues at pkg847.
-
-
-THE FAULT
----------
-The card and its drill-down were two implementations of the same rule.
-
-  Headline:   invoiced and costs AS AT THAT MONTH'S VALUATION DATE
-  Drill-down: raw running totals TO TODAY
-
-Same formula in both - total profit / total invoiced - but different inputs, so
-your August card read 2.2% while the four rows underneath added up to 26.3%.
-
-The page already computed the correct rows, as `eomRows`, used them for the
-headline, and then handed the drill-down `liveProjects` instead.
-
-Three things followed from that:
-  1. rows were not capped at the valuation date
-  2. rows included projects the headline EXCLUDES (an in-progress job with no
-     valuation date is left out of the figure, but was still listed at full
-     value)
-  3. there was no totals row, so the disagreement was invisible until someone
-     added the column up by hand
+Every Redis key string diffed old vs new - identical in all ten.
 
 
-WHAT IT DOES NOW
-----------------
-- The drill-down shows the same rows the headline is built from: invoiced and
-  costs as at that month's valuation date.
-- A new VALUATION DATE column, so you can see where each project's figures
-  stop and why. This is also the visual marker that the deploy landed.
-- A TOTALS ROW at the bottom. It must equal the card that opened it. If it ever
-  does not, one of them is wrong and you can see which.
-- Projects that are NOT counted are listed separately underneath, with the
-  reason, instead of silently padding the table.
-- The card now says "3 projects counted - 1 not counted" rather than
-  "4 live projects", which was counting projects the figure did not include.
+REQUIRES pkg843 (lib/db.js) TO BE LIVE.
 
 
-COLUMNS REMOVED: Labour and Materials
+NEW FILES TO CREATE BY HAND IN GITHUB
 -------------------------------------
-Deliberate. Those two cannot be shown on the valuation-date basis without
-re-deriving the labour/materials split from the cost lines, and that rule
-already lives in two other places (account categorisation, and the 320/321 rule
-in cost-reconcile). Writing a third copy here is exactly the fault that caused
-this in the first place.
-
-Total Costs is shown, correctly capped. If you want the split back, say so and
-I will wire it to the existing categorisation rather than write a new one.
+None. All ten already exist.
+Note pages/api/project/[id].js uses literal square brackets in the folder name.
 
 
-ALSO FIXED WHILE IN THIS FILE
+FILES IN THIS PACKAGE (10)
+--------------------------
+pages/api/project/[id].js
+pages/api/cm-project-financials.js
+pages/api/cron/wip-sync.js
+pages/api/sync-wages.js
+pages/api/import-bills-bulk.js
+pages/api/import-invoices-bulk.js
+pages/api/upload-transactions.js
+pages/api/xero-gross-margin.js
+pages/api/variation-instruct.js
+lib/outstandingInvoicesReport.js
+
+Running total: 40 of 49 converted. NINE REMAIN.
+
+
+THE NINE LEFT, for pkg848 onwards
+---------------------------------
+pages/api/dashboard.js              1075 lines
+pages/api/business-financials.js    1694 lines
+pages/api/cron/deep-sync.js          399 lines
+pages/api/applications.js            410 lines
+pages/api/project-cashflow.js        428 lines
+pages/api/sync-invoices.js           335 lines
+pages/api/commercial-metrics.js      282 lines
+pages/api/outstanding-invoices.js    274 lines
+pages/api/bookkeeping.js             277 lines
+
+These are the ones you watch most closely, so they go in smaller packages -
+probably three of three, not one of nine.
+
+
+TWO STRUCTURAL CHANGES WORTH KNOWING
+------------------------------------
+1. cm-project-financials.js built its Redis connection at MODULE SCOPE - once,
+   when the file was first imported, outside any request. It is now built
+   inside the handler, per request. Checked: nothing outside the handler
+   referenced it (0 references before the handler, 7 inside), so this is
+   mechanical.
+
+   This matters for multi-tenancy. A connection made at import time is made
+   before any request exists, so there is no tenant to resolve against. Every
+   one of these has to move inside the handler before tenancy goes in.
+   That is now two found (this and crmGpSnapshots.js in pkg845).
+
+2. lib/outstandingInvoicesReport.js called getRedis() in six separate places.
+   All six now call getClient(). The helper functions take no client argument,
+   so nothing is threaded through - each gets its own.
+
+
+OTHER NOTES
+-----------
+- variation-instruct.js had an inline connection on one line purely to clear
+  the dashboard cache. Replaced, and the two now-unused env var lines beside it
+  removed.
+- project/[id].js keeps its "if (redis)" guards. They are dead now, because
+  getClient() cannot return null, but removing them would have widened the diff
+  across four separate blocks for no gain.
+
+
+CHECKS I RAN BEFORE PACKAGING
 -----------------------------
-The drill-down modal closed on a backdrop click, against your standing rule.
-It now closes on the x and on Escape only.
+- esbuild compile on all 10: 0 errors
+- every Redis key string diffed old vs new: identical in all 10
+- no remaining @upstash/redis import or getRedis reference anywhere in them
+- full text diff read on project/[id].js, outstandingInvoicesReport.js,
+  cm-project-financials.js and variation-instruct.js - the four with anything
+  unusual about them
+- confirmed cm-project-financials.js uses redis only inside the handler
 
 
-SEPARATE FINDING - pages/scorecard.js
--------------------------------------
-There is a second scorecard page holding a THIRD version of this calculation.
-It sums raw to-date figures with no valuation-date cap at all, so it would
-answer differently again. It is not linked from anywhere - not in
-PreContractNav.js, not in AreaToggle.js - so nothing reaches it.
-
-Recommend deleting it. Not done in this package because deleting a page is your
-call, not mine. Left as it is until you say.
-
-
-CHECKS I RAN
-------------
-- esbuild compile: 0 errors
-- header, row and footer all have 9 columns (footer counted with its colSpan)
-- the useEffect for Escape is declared BEFORE the early return, so hook order
-  is stable whether or not the modal has rows
-- gpTotals is computed before the JSX that reads it
-- no new non-ASCII characters anywhere in the file
-- confirmed the card's Profit/Invoiced/Costs come from _gpMarginTotals, which
-  is built from eomRows - so the new footer and the card share one source
-
-
-WHAT TO CHECK AFTER DEPLOYING
+WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Open your GP margin card for Aug 26. The table should now have a Valuation
-   date column and a Total row.
-2. THE TOTAL ROW MUST MATCH THE CARD. Profit, Invoiced, Costs, and the
-   percentage. If it does not, tell me the two sets of numbers.
-3. Check the valuation dates shown look right for those projects.
-4. Look at what is listed under "Not counted" - if a project is there that you
-   would expect to be counted, its valuation date is missing for that month.
-5. Check an estimator whose card looked correct, and confirm it still does.
-6. Press Escape to close the modal. Click the grey area behind it and confirm
-   it stays open.
-
-On whether 2.2% is right: with this deployed you will be able to see for
-yourself. J244 carrying 99k of materials against 357 of labour looks like a
-delivery landing before the valuation date with the invoicing following after,
-which would make August genuinely bad rather than wrong. The valuation date
-column will show whether that is what happened.
+1. Open a project from Project Financials. Costs, invoiced and AFA as before.
+2. Site App - open a project's financials as a Contracts Manager would. That is
+   cm-project-financials.js, the one with the structural change.
+3. Outstanding Invoices page - Total due (unpaid) against your baseline.
+   Send the weekly report as a dry run if you can.
+4. Import Bills (bulk) and Import Invoices (bulk) - run one of each and confirm
+   the counts come back and nothing double-counts.
+5. Sync Wages - press it, confirm it completes.
+6. Instruct a variation from a test link if you have one, and confirm Project
+   Financials updates afterwards.
+7. WIP - the nightly cron wip-sync.js is in here. Check tomorrow morning that
+   WIP still updated overnight.

@@ -1,19 +1,11 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 // Parse Xero's Microsoft-JSON date "/Date(1551312000000+0000)/" -> "YYYY-MM-DD".
 // Handles the /Date(ms)/ form and plain ISO. Wage lines MUST have a date for the
@@ -83,8 +75,7 @@ async function fetchAllWageLines(at, tid, fromDate) {
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   const isDebug = req.query?.debug === '1' || req.body?.debug === true
   const last = await redis.get('sync-wages:at').catch(() => null)

@@ -1,4 +1,4 @@
-import { getProject, saveProject, get } from '../../lib/db'
+import { getProject, saveProject, get, getClient } from '../../lib/db'
 import { isInstructed } from '../../lib/applications'
 import { projectLabel } from '../../lib/variationInstruct'
 import { verifyInstructToken } from '../../lib/variationInstruct'
@@ -188,10 +188,8 @@ export default async function handler(req, res) {
   const fresh = (await getProject(t.projectId)) || {}
   await saveProject(t.projectId, { ...fresh, variations: next })
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (url && tok) await new Redis({ url, token: tok }).del('dashboard:cache')
+    const redis = await getClient()
+    await redis.del('dashboard:cache')
   } catch {}
 
   // CONFIRM IT BACK TO EVERYONE WHO WAS ON THE ORIGINAL, with the document carrying the

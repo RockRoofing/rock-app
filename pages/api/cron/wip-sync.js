@@ -1,21 +1,12 @@
 import { getTokens, saveTokens, getAllProjectSettings, getEffectiveValuationDate, getWipEndDate } from '../../../lib/db'
+import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchBillsByCategory, fetchLabourJournalsByCategory, getInvoicesByCategory } from '../../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
 
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+  const redis = await getClient()
 
   try {
     let tokens = await getTokens()

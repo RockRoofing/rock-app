@@ -1,8 +1,7 @@
-import { Redis } from '@upstash/redis'
 import { isInstructed } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { nameMatches, normJobNo } from '../../lib/cmSiteApp'
-import { getOpsProjects } from '../../lib/db'
+import { getOpsProjects, getClient } from '../../lib/db'
 
 // High-level project financials for the Contracts Manager Site App.
 //
@@ -17,15 +16,11 @@ import { getOpsProjects } from '../../lib/db'
 // Margin is on the SAME basis as the EOM report (last completed month's valuation date,
 // including WIP) via the shared computeProjectWip, so site and Commercial agree.
 
-const redis = new Redis({
-  url: process.env.kv_KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.kv_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
-})
-
 const numOr0 = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const redis = await getClient()
 
   const no = String(req.query.no || '').trim()
   const who = String(req.query.name || '').trim()
