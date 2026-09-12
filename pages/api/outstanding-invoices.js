@@ -2,23 +2,14 @@ import { requireRole } from '../../lib/portalAuth'
 import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport, getWeeklySchedule, setWeeklySchedule, maybeSendScheduledReport } from '../../lib/outstandingInvoicesReport'
 import { buildOutstandingInvoicesPDF } from '../../lib/outstandingInvoicesPdf'
 import { getPortalUsers } from '../../lib/db'
+import { getClient } from '../../lib/db'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const META_KEY = 'invoice:meta'   // { [invoiceNumber]: { expectedDate, comments:[{id,text,author,at,mentions:[]}] } }
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   // Return the manual meta map (expected dates + comments) for all invoices.
   if (req.method === 'GET') {
@@ -224,7 +215,7 @@ export default async function handler(req, res) {
 
 // Drop an in-app notification AND send an email for each mentioned user (by id).
 async function notifyMentions(userIds, invoiceNumber, comment, baseUrl) {
-  const redis = await getRedis()
+  const redis = await getClient()
   if (!redis) return
   // Look up portal users so we can email them.
   let users = []

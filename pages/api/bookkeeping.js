@@ -1,16 +1,8 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const monthOf = (dateStr) => (dateStr && /^\d{4}-\d{2}/.test(dateStr)) ? dateStr.slice(0, 7) : ''
 
@@ -31,8 +23,7 @@ function categoryOf(code, config) {
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   try {
     const [untBills, untWages, unassignedInv, catConfig, benchmark, dash] = await Promise.all([

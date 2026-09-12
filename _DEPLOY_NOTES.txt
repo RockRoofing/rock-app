@@ -1,9 +1,11 @@
-pkg847 - Route the next 10 files through lib/db.js (step 4 of 5)
-================================================================
+pkg848 - Route 3 more files through lib/db.js (step 5 of 7)
+===========================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-Every Redis key string diffed old vs new - identical in all ten.
+Three files only. From here the remaining files are the ones that feed most of
+your baseline sheet, so they go three at a time rather than ten, and each
+package names exactly which numbers it can move.
 
 
 REQUIRES pkg843 (lib/db.js) TO BE LIVE.
@@ -11,92 +13,70 @@ REQUIRES pkg843 (lib/db.js) TO BE LIVE.
 
 NEW FILES TO CREATE BY HAND IN GITHUB
 -------------------------------------
-None. All ten already exist.
-Note pages/api/project/[id].js uses literal square brackets in the folder name.
+None.
 
 
-FILES IN THIS PACKAGE (10)
---------------------------
-pages/api/project/[id].js
-pages/api/cm-project-financials.js
-pages/api/cron/wip-sync.js
-pages/api/sync-wages.js
-pages/api/import-bills-bulk.js
-pages/api/import-invoices-bulk.js
-pages/api/upload-transactions.js
-pages/api/xero-gross-margin.js
-pages/api/variation-instruct.js
-lib/outstandingInvoicesReport.js
+FILES IN THIS PACKAGE (3)
+-------------------------
+pages/api/commercial-metrics.js
+pages/api/outstanding-invoices.js
+pages/api/bookkeeping.js
 
-Running total: 40 of 49 converted. NINE REMAIN.
+Running total: 43 of 49 converted. SIX REMAIN.
 
 
-THE NINE LEFT, for pkg848 onwards
----------------------------------
-pages/api/dashboard.js              1075 lines
-pages/api/business-financials.js    1694 lines
-pages/api/cron/deep-sync.js          399 lines
-pages/api/applications.js            410 lines
-pages/api/project-cashflow.js        428 lines
-pages/api/sync-invoices.js           335 lines
-pages/api/commercial-metrics.js      282 lines
-pages/api/outstanding-invoices.js    274 lines
-pages/api/bookkeeping.js             277 lines
+THE SIX LEFT
+------------
+pkg849:  pages/api/applications.js        410 lines
+         pages/api/project-cashflow.js    428 lines
+         pages/api/sync-invoices.js       335 lines
 
-These are the ones you watch most closely, so they go in smaller packages -
-probably three of three, not one of nine.
+pkg850:  pages/api/dashboard.js          1075 lines
+         pages/api/business-financials.js 1694 lines
+         pages/api/cron/deep-sync.js      399 lines
+
+pkg850 is the one to take slowly. Those two files between them feed most of
+the baseline sheet.
 
 
-TWO STRUCTURAL CHANGES WORTH KNOWING
-------------------------------------
-1. cm-project-financials.js built its Redis connection at MODULE SCOPE - once,
-   when the file was first imported, outside any request. It is now built
-   inside the handler, per request. Checked: nothing outside the handler
-   referenced it (0 references before the handler, 7 inside), so this is
-   mechanical.
+WHAT CHANGED
+------------
+Nothing structural. All three had the standard local getRedis() helper. Each
+now does:
 
-   This matters for multi-tenancy. A connection made at import time is made
-   before any request exists, so there is no tenant to resolve against. Every
-   one of these has to move inside the handler before tenancy goes in.
-   That is now two found (this and crmGpSnapshots.js in pkg845).
+    const redis = await getClient()
 
-2. lib/outstandingInvoicesReport.js called getRedis() in six separate places.
-   All six now call getClient(). The helper functions take no client argument,
-   so nothing is threaded through - each gets its own.
+Every line after that is untouched. No module-scope connections in these three,
+unlike pkg845 and pkg847.
 
-
-OTHER NOTES
------------
-- variation-instruct.js had an inline connection on one line purely to clear
-  the dashboard cache. Replaced, and the two now-unused env var lines beside it
-  removed.
-- project/[id].js keeps its "if (redis)" guards. They are dead now, because
-  getClient() cannot return null, but removing them would have widened the diff
-  across four separate blocks for no gain.
+bookkeeping.js passes the client into readRegistry() from lib/projectRegistry.js
+- checked, that uses only .get and .set, both on the shared client.
 
 
 CHECKS I RAN BEFORE PACKAGING
 -----------------------------
-- esbuild compile on all 10: 0 errors
-- every Redis key string diffed old vs new: identical in all 10
-- no remaining @upstash/redis import or getRedis reference anywhere in them
-- full text diff read on project/[id].js, outstandingInvoicesReport.js,
-  cm-project-financials.js and variation-instruct.js - the four with anything
-  unusual about them
-- confirmed cm-project-financials.js uses redis only inside the handler
+- esbuild compile on all 3: 0 errors
+- every Redis key string diffed old vs new: identical in all 3
+- no remaining @upstash/redis import or getRedis reference
+- full text diff read on all three. Each is three edits: the import line, the
+  deleted helper, and the line that gets the client. Nothing else moved.
+
+
+WHICH BASELINE ROWS THIS CAN MOVE
+---------------------------------
+Only these. Everything else on the sheet is untouched by this package.
+
+- Outstanding Invoices: Total due (unpaid)
+- Bookkeeping page: Cost of Sale (Bills), Direct Wages, Sales Invoices
+- Commercial Scorecard figures
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Open a project from Project Financials. Costs, invoiced and AFA as before.
-2. Site App - open a project's financials as a Contracts Manager would. That is
-   cm-project-financials.js, the one with the structural change.
-3. Outstanding Invoices page - Total due (unpaid) against your baseline.
-   Send the weekly report as a dry run if you can.
-4. Import Bills (bulk) and Import Invoices (bulk) - run one of each and confirm
-   the counts come back and nothing double-counts.
-5. Sync Wages - press it, confirm it completes.
-6. Instruct a variation from a test link if you have one, and confirm Project
-   Financials updates afterwards.
-7. WIP - the nightly cron wip-sync.js is in here. Check tomorrow morning that
-   WIP still updated overnight.
+1. Bookkeeping page - loads, and the three totals match your baseline. Check
+   the embedded Retention and WIP panels still render.
+2. Outstanding Invoices - Total due (unpaid) against your baseline, and the
+   weekly recipients list still saves.
+3. Commercial Scorecard - the figures load and look unchanged.
+
+That is the whole check. Three files, three pages.
