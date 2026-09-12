@@ -1,19 +1,11 @@
 import { getTokens, saveTokens } from '../../../lib/db'
+import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 
 export const config = {
   maxDuration: 300
 }
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const LABOUR_ACCOUNTS = ['321']
 const COST_OF_SALE_ACCOUNTS = ['321', '322', '310', '311', '331', '330', '329', '333', '334', '335', '336']
@@ -27,8 +19,7 @@ export default async function handler(req, res) {
     tokens = { ...tokens, ...newTokens }
     await saveTokens(tokens)
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis' })
+    const redis = await getClient()
 
     const tenantId = tokens.tenant_id
     const categoryProjects = await getProjectsFromCategories(tokens.access_token, tenantId)

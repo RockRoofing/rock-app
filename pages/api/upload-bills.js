@@ -1,15 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
+import { getClient } from '../../lib/db'
 import { LABOUR_ACCOUNTS, COST_OF_SALE_ACCOUNTS, extractJobNoFromDescription } from '../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 function parseCSV(text) {
   const lines = text.split('\n')
@@ -68,7 +60,7 @@ export default async function handler(req, res) {
     if (!csvText) return res.status(400).json({ error: 'No data received' })
 
     const rows = parseCSV(csvText)
-    const redis = await getRedis()
+    const redis = await getClient()
 
     // Load already processed invoice numbers
     const processedInvoices = (redis ? await redis.get('uploaded:invoices') : null) || {}

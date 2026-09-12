@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
 import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
@@ -7,15 +8,6 @@ import * as xlsx from 'xlsx'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const num = (x) => { const n = parseFloat(String(x ?? '').replace(/[£,]/g, '')); return isNaN(n) ? 0 : n }
 function excelDate(v) {
@@ -79,8 +71,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No "Projects" column found. Make sure all columns are selected when exporting.' })
     }
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+    const redis = await getClient()
     const seenAccounts = (await redis.get('costs:seen-accounts').catch(() => null)) || {}
     if (!seenAccounts['320']) seenAccounts['320'] = 'Direct Wages'
 

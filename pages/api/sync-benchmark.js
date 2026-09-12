@@ -1,16 +1,8 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap, fetchGeneralLedgerByAccountMonth, fetchSalesLedgerFromInvoicesAndJournals } from '../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
@@ -18,8 +10,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 // one API call per month, 6 months = ~6 calls. Safe to run on demand.
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   try {
     let tokens = await getTokens()

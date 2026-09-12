@@ -1,93 +1,87 @@
-pkg844 - Route the next 10 files through lib/db.js (step 2 of 5)
+pkg845 - Route the next 10 files through lib/db.js (step 3 of 5)
 ================================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-No calculations changed, no key names changed. Every Redis key string in these
-ten files was extracted and diffed against the version currently on GitHub -
-identical in all ten. If any number moves, that is a fault. Tell me which one.
+Every Redis key string in these ten files was extracted and diffed against the
+version on GitHub - identical in all ten. If any number moves, that is a fault.
 
 
-REQUIRES pkg843 TO BE DEPLOYED FIRST
-------------------------------------
-All ten files import getClient() from lib/db.js, which was added in pkg843.
-If pkg843 is not live, these will fail. Confirm pkg843 is on GitHub before
-uploading this.
+REQUIRES pkg843 (lib/db.js) TO BE LIVE
+--------------------------------------
+These import getClient() from it.
 
 
 NEW FILES TO CREATE BY HAND IN GITHUB
 -------------------------------------
-None. All ten files already exist and are being replaced.
-Note the folder pages/api/project/[id]/ uses literal square brackets.
+None. All ten already exist and are being replaced.
 
 
 FILES IN THIS PACKAGE (10)
 --------------------------
-pages/api/retention.js
-pages/api/wip-lock.js
-pages/api/clear-financial-data.js
-pages/api/account-categorisation.js
-pages/api/sync-chart-of-accounts.js
-pages/api/application-send.js
-pages/api/xero/sync.js
-pages/api/project/[id]/settings.js
-pages/api/project/[id]/wip-adjustments.js
-pages/api/project/[id]/wip-margin.js
+pages/api/wip.js
+pages/api/upload-bills.js
+pages/api/upload-invoices.js
+pages/api/import-wages-bulk.js
+pages/api/sync-benchmark.js
+pages/api/invoice-store-audit.js
+pages/api/admin/variations-instructed-audit.js
+pages/api/xero/backfill-costs.js
+pages/api/xero/backfill-labour.js
+lib/crmGpSnapshots.js
 
-Running total: 20 of 49 converted. 29 remain (pkg845-847).
+Running total: 30 of 49 converted. 19 remain.
 
 
-WHAT CHANGED IN EACH
---------------------
-Each file previously opened its own connection to Redis. Each now does:
+ONE REAL FINDING: lib/crmGpSnapshots.js
+---------------------------------------
+This file opened a connection to Redis at the top of the file, at import time,
+and then NEVER USED IT. Every read and write in the file already went through
+get() and set() from lib/db.js. The client was dead code.
+
+It has been deleted rather than converted. Nothing in the file's behaviour
+changes, because nothing was using it.
+
+Worth knowing why it mattered: because it was at module scope, that connection
+was built every time anything imported this file, whether or not the GP
+snapshot code ran. Under multi-tenancy it would have been built before any
+tenant was known.
+
+
+WHAT CHANGED IN THE OTHER NINE
+------------------------------
+Each had its own local getRedis() helper. All nine now do:
 
     const redis = await getClient()
 
-and everything after that line is untouched. Key names, logic, responses and
-error handling are all identical.
+and nothing after that line changed. The "if (!redis) return 500 No Redis"
+guards have gone, because getClient() cannot return null.
 
-
-TWO THINGS WORTH KNOWING
-------------------------
-1. getClient() never returns null. Several of these files had a guard like
-   "if (!redis) return 500 No Redis" or "redis ? await redis.get(...) : null".
-   Those guards existed because a missing environment variable produced a null
-   client. That cannot happen now - lib/db.js falls back to an in-process store
-   instead - so the guards have been removed or left as dead code where
-   removing them would have widened the diff. No behaviour change on a working
-   deployment.
-
-2. clear-financial-data.js uses scan() with a cursor. That is supported by the
-   shared client and was added in pkg843 alongside del().
+invoice-store-audit.js passes the client into readRegistry() from
+lib/projectRegistry.js - checked, that uses only .get and .set, both present
+on the shared client.
 
 
 CHECKS I RAN BEFORE PACKAGING
 -----------------------------
-- esbuild compile on all 10 files: 0 errors
+- esbuild compile on all 10: 0 errors
 - every Redis key string diffed old vs new: identical in all 10
-- no remaining references to @upstash/redis or the deleted local getRedis()
-- constants that sat next to the removed code (CONFIG_KEY, SEEN_KEY,
-  CHART_KEY in account-categorisation.js) confirmed still present
-- import depth checked on the three files inside pages/api/project/[id]/
+- no remaining reference to @upstash/redis or getRedis in any of them
+- full text diff read on each file - the only changes are the import line,
+  the deleted helper, and the one changed line that gets the client
+- confirmed crmGpSnapshots.js never referenced its client anywhere
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-These ten touch more of what you look at daily than pkg843 did, so this is the
-one to check properly.
+1. WIP page - Total WIP and Profit in WIP against your baseline. This is the
+   big one in this batch.
+2. Upload a Bills file and an Invoices file. Confirm the counts come back and
+   Project Financials costs are unchanged afterwards.
+3. Import Wages (bulk) - same.
+4. Admin > Invoice Store Audit - the report loads.
+5. CRM > GP margin card - the monthly figures still show. This is the file
+   with the deleted dead client, so it is the one to confirm still works.
+6. Sync Benchmark - press it, confirm it completes.
 
-1. RETENTION page - open it. Check the 612 figure, Applied For and Certified
-   against your baseline. Add a retention entry and delete it again.
-2. WIP - open a month, check the total. Lock a month and confirm the
-   notification email arrives. Unlock it again.
-3. Project Financials - open a project, change a setting, save, reload,
-   confirm it stuck.
-4. WIP adjustments on a project - add one, edit the margin, delete it.
-5. Admin > Account Categorisation - the list loads, every account shows,
-   change one category and save.
-6. Sync Chart of Accounts - press it, confirm the count comes back.
-7. Send an application on a test project if you have one, and confirm the
-   AFA updates on Project Financials afterwards.
-
-Do NOT click: Clear Financial Data. It is destructive and only in this batch
-because it is small.
+Backfill Costs and Backfill Labour are in this batch but do not need running.

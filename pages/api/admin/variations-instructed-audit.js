@@ -1,4 +1,4 @@
-import { saveProject } from '../../../lib/db'
+import { saveProject, getClient } from '../../../lib/db'
 import { requireRole } from '../../../lib/portalAuth'
 import { isInstructed } from '../../../lib/applications'
 
@@ -47,14 +47,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "apply must be 'shape' or 'restore'" })
   }
 
-  let redis = null
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (url && token) redis = new Redis({ url, token })
-  } catch { /* handled below */ }
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   // Every project record, by key.
   let keys = []
