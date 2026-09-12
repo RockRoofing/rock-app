@@ -1,87 +1,103 @@
-pkg845 - Route the next 10 files through lib/db.js (step 3 of 5)
-================================================================
+pkg846 - GP margin drill-down: show what the headline is actually made of
+=========================================================================
 
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
+ONE FILE:  pages/scorecard-crm.js
 
-Every Redis key string in these ten files was extracted and diffed against the
-version on GitHub - identical in all ten. If any number moves, that is a fault.
-
-
-REQUIRES pkg843 (lib/db.js) TO BE LIVE
---------------------------------------
-These import getClient() from it.
+Not part of the multi-tenancy conversion. That continues at pkg847.
 
 
-NEW FILES TO CREATE BY HAND IN GITHUB
+THE FAULT
+---------
+The card and its drill-down were two implementations of the same rule.
+
+  Headline:   invoiced and costs AS AT THAT MONTH'S VALUATION DATE
+  Drill-down: raw running totals TO TODAY
+
+Same formula in both - total profit / total invoiced - but different inputs, so
+your August card read 2.2% while the four rows underneath added up to 26.3%.
+
+The page already computed the correct rows, as `eomRows`, used them for the
+headline, and then handed the drill-down `liveProjects` instead.
+
+Three things followed from that:
+  1. rows were not capped at the valuation date
+  2. rows included projects the headline EXCLUDES (an in-progress job with no
+     valuation date is left out of the figure, but was still listed at full
+     value)
+  3. there was no totals row, so the disagreement was invisible until someone
+     added the column up by hand
+
+
+WHAT IT DOES NOW
+----------------
+- The drill-down shows the same rows the headline is built from: invoiced and
+  costs as at that month's valuation date.
+- A new VALUATION DATE column, so you can see where each project's figures
+  stop and why. This is also the visual marker that the deploy landed.
+- A TOTALS ROW at the bottom. It must equal the card that opened it. If it ever
+  does not, one of them is wrong and you can see which.
+- Projects that are NOT counted are listed separately underneath, with the
+  reason, instead of silently padding the table.
+- The card now says "3 projects counted - 1 not counted" rather than
+  "4 live projects", which was counting projects the figure did not include.
+
+
+COLUMNS REMOVED: Labour and Materials
 -------------------------------------
-None. All ten already exist and are being replaced.
+Deliberate. Those two cannot be shown on the valuation-date basis without
+re-deriving the labour/materials split from the cost lines, and that rule
+already lives in two other places (account categorisation, and the 320/321 rule
+in cost-reconcile). Writing a third copy here is exactly the fault that caused
+this in the first place.
+
+Total Costs is shown, correctly capped. If you want the split back, say so and
+I will wire it to the existing categorisation rather than write a new one.
 
 
-FILES IN THIS PACKAGE (10)
---------------------------
-pages/api/wip.js
-pages/api/upload-bills.js
-pages/api/upload-invoices.js
-pages/api/import-wages-bulk.js
-pages/api/sync-benchmark.js
-pages/api/invoice-store-audit.js
-pages/api/admin/variations-instructed-audit.js
-pages/api/xero/backfill-costs.js
-pages/api/xero/backfill-labour.js
-lib/crmGpSnapshots.js
-
-Running total: 30 of 49 converted. 19 remain.
-
-
-ONE REAL FINDING: lib/crmGpSnapshots.js
----------------------------------------
-This file opened a connection to Redis at the top of the file, at import time,
-and then NEVER USED IT. Every read and write in the file already went through
-get() and set() from lib/db.js. The client was dead code.
-
-It has been deleted rather than converted. Nothing in the file's behaviour
-changes, because nothing was using it.
-
-Worth knowing why it mattered: because it was at module scope, that connection
-was built every time anything imported this file, whether or not the GP
-snapshot code ran. Under multi-tenancy it would have been built before any
-tenant was known.
-
-
-WHAT CHANGED IN THE OTHER NINE
-------------------------------
-Each had its own local getRedis() helper. All nine now do:
-
-    const redis = await getClient()
-
-and nothing after that line changed. The "if (!redis) return 500 No Redis"
-guards have gone, because getClient() cannot return null.
-
-invoice-store-audit.js passes the client into readRegistry() from
-lib/projectRegistry.js - checked, that uses only .get and .set, both present
-on the shared client.
-
-
-CHECKS I RAN BEFORE PACKAGING
+ALSO FIXED WHILE IN THIS FILE
 -----------------------------
-- esbuild compile on all 10: 0 errors
-- every Redis key string diffed old vs new: identical in all 10
-- no remaining reference to @upstash/redis or getRedis in any of them
-- full text diff read on each file - the only changes are the import line,
-  the deleted helper, and the one changed line that gets the client
-- confirmed crmGpSnapshots.js never referenced its client anywhere
+The drill-down modal closed on a backdrop click, against your standing rule.
+It now closes on the x and on Escape only.
 
 
-WHAT TO CLICK AFTER DEPLOYING
+SEPARATE FINDING - pages/scorecard.js
+-------------------------------------
+There is a second scorecard page holding a THIRD version of this calculation.
+It sums raw to-date figures with no valuation-date cap at all, so it would
+answer differently again. It is not linked from anywhere - not in
+PreContractNav.js, not in AreaToggle.js - so nothing reaches it.
+
+Recommend deleting it. Not done in this package because deleting a page is your
+call, not mine. Left as it is until you say.
+
+
+CHECKS I RAN
+------------
+- esbuild compile: 0 errors
+- header, row and footer all have 9 columns (footer counted with its colSpan)
+- the useEffect for Escape is declared BEFORE the early return, so hook order
+  is stable whether or not the modal has rows
+- gpTotals is computed before the JSX that reads it
+- no new non-ASCII characters anywhere in the file
+- confirmed the card's Profit/Invoiced/Costs come from _gpMarginTotals, which
+  is built from eomRows - so the new footer and the card share one source
+
+
+WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-1. WIP page - Total WIP and Profit in WIP against your baseline. This is the
-   big one in this batch.
-2. Upload a Bills file and an Invoices file. Confirm the counts come back and
-   Project Financials costs are unchanged afterwards.
-3. Import Wages (bulk) - same.
-4. Admin > Invoice Store Audit - the report loads.
-5. CRM > GP margin card - the monthly figures still show. This is the file
-   with the deleted dead client, so it is the one to confirm still works.
-6. Sync Benchmark - press it, confirm it completes.
+1. Open your GP margin card for Aug 26. The table should now have a Valuation
+   date column and a Total row.
+2. THE TOTAL ROW MUST MATCH THE CARD. Profit, Invoiced, Costs, and the
+   percentage. If it does not, tell me the two sets of numbers.
+3. Check the valuation dates shown look right for those projects.
+4. Look at what is listed under "Not counted" - if a project is there that you
+   would expect to be counted, its valuation date is missing for that month.
+5. Check an estimator whose card looked correct, and confirm it still does.
+6. Press Escape to close the modal. Click the grey area behind it and confirm
+   it stays open.
 
-Backfill Costs and Backfill Labour are in this batch but do not need running.
+On whether 2.2% is right: with this deployed you will be able to see for
+yourself. J244 carrying 99k of materials against 357 of labour looks like a
+delivery landing before the valuation date with the invoicing following after,
+which would make August genuinely bad rather than wrong. The valuation date
+column will show whether that is what happened.

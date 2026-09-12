@@ -141,17 +141,36 @@ function eomAtValDate(project, monthKey) {
   const costsToDate = costLines.filter(l => l.date && withinDate(l.date)).reduce((s, l) => s + (l.amount || 0), 0)
   const invoicedToDate = invoiceLines.filter(i => i.date && withinDate(i.date))
     .reduce((s, i) => s + (i.sales200 != null ? i.sales200 : (i.subTotal || 0)), 0)
-  return { grossInvoiced: invoicedToDate, totalCosts: costsToDate }
+  return { grossInvoiced: invoicedToDate, totalCosts: costsToDate, vDate: vDateStr }
 }
 
-function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
+function DrillModal({ title, projects, excluded, isValueChange, isGpMargin, onClose }) {
+  // Escape closes. Backdrop click does NOT - a stray click behind a table you are
+  // reading should not throw it away.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   if (!projects || projects.length === 0) return null
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12, verticalAlign: 'middle' }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
   const fmtGBP = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 
+  // Totals for the GP table. Summed from the rows on screen, so the footer can only
+  // ever agree with what is above it - and it must also equal the card that opened
+  // this modal. If it does not, one of them is wrong and you can see which.
+  const gpTotals = (() => {
+    if (!isGpMargin) return { afa: 0, invoiced: 0, costs: 0, profit: 0, pct: null }
+    const afa = projects.reduce((t, p) => t + (p.afa || 0), 0)
+    const invoiced = projects.reduce((t, p) => t + (p.grossInvoiced || 0), 0)
+    const costs = projects.reduce((t, p) => t + (p.totalCosts || 0), 0)
+    const profit = invoiced - costs
+    return { afa, invoiced, costs, profit, pct: invoiced > 0 ? profit / invoiced : null }
+  })()
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 1100, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e1e0d9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -169,12 +188,11 @@ function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
                     <th style={thS}>Job No</th>
                     <th style={thS}>Project</th>
                     <th style={thS}>Estimator</th>
+                    <th style={thS}>Valuation date</th>
                     <th style={{ ...thS, textAlign: 'right' }}>AFA</th>
-                    <th style={{ ...thS, textAlign: 'right' }}>Gross Invoiced</th>
-                    <th style={{ ...thS, textAlign: 'right' }}>Labour</th>
-                    <th style={{ ...thS, textAlign: 'right' }}>Materials</th>
-                    <th style={{ ...thS, textAlign: 'right' }}>Total Costs</th>
-                    <th style={{ ...thS, textAlign: 'right' }}>Profit £</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Invoiced</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Costs</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Profit</th>
                     <th style={{ ...thS, textAlign: 'right' }}>Profit %</th>
                   </>
                 ) : isValueChange ? (
@@ -213,10 +231,9 @@ function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
                     <td style={tdS}>{p.jobNo || '—'}</td>
                     <td style={tdS}>{p.name || '—'}</td>
                     <td style={tdS}>{p.estimator || '—'}</td>
+                    <td style={tdS}>{p.vDate ? new Date(p.vDate).toLocaleDateString('en-GB') : '-'}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.afa)}</td>
                     <td style={{ ...tdS, textAlign: 'right', fontWeight: 500 }}>{fmtGBP(p.grossInvoiced)}</td>
-                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.labourSpend)}</td>
-                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.materialsSpend)}</td>
                     <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.totalCosts)}</td>
                     <td style={{ ...tdS, textAlign: 'right', fontWeight: 500, color: profit >= 0 ? '#16a34a' : '#e63946' }}>{fmtGBP(profit)}</td>
                     <td style={{ ...tdS, textAlign: 'right', fontWeight: 500, color: profitPct == null ? '#aaa' : profitPct >= 0.25 ? '#16a34a' : profitPct >= 0.2 ? '#ca8a04' : '#e63946' }}>
@@ -256,7 +273,36 @@ function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
                 </tr>
               ))}
             </tbody>
+            {isGpMargin && (
+              <tfoot style={{ position: 'sticky', bottom: 0, background: '#fff' }}>
+                <tr>
+                  <td style={{ ...tdS, fontWeight: 600, borderTop: '2px solid #e1e0d9' }} colSpan={4}>Total</td>
+                  <td style={{ ...tdS, textAlign: 'right', borderTop: '2px solid #e1e0d9' }}>{fmtGBP(gpTotals.afa)}</td>
+                  <td style={{ ...tdS, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e1e0d9' }}>{fmtGBP(gpTotals.invoiced)}</td>
+                  <td style={{ ...tdS, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e1e0d9' }}>{fmtGBP(gpTotals.costs)}</td>
+                  <td style={{ ...tdS, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e1e0d9', color: gpTotals.profit >= 0 ? '#16a34a' : '#e63946' }}>{fmtGBP(gpTotals.profit)}</td>
+                  <td style={{ ...tdS, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e1e0d9' }}>{gpTotals.pct != null ? (gpTotals.pct * 100).toFixed(1) + '%' : '-'}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
+          {isGpMargin && excluded && excluded.length > 0 && (
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #e1e0d9', background: '#fdfdfb' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                Not counted ({excluded.length})
+              </div>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+                In progress this month but with no valuation date, so there is no point to
+                measure to. Left out of the figure above rather than counted at zero.
+              </div>
+              {excluded.map((p, i) => (
+                <div key={p.xeroId || i} style={{ fontSize: 12, padding: '3px 0' }}>
+                  {p.jobNo || '-'} &nbsp; {p.name || '-'} &nbsp;
+                  <span style={{ color: '#888' }}>{p.estimator || '-'}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -477,6 +523,32 @@ export default function Scorecard() {
       .filter(r => r.eom)
     const totalGrossInvoiced = eomRows.reduce((s, r) => s + r.eom.grossInvoiced, 0)
     const totalCostsAll = eomRows.reduce((s, r) => s + r.eom.totalCosts, 0)
+
+    // THE DRILL-DOWN MUST SHOW WHAT THE HEADLINE IS MADE OF.
+    //
+    // It used to be handed `liveProjects` - the raw project records, carrying
+    // running totals to TODAY and including projects the headline excludes. So
+    // the rows added up to a different number from the card above them, and
+    // there was no way to tell which was wrong. Same rule, two implementations.
+    //
+    // These rows are the eomRows the headline is built from: invoiced and costs
+    // as at that month's valuation date, nothing else.
+    const gpRows = eomRows.map(r => ({
+      xeroId: r.p.xeroId,
+      jobNo: r.p.jobNo,
+      name: r.p.name,
+      estimator: r.p.estimator,
+      afa: r.p.afa,
+      vDate: r.eom.vDate,
+      grossInvoiced: r.eom.grossInvoiced,
+      totalCosts: r.eom.totalCosts,
+    }))
+    // Projects dropped from the figure, and why. Previously invisible: an
+    // in-progress job with no valuation date that month simply vanished from
+    // the maths while still appearing in the list at full value.
+    const gpExcluded = liveProjects
+      .filter(p => !eomAtValDate(p, m))
+      .map(p => ({ xeroId: p.xeroId, jobNo: p.jobNo, name: p.name, estimator: p.estimator, afa: p.afa }))
     const totalLabour = liveProjects.reduce((s, p) => s + (p.labourSpend || 0), 0)
     const totalMaterials = liveProjects.reduce((s, p) => s + (p.materialsSpend || 0), 0)
     const totalProfit = totalGrossInvoiced - totalCostsAll
@@ -515,8 +587,9 @@ export default function Scorecard() {
       _avgValueSecuredCount: avgSecNow.count,
       _avgValueSecuredList: avgSecNow.list,
       dealsSecuredOver200kRolling3: dealsOver200kRolling3, gpMargin,
-      _gpMarginProjects: liveProjects,
-      _gpMarginTotals: { totalGrossInvoiced, totalCostsAll, totalLabour, totalMaterials, totalProfit, count: liveProjects.length },
+      _gpMarginProjects: gpRows,
+      _gpMarginExcluded: gpExcluded,
+      _gpMarginTotals: { totalGrossInvoiced, totalCostsAll, totalLabour, totalMaterials, totalProfit, count: eomRows.length, excludedCount: gpExcluded.length },
       // drill-down project sets
       _rolling6Projects: rolling6,
       _mcRollingProjects: mcRolling,
@@ -789,7 +862,7 @@ export default function Scorecard() {
     if (!m.drillKey) return
     const projects = metrics[m.drillKey] || []
     if (projects.length === 0) return
-    setModal({ title: `${m.label} — ${monthLabel(monthStr)}`, projects, isValueChange: !!m.isValueChange, isGpMargin: !!m.isGpMargin })
+    setModal({ title: `${m.label} — ${monthLabel(monthStr)}`, projects, excluded: metrics._gpMarginExcluded || [], isValueChange: !!m.isValueChange, isGpMargin: !!m.isGpMargin })
   }
 
   function renderCard(m, metrics, label, withGraph, monthStr) {
@@ -843,7 +916,10 @@ export default function Scorecard() {
               <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.5 }}>
                 <div>Profit: <strong>{t.totalProfit != null ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalProfit) : '—'}</strong></div>
                 <div style={{ color: '#aaa', fontSize: 10 }}>Invoiced: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalGrossInvoiced)} · Costs: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalCostsAll)}</div>
-                <div style={{ color: '#aaa', fontSize: 10 }}>{t.count} live project{t.count !== 1 ? 's' : ''}</div>
+                <div style={{ color: '#aaa', fontSize: 10 }}>
+                  {t.count} project{t.count !== 1 ? 's' : ''} counted
+                  {t.excludedCount ? ` · ${t.excludedCount} not counted` : ''}
+                </div>
               </div>
             )
           })()}
@@ -951,7 +1027,7 @@ export default function Scorecard() {
     <>
       <Head><title>Rock Roofing — Scorecards (CRM)</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
-        {modal && <DrillModal title={modal.title} projects={modal.projects} isValueChange={modal.isValueChange} isGpMargin={modal.isGpMargin} onClose={() => setModal(null)} />}
+        {modal && <DrillModal title={modal.title} projects={modal.projects} excluded={modal.excluded} isValueChange={modal.isValueChange} isGpMargin={modal.isGpMargin} onClose={() => setModal(null)} />}
 
         <PreContractNav active="scorecard-crm">
         </PreContractNav>
