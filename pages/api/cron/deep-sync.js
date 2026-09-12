@@ -1,4 +1,5 @@
 import { getTokens, saveTokens } from '../../../lib/db'
+import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchProfitAndLoss, fetchAccountCodeMap } from '../../../lib/xero'
 import { mergeCosts } from '../../../lib/mergeCosts'
 import { costLineKey as costKey, invoiceLineKey as invoiceKey } from '../../../lib/costDedupe'
@@ -17,15 +18,6 @@ const COST_OF_SALE_ACCOUNTS = ['321', '322', '310', '311', '331', '330', '329', 
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const xget = (url, accessToken, tenantId) => fetch(url, {
   headers: { Authorization: `Bearer ${accessToken}`, 'Xero-Tenant-Id': tenantId, Accept: 'application/json' }
@@ -229,8 +221,7 @@ function mergeWindow(existing, incoming, fromDateStr, keyFn) {
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+  const redis = await getClient()
 
   try {
     let tokens = await getTokens()

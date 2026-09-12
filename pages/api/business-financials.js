@@ -1,4 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
+import { getClient } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 import { getTokens, saveTokens, getProject } from '../../lib/db'
 import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
@@ -18,15 +19,6 @@ function payFromDeliver(refISO, days) {
 }
 
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const CATEGORY_OF = (code, config) => {
   const cfg = config[String(code)]
@@ -116,8 +108,7 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
 // POST /api/business-financials { syncBank:true } -> refresh the Bank Summary (money in/out) per month
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   const [benchmark, catConfig, bank] = await Promise.all([
     redis.get('xero:pl-benchmark').then(v => v || { months: {} }).catch(() => ({ months: {} })),
@@ -445,7 +436,7 @@ export default async function handler(req, res) {
   }
   // Reads the stored ledger captured at sync time (view=overhead-transactions).
   if (view === 'vat') {
-    const redis2 = await getRedis()
+    const redis2 = await getClient()
     // Save a filed Box 5 for a month.
     if (req.method === 'POST' && (req.body?.action === 'set-filed')) {
       const month = String(req.body.month || '')
@@ -1295,7 +1286,7 @@ export default async function handler(req, res) {
       // bank:outstanding-receivables - so the old dashboard:cache branch must still be
       // live. Rather than argue about whether a deploy landed, the page now says.
       recDiag: {
-        build: 'pkg844',
+        build: 'pkg852',
         source: 'bank:outstanding-receivables',
         rows: receivables.length,
         storeRows: (recStore.items || []).length,
