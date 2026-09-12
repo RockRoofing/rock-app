@@ -1,15 +1,5 @@
-import { getTokens, saveTokens } from '../../../lib/db'
+import { getTokens, saveTokens, getClient } from '../../../lib/db'
 import { refreshXeroToken, fetchAllCostBills, extractJobNoFromDescription, LABOUR_ACCOUNTS, COST_OF_SALE_ACCOUNTS } from '../../../lib/xero'
-
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -22,7 +12,7 @@ export default async function handler(req, res) {
     await saveTokens(tokens)
 
     const tenantId = tokens.tenant_id
-    const redis = await getRedis()
+    const redis = await getClient()
 
     // Get last sync date
     const lastSyncDate = redis ? await redis.get('sync:lastDate') : null

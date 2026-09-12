@@ -1,85 +1,93 @@
-pkg843 - Route the first 10 files through lib/db.js (step 1 of 5)
+pkg844 - Route the next 10 files through lib/db.js (step 2 of 5)
 ================================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-This package changes no behaviour, no calculations and no key names. Every
-Redis key string in these files was verified byte-identical before and after.
-If any number moves, that is a fault - tell me which one.
+No calculations changed, no key names changed. Every Redis key string in these
+ten files was extracted and diffed against the version currently on GitHub -
+identical in all ten. If any number moves, that is a fault. Tell me which one.
+
+
+REQUIRES pkg843 TO BE DEPLOYED FIRST
+------------------------------------
+All ten files import getClient() from lib/db.js, which was added in pkg843.
+If pkg843 is not live, these will fail. Confirm pkg843 is on GitHub before
+uploading this.
 
 
 NEW FILES TO CREATE BY HAND IN GITHUB
 -------------------------------------
-None. All 11 files already exist and are being replaced.
+None. All ten files already exist and are being replaced.
+Note the folder pages/api/project/[id]/ uses literal square brackets.
 
 
-FILES IN THIS PACKAGE (11)
+FILES IN THIS PACKAGE (10)
 --------------------------
-lib/db.js                          MODIFIED - adds getClient(), del(), scan()
-pages/api/sync-status.js           converted
-pages/api/hidden-projects.js       converted
-pages/api/clear-cache.js           converted
-pages/api/wip-by-month.js          converted
-pages/api/reset-backfill.js        converted
-pages/api/reset-costs.js           converted
-pages/api/clear-wages.js           converted
-pages/api/staff.js                 converted
-pages/api/contracted-rates.js      converted
-pages/api/variation-debug.js       converted
+pages/api/retention.js
+pages/api/wip-lock.js
+pages/api/clear-financial-data.js
+pages/api/account-categorisation.js
+pages/api/sync-chart-of-accounts.js
+pages/api/application-send.js
+pages/api/xero/sync.js
+pages/api/project/[id]/settings.js
+pages/api/project/[id]/wip-adjustments.js
+pages/api/project/[id]/wip-margin.js
 
-Deploy lib/db.js FIRST or at the same time as the rest. The other ten import
-getClient() from it, so on its own none of them will work.
+Running total: 20 of 49 converted. 29 remain (pkg845-847).
 
 
-WHAT CHANGED
-------------
-lib/db.js gains three exports:
+WHAT CHANGED IN EACH
+--------------------
+Each file previously opened its own connection to Redis. Each now does:
 
-  getClient()   the shared data client - get / set / del / keys / scan.
-                Same shape as an Upstash client, so call sites read identically
-                to the direct connections they replace.
-  del(key)      generic delete helper
-  scan(c, o)    generic scan helper
+    const redis = await getClient()
 
-The ten API files previously each opened their own connection to Redis and
-built their own keys. They now ask lib/db.js for a client instead. Nothing else
-about them changed.
+and everything after that line is untouched. Key names, logic, responses and
+error handling are all identical.
 
-WHY: when the app becomes multi-tenant, getClient() is the single place that
-picks the right customer's database. Any file holding its own connection would
-not follow, and would serve one customer's data to another. 39 files still do
-this; they follow in pkg844-847.
 
-SIDE EFFECT WORTH KNOWING: sync-status.js and hidden-projects.js used
-Redis.fromEnv(), which only reads UPSTASH_REDIS_REST_URL / _TOKEN. If Vercel
-holds the credentials under the KV_REST_API_* or kv_KV_REST_API_* names
-instead, those two endpoints have been silently failing. Going through
-lib/db.js, which accepts all three naming conventions, fixes that. So the
-"last synced" stamps and the hidden-projects list may start working if they
-were not before. That is the only thing in this package that could visibly
-change, and only in the direction of working.
+TWO THINGS WORTH KNOWING
+------------------------
+1. getClient() never returns null. Several of these files had a guard like
+   "if (!redis) return 500 No Redis" or "redis ? await redis.get(...) : null".
+   Those guards existed because a missing environment variable produced a null
+   client. That cannot happen now - lib/db.js falls back to an in-process store
+   instead - so the guards have been removed or left as dead code where
+   removing them would have widened the diff. No behaviour change on a working
+   deployment.
+
+2. clear-financial-data.js uses scan() with a cursor. That is supported by the
+   shared client and was added in pkg843 alongside del().
 
 
 CHECKS I RAN BEFORE PACKAGING
 -----------------------------
-- esbuild compile on all 11 files: 0 errors
-- every Redis key string extracted from old and new versions and diffed:
-  identical in all 11 files
-- no orphaned references to the deleted local getRedis() / negRedis() helpers
-- no non-ASCII characters in any new line
-- mergeCosts(redis, id), which clear-wages.js passes the client into, uses
-  only .get and .set - both present on the shared client
+- esbuild compile on all 10 files: 0 errors
+- every Redis key string diffed old vs new: identical in all 10
+- no remaining references to @upstash/redis or the deleted local getRedis()
+- constants that sat next to the removed code (CONFIG_KEY, SEEN_KEY,
+  CHART_KEY in account-categorisation.js) confirmed still present
+- import depth checked on the three files inside pages/api/project/[id]/
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Bookkeeping page - the "last synced" stamps still show (or now show).
-2. Project Financials - hide a project, reload, it stays hidden. Unhide it.
-3. Admin > Staff - open it, save it, confirm it saves.
-4. Contracted rates on any project - open, check the rates are there.
-5. WIP page loads with the same totals.
-6. Fill in the baseline sheet BEFORE deploying, then re-check after.
+These ten touch more of what you look at daily than pkg843 did, so this is the
+one to check properly.
 
-Do NOT click these while testing: Reset Costs, Clear Wages, Reset Backfill,
-Clear Cache. They are destructive. They are in this package because they are
-small and simple, not because they need exercising.
+1. RETENTION page - open it. Check the 612 figure, Applied For and Certified
+   against your baseline. Add a retention entry and delete it again.
+2. WIP - open a month, check the total. Lock a month and confirm the
+   notification email arrives. Unlock it again.
+3. Project Financials - open a project, change a setting, save, reload,
+   confirm it stuck.
+4. WIP adjustments on a project - add one, edit the margin, delete it.
+5. Admin > Account Categorisation - the list loads, every account shows,
+   change one category and save.
+6. Sync Chart of Accounts - press it, confirm the count comes back.
+7. Send an application on a test project if you have one, and confirm the
+   AFA updates on Project Financials afterwards.
+
+Do NOT click: Clear Financial Data. It is destructive and only in this batch
+because it is small.

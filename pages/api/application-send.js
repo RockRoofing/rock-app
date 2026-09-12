@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, get, saveProject } from '../../lib/db'
+import { getProject, get, saveProject, getClient } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
 import { describeApplication, computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 
@@ -107,10 +107,8 @@ export default async function handler(req, res) {
     await saveProject(projectId, project)
     // Refresh Project Financials / Retentions so the new AFA shows.
     try {
-      const { Redis } = await import('@upstash/redis')
-      const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-      const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-      if (url && token) { const redis = new Redis({ url, token }); await redis.del('dashboard:cache') }
+      const redis = await getClient()
+      await redis.del('dashboard:cache')
     } catch {}
 
     return res.json({ ok: true, id: data?.id || null, application: apps[idx] })

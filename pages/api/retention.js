@@ -1,19 +1,9 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, saveProject } from '../../lib/db'
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
+import { getProject, saveProject, getClient } from '../../lib/db'
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
   const KEY = 'retention:entries'
 
   if (req.method === 'GET') {

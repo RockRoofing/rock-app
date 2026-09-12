@@ -1,17 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getTokens, saveTokens } from '../../lib/db'
+import { getTokens, saveTokens, getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
-
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 async function projectIds(redis) {
   const cached = await redis.get('projects:list').catch(() => null)
@@ -34,8 +24,7 @@ export default async function handler(req, res) {
   if (confirm !== 'CLEAR') return res.status(400).json({ error: 'Type CLEAR to confirm.' })
   if (!['bills', 'wages', 'sales', 'overheads', 'manual', 'all'].includes(type)) return res.status(400).json({ error: 'Invalid type.' })
 
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   try {
     // Scan ALL keys of each type (not just current projects) so archived/old

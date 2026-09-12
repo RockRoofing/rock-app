@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getPortalUsers } from '../../lib/db'
+import { getPortalUsers, getClient } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 
 // Locking a month's WIP.
@@ -12,11 +12,7 @@ export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { Redis } = await import('@upstash/redis')
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return res.status(500).json({ error: 'Storage not configured' })
-  const redis = new Redis({ url, token })
+  const redis = await getClient()
 
   const { month, action, by, totalWip } = req.body || {}
   if (!month) return res.status(400).json({ error: 'month required' })
