@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { buildContractWorksFromRates, computeApplicationSummary, buildAppVariations, varKey } from '../../lib/applications'
 import { projectVariations, varNumberOf } from '../../lib/variationInstruct'
 
@@ -12,15 +13,6 @@ const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 //                                          materials, mcdPct, retentionPct, matDeliver } ]
 // projectKey is the planning key: "L:<projectNo>" (live/draft) or "N:<dealId>" (negotiated).
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 const HKEY = (key) => `cashflow:hyp-apps:${key}`
 
@@ -123,8 +115,7 @@ function variationSeed(project) {
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   if (req.method === 'GET') {
     const { projectKey, xeroId, all } = req.query

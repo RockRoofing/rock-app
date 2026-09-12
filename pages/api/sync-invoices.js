@@ -1,19 +1,11 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
+import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const xget = (url, at, tid) => fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 // Pull ALL ACCREC (sales) invoices modified/dated in the window, ONE pass, and
 // return them with the tracking OPTION NAME(s) on their line items. We match by
@@ -192,8 +184,7 @@ async function fetchInvoiceLineItems(at, tid, invoiceId) {
 // Exact-mirror within the window (older invoices preserved).
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'post-contract', 'management', 'admin'])) return
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   const last = await redis.get('sync-invoices:at').catch(() => null)
   if (last && Date.now() - new Date(last).getTime() < 45000) {

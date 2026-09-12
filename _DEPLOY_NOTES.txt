@@ -1,11 +1,7 @@
-pkg848 - Route 3 more files through lib/db.js (step 5 of 7)
+pkg849 - Route 3 more files through lib/db.js (step 6 of 7)
 ===========================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
-
-Three files only. From here the remaining files are the ones that feed most of
-your baseline sheet, so they go three at a time rather than ten, and each
-package names exactly which numbers it can move.
 
 
 REQUIRES pkg843 (lib/db.js) TO BE LIVE.
@@ -18,65 +14,70 @@ None.
 
 FILES IN THIS PACKAGE (3)
 -------------------------
-pages/api/commercial-metrics.js
-pages/api/outstanding-invoices.js
-pages/api/bookkeeping.js
+pages/api/applications.js
+pages/api/project-cashflow.js
+pages/api/sync-invoices.js
 
-Running total: 43 of 49 converted. SIX REMAIN.
+Running total: 46 of 49 converted. THREE REMAIN.
 
 
-THE SIX LEFT
-------------
-pkg849:  pages/api/applications.js        410 lines
-         pages/api/project-cashflow.js    428 lines
-         pages/api/sync-invoices.js       335 lines
+THE LAST THREE, for pkg850
+--------------------------
+pages/api/dashboard.js            1075 lines
+pages/api/business-financials.js  1694 lines
+pages/api/cron/deep-sync.js        399 lines
 
-pkg850:  pages/api/dashboard.js          1075 lines
-         pages/api/business-financials.js 1694 lines
-         pages/api/cron/deep-sync.js      399 lines
-
-pkg850 is the one to take slowly. Those two files between them feed most of
-the baseline sheet.
+Those two big ones feed most of the baseline sheet between them, and deep-sync
+is a cron so a fault shows up overnight rather than on screen. I may split that
+package again once I have read them properly.
 
 
 WHAT CHANGED
 ------------
-Nothing structural. All three had the standard local getRedis() helper. Each
-now does:
+project-cashflow.js and sync-invoices.js had the standard local getRedis()
+helper. applications.js had a single clearDashboardCache() helper that opened
+its own connection purely to drop 'dashboard:cache'. All three now use
+getClient(). Nothing structural - no module-scope connections in these.
 
-    const redis = await getClient()
+project-cashflow.js passes the client into loadRates() and into readRegistry()
+from lib/projectRegistry.js. Checked both: loadRates uses only .get, and
+readRegistry uses only .get and .set.
 
-Every line after that is untouched. No module-scope connections in these three,
-unlike pkg845 and pkg847.
-
-bookkeeping.js passes the client into readRegistry() from lib/projectRegistry.js
-- checked, that uses only .get and .set, both on the shared client.
+Across all three the only operations used are get, set, del and scan - all on
+the shared client.
 
 
 CHECKS I RAN BEFORE PACKAGING
 -----------------------------
 - esbuild compile on all 3: 0 errors
 - every Redis key string diffed old vs new: identical in all 3
+  (project-cashflow.js has 12 distinct keys, the most of any file so far)
 - no remaining @upstash/redis import or getRedis reference
-- full text diff read on all three. Each is three edits: the import line, the
-  deleted helper, and the line that gets the client. Nothing else moved.
+- full text diff read on all three
+- every redis operation used checked against what getClient() provides
 
 
 WHICH BASELINE ROWS THIS CAN MOVE
 ---------------------------------
-Only these. Everything else on the sheet is untouched by this package.
+More than the last package. These three sit behind:
 
-- Outstanding Invoices: Total due (unpaid)
-- Bookkeeping page: Cost of Sale (Bills), Direct Wages, Sales Invoices
-- Commercial Scorecard figures
+- 13-week cash flow: closing balance, final week
+- Retention: Applied For, Certified, and the 612 figure
+- Project Financials: AFA on any project with applications
+- Anything downstream of the invoice sync
+
+Untouched: CRM, Business Financials, Operations, Forms, Bookkeeping totals.
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Bookkeeping page - loads, and the three totals match your baseline. Check
-   the embedded Retention and WIP panels still render.
-2. Outstanding Invoices - Total due (unpaid) against your baseline, and the
-   weekly recipients list still saves.
-3. Commercial Scorecard - the figures load and look unchanged.
+1. 13-week cash flow - closing balance against your baseline. Check the build
+   marker changed, or nothing else on this list means anything.
+2. Retention - 612, Applied For, Certified against your baseline.
+3. Open a project with applications on it. Check the AFA and the application
+   list. Open an application and confirm the figures are right.
+4. Sync Invoices - press it, confirm it completes and the counts look normal.
+5. Project cash flow on a single project - open one and check it renders.
 
-That is the whole check. Three files, three pages.
+Item 3 is the one most likely to catch something. applications.js is read by
+more surfaces than anything else in this batch.
