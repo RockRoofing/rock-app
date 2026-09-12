@@ -1,83 +1,85 @@
-pkg844 - Same date column on the Forms Missing table itself. Includes pkg811-843.
-===================================================================================
+pkg843 - Route the first 10 files through lib/db.js (step 1 of 5)
+================================================================
 
-DEPLOY THIS INSTEAD OF pkg811-843. It contains all of them. Fifty-three files.
+WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-*** THIRTEEN NEW FILES TO CREATE BY HAND *** (unchanged from pkg842/843)
-
-  lib/formDates.js            lib/preStartDone.js       lib/uploadFile.js
-  lib/inquery.js              lib/handoverPdf.js        components/InQueryTable.js
-  components/SearchableSelect.js
-  pages/inquery-review.js
-  pages/api/inquery-review.js            pages/api/bookkeeping-inquery.js
-  pages/api/handover-pdf.js              pages/api/planning-timesheet-csv.js
-  pages/api/admin/variations-instructed-audit.js   (folder does not exist yet)
-
-middleware.js is changed (pkg828). Everything else exists; overwrite in place.
+This package changes no behaviour, no calculations and no key names. Every
+Redis key string in these files was verified byte-identical before and after.
+If any number moves, that is a fault - tell me which one.
 
 
-THE CHANGE
-===========
-The Week column on the main table is now the same date column as the pop-out: the
-date the form was completed, or the date it is needed for.
-
-ONE DIFFERENCE FROM THE POP-OUT, and it is deliberate. The pop-out is already split
-into Missing / Upcoming / Completed sections, so each can head its column "Date
-needed" or "Date completed". The main table mixes all three in one list, so a single
-heading cannot be honest about it.
-
-So the column reads "Date" and each cell says underneath which kind it is:
-
-    Mon 17 Aug 26      Sun 18 Aug 26       Tue 25 Aug 26
-    needed             completed           expected
-
-Without that, a mixed list shows two different kinds of date in one column with
-nothing to tell them apart - which is worse than the week it replaced.
+NEW FILES TO CREATE BY HAND IN GITHUB
+-------------------------------------
+None. All 11 files already exist and are being replaced.
 
 
-ALSO
------
-The table now SORTS on the date shown rather than the week, the same as the pop-out.
+FILES IN THIS PACKAGE (11)
+--------------------------
+lib/db.js                          MODIFIED - adds getClient(), del(), scan()
+pages/api/sync-status.js           converted
+pages/api/hidden-projects.js       converted
+pages/api/clear-cache.js           converted
+pages/api/wip-by-month.js          converted
+pages/api/reset-backfill.js        converted
+pages/api/reset-costs.js           converted
+pages/api/clear-wages.js           converted
+pages/api/staff.js                 converted
+pages/api/contracted-rates.js      converted
+pages/api/variation-debug.js       converted
 
-The day used to be tacked onto the Form column for diaries, because the date column
-was only the week. It is the date column now, so that has gone - otherwise every
-diary row showed the same date twice. Removed from the pop-out as well.
-
-An obligation with no specific date still falls back to a grey "W/C 17 Aug 26".
-
-
-MARKERS
---------
-  13-week cash flow build marker        -> pkg844
-  612 drill-down header                 -> v844
-  Applied for / Certified drill-down    -> v844
-
-Hard refresh after deploying.
+Deploy lib/db.js FIRST or at the same time as the rest. The other ten import
+getClient() from it, so on its own none of them will work.
 
 
-ALSO IN THIS PACKAGE
----------------------
-pkg843  The same column in the pop-out, and every obligation given the date it is
-        actually about - the start date for a Pre-Start, the first day on site for
-        Start on Site, the finishing day for a Works Area Handover.
-pkg842  Diaries scored on the Site Diary Date rather than the submission date.
-pkg841  Pre-Start was never picked up at all - and the Monday cron chased Contracts
-        Managers for Pre-Starts already sent.
-pkg840  Forms Missing cards open the drill-down.
-pkg839  Projects are archived, not deleted.
-pkg838  RAMS uploads over ~4.5MB failed with an unreadable JSON error.
+WHAT CHANGED
+------------
+lib/db.js gains three exports:
+
+  getClient()   the shared data client - get / set / del / keys / scan.
+                Same shape as an Upstash client, so call sites read identically
+                to the direct connections they replace.
+  del(key)      generic delete helper
+  scan(c, o)    generic scan helper
+
+The ten API files previously each opened their own connection to Redis and
+built their own keys. They now ask lib/db.js for a client instead. Nothing else
+about them changed.
+
+WHY: when the app becomes multi-tenant, getClient() is the single place that
+picks the right customer's database. Any file holding its own connection would
+not follow, and would serve one customer's data to another. 39 files still do
+this; they follow in pkg844-847.
+
+SIDE EFFECT WORTH KNOWING: sync-status.js and hidden-projects.js used
+Redis.fromEnv(), which only reads UPSTASH_REDIS_REST_URL / _TOKEN. If Vercel
+holds the credentials under the KV_REST_API_* or kv_KV_REST_API_* names
+instead, those two endpoints have been silently failing. Going through
+lib/db.js, which accepts all three naming conventions, fixes that. So the
+"last synced" stamps and the hidden-projects list may start working if they
+were not before. That is the only thing in this package that could visibly
+change, and only in the direction of working.
 
 
-STILL OPEN, ON YOUR WORD
--------------------------
-  - The seven remaining upload paths (pkg838 notes).
-  - In Query appears as a PROJECT on Project Financials and the dashboard.
-  - Release halves are on the Applied-for base, not the Final Account base their own
-    tooltip and the certificate use (pkg798 notes). Material mid-contract.
-  - MCD placement flags default TRUE in lib/applications.js, FALSE in
-    pages/api/applications.js (pkg797 notes).
-  - latestAppEnd, retentionClaimed and appRelease1/2 still read the latest
-    application of ANY status.
-  - A script listing every project holding settings under BOTH keys.
-  - An hours field on the Planner day cell, for real hours in the timesheet CSV.
-  - Multi-tenancy. See HANDOVER-MULTI-TENANCY.md.
+CHECKS I RAN BEFORE PACKAGING
+-----------------------------
+- esbuild compile on all 11 files: 0 errors
+- every Redis key string extracted from old and new versions and diffed:
+  identical in all 11 files
+- no orphaned references to the deleted local getRedis() / negRedis() helpers
+- no non-ASCII characters in any new line
+- mergeCosts(redis, id), which clear-wages.js passes the client into, uses
+  only .get and .set - both present on the shared client
+
+
+WHAT TO CLICK AFTER DEPLOYING
+-----------------------------
+1. Bookkeeping page - the "last synced" stamps still show (or now show).
+2. Project Financials - hide a project, reload, it stays hidden. Unhide it.
+3. Admin > Staff - open it, save it, confirm it saves.
+4. Contracted rates on any project - open, check the rates are there.
+5. WIP page loads with the same totals.
+6. Fill in the baseline sheet BEFORE deploying, then re-check after.
+
+Do NOT click these while testing: Reset Costs, Clear Wages, Reset Backfill,
+Clear Cache. They are destructive. They are in this package because they are
+small and simple, not because they need exercising.

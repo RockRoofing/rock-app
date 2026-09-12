@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, get } from '../../lib/db'
+import { getProject, get, getClient } from '../../lib/db'
 
 // GET /api/variation-debug?projectId=...        what is stored for one project
 // GET /api/variation-debug                      a count for every project
@@ -65,11 +65,7 @@ export default async function handler(req, res) {
   // lists every project:* record that contains variations, with its raw key. If V01 and
   // V02 exist anywhere, this finds them.
   if (req.query.all === '1') {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !tok) return res.status(500).json({ error: 'Storage not configured' })
-    const redis = new Redis({ url, token: tok })
+    const redis = await getClient()
     const keys = await redis.keys('project:*')
     const found = []
     for (const k of keys) {

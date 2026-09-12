@@ -1,17 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
+import { getTokens, saveTokens, getAllProjectSettings, getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
-
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 // One-time RESET of wages data only. Wipes the untagged wage lump sums and every
 // per-project wage source, then re-merges so project cost totals drop the wages.
@@ -23,8 +13,7 @@ export default async function handler(req, res) {
   if (!req.body || req.body.confirm !== 'CLEAR WAGES') {
     return res.status(400).json({ error: 'Confirmation required.' })
   }
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   try {
     // Resolve the project list (to find every costs:wages:<id>).

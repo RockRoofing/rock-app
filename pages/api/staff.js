@@ -1,12 +1,8 @@
-import { getStaff, saveStaff } from '../../lib/db'
+import { getStaff, saveStaff, getClient } from '../../lib/db'
 
 async function clearCache() {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return
-    const redis = new Redis({ url, token })
+    const redis = await getClient()
     await redis.del('dashboard:cache')
   } catch {}
 }

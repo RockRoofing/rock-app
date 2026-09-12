@@ -1,10 +1,11 @@
 // Returns the last-synced timestamp for each Xero data type, so the Bookkeeping
 // and Commercial pages can show a "last synced" stamp. Read-only, no auth-sensitive
 // data (just ISO timestamps).
+import { getClient } from '../../lib/db'
+
 export default async function handler(req, res) {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const redis = Redis.fromEnv()
+    const redis = await getClient()
     const [invoices, wages, bills, benchmark] = await Promise.all([
       redis.get('sync-invoices:at').catch(() => null),
       redis.get('sync-wages:at').catch(() => null),

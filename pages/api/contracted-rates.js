@@ -1,25 +1,18 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, saveProject } from '../../lib/db'
+import { getProject, saveProject, getClient } from '../../lib/db'
 
 // Negotiated projects (Pipedrive deals, id like "N:123") aren't in getProject, so
 // their contracted rates live in a dedicated Redis key. We wrap them in the same
 // shape { contractedRates, variations } the rest of this handler expects, so live and
 // negotiated projects share one code path.
 const isNegotiated = (id) => typeof id === 'string' && id.startsWith('N:')
-async function negRedis() {
-  const { Redis } = await import('@upstash/redis')
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  return new Redis({ url, token })
-}
 async function getNegProject(id) {
-  const r = await negRedis(); if (!r) return {}
+  const r = await getClient()
   const dealId = id.slice(2)
   return (await r.get(`crates:negotiated:${dealId}`)) || {}
 }
 async function saveNegProject(id, project) {
-  const r = await negRedis(); if (!r) return
+  const r = await getClient()
   const dealId = id.slice(2)
   await r.set(`crates:negotiated:${dealId}`, project)
 }
@@ -32,11 +25,7 @@ const persistProject = async (id, project) => isNegotiated(id) ? saveNegProject(
 // dashboard caches for 4h, so without this the tables show stale numbers.
 async function clearDashboardCache() {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return
-    const redis = new Redis({ url, token })
+    const redis = await getClient()
     await redis.del('dashboard:cache')
   } catch {}
 }

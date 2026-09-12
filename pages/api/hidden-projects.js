@@ -2,10 +2,11 @@
 // Financials, Retention, Application Calendar, Commercial Scorecard). Stored as a
 // single KV key so every user sees the same set — any logged-in user can edit it.
 // Default is VISIBLE: a project only disappears if its id is in this list.
+import { getClient } from '../../lib/db'
+
 export default async function handler(req, res) {
   try {
-    const { Redis } = await import('@upstash/redis')
-    const redis = Redis.fromEnv()
+    const redis = await getClient()
     const KEY = 'config:hidden-projects'
 
     if (req.method === 'GET') {
