@@ -1,4 +1,4 @@
-import { getAllProjectSettings, getOpsProjects } from '../../lib/db'
+import { getAllProjectSettings, getOpsProjects, getClient } from '../../lib/db'
 import { computeApplicationSummary, isInstructed, resolveGrossAfa } from '../../lib/applications'
 import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
@@ -6,15 +6,6 @@ import { syncRegistry, ghostsFromRegistry } from '../../lib/projectRegistry'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken } from '../../lib/xero'
 
-async function getRedis() {
-  try {
-    const { Redis } = await import('@upstash/redis')
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
-    if (!url || !token) return null
-    return new Redis({ url, token })
-  } catch { return null }
-}
 
 // Calculate valuation date for a given month key (YYYY-MM) and valuation day
 function getValuationDateForMonth(monthKey, valuationDay) {
@@ -24,8 +15,7 @@ function getValuationDateForMonth(monthKey, valuationDay) {
 }
 
 export default async function handler(req, res) {
-  const redis = await getRedis()
-  if (!redis) return res.status(500).json({ error: 'No Redis' })
+  const redis = await getClient()
 
   // Try cache first unless sync=true. Ignore a cache built before the completeness
   // field existed (so the "details incomplete" banner works without a manual sync).
