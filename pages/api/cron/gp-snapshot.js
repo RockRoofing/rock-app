@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { refreshGpSnapshots } from '../../../lib/crmGpSnapshots'
 
 // Monthly GP margin snapshot per estimator.
@@ -9,7 +10,7 @@ import { refreshGpSnapshots } from '../../../lib/crmGpSnapshots'
 //   ?months=12      widen the re-snapshot window
 export const config = { maxDuration: 300 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     // The project list, stages and estimators come from the same place Project Financials
     // uses, so the snapshot and the live page cannot disagree about who owns what.
@@ -29,3 +30,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('gp-snapshot', handler)

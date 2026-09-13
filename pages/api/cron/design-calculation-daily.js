@@ -1,9 +1,10 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, set } from '../../../lib/db'
 import { allCalculationProjectNos, calcPendingKey, projectRecipients, projectDisplayName, ukDate, calculationDigestHtml, sendMail } from '../../../lib/designRfiNotify'
 
 // Runs once at the END OF THE DAY. For each project that has had COMMENTS on Calculations
 // today and hasn't been emailed yet today, send ONE digest to everyone with access.
-export default async function handler(req, res) {
+async function handler(req, res) {
   const today = ukDate()
   const nos = await allCalculationProjectNos()
   let projectsEmailed = 0, emailsSent = 0
@@ -26,3 +27,5 @@ export default async function handler(req, res) {
   }
   return res.json({ ok: true, date: today, projectsEmailed, emailsSent })
 }
+
+export default forEachTenant('design-calculation-daily', handler)

@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, getTeamMembers, getOpsUsers } from '../../../lib/db'
 import { runFormsWeeklyNotify } from './forms-weekly-notify'
 import { runDeliveriesNotify } from './deliveries-notify'
@@ -28,7 +29,7 @@ async function buildPeople() {
   return people
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const force = req.query.force === '1'
     const now = new Date()
@@ -113,3 +114,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('hs-expiry-email', handler)

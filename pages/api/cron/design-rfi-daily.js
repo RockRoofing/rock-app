@@ -1,10 +1,11 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, set } from '../../../lib/db'
 import { allRfiProjectNos, pendingKey, projectRecipients, projectDisplayName, ukDate, dailyDigestHtml, sendMail } from '../../../lib/designRfiNotify'
 
 // Runs once at the END OF THE DAY. For each project that has had COMMENTS on RFIs today and
 // hasn't been emailed yet today, send ONE digest to everyone with access to that project.
 // (New RFIs are emailed immediately at creation time - they are NOT part of this digest.)
-export default async function handler(req, res) {
+async function handler(req, res) {
   const today = ukDate()
   const nos = await allRfiProjectNos()
   let projectsEmailed = 0, emailsSent = 0
@@ -28,3 +29,5 @@ export default async function handler(req, res) {
   }
   return res.json({ ok: true, date: today, projectsEmailed, emailsSent })
 }
+
+export default forEachTenant('design-rfi-daily', handler)

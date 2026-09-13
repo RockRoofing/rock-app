@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { runEmailSync } from '../../../lib/crmEmailSync'
 
 // Pulls new mail from the pre-contract mailboxes and files it against projects.
@@ -28,7 +29,7 @@ import { runEmailSync } from '../../../lib/crmEmailSync'
 // timeout would kill it part-way, leaving a run that looks finished but is not.
 export const config = { maxDuration: 300 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const dryRun = req.query.dryRun === '1'
     const detail = req.query.detail === '1'
@@ -61,3 +62,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('crm-email-sync', handler)

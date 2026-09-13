@@ -1,108 +1,125 @@
-pkg857 - Project report download: rewritten
-===========================================
+pkg858 - Crons run once per customer. STILL DORMANT.
+====================================================
 
-ONE FILE.  pages/api/project/[id]/report.js
-
-Folder uses literal square brackets. No new files to create by hand.
-
-THIS ONE DOES CHANGE WHAT YOU SEE. The report currently downloads with two
-empty tabs and some wrong summary figures. It will now be populated and correct.
+WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING,
+except that crons now record a heartbeat. See below - that part is live today.
 
 
-IT WAS NOT THE DEPLOY
----------------------
-Checked first. The only change pkg856 made to this file was the withTenant
-wrapper, and that wrapper is dormant. This has been broken for a long time -
-almost certainly since the app moved off Xero Projects, which is why you have
-never had a reason to use it.
+NEW FILE TO CREATE BY HAND IN GITHUB
+------------------------------------
+  lib/forEachTenant.js      <-- DOES NOT EXIST YET
+
+Then replace the 21 files in pages/api/cron/.
 
 
-FOUR FAULTS, COMPOUNDING
-------------------------
-1. It imported getProjectExpenses and getProjectInvoices from lib/xero.js.
-   NEITHER IS EXPORTED FROM THERE. Only getXeroProjects is. Both calls threw on
-   the first line.
+WHY CRONS CANNOT USE withTenant
+-------------------------------
+withTenant works out the customer from the web address the request came to. A
+cron has no meaningful address - Vercel calls it on the deployment URL. Wrapping
+one would bind it to whichever host it was called on, which in practice means
+every cron runs as the first customer forever and never runs for anyone else.
+Silently. The sync would stop for everybody except one company and nothing would
+say so.
 
-2. Both sat inside `try { } catch (e) {}` with an EMPTY catch. So the throw was
-   swallowed, costs and invoices stayed as empty arrays, the sheets were built
-   with headers and a zero total, and the file downloaded looking completely
-   normal. A silent catch turned a broken import into a plausible report. This
-   is the same failure shape as everything else that has gone wrong on this
-   project: no error, no alarm, just a wrong answer that looks right.
+So a cron loops instead:
 
-3. It read the Xero PROJECTS api (/projects.xro/1.0/projects). Rock has never
-   used Xero Projects - the app works from TRACKING CATEGORIES, via
-   getProjectsFromCategories, in 18 other files. So the project lookup returned
-   nothing, jobNo came out as an empty string, and even a working invoice
-   lookup would have been searching for a blank job number.
-   report.js was the LAST FILE IN THE CODEBASE still on that path.
-
-4. Labour Spend was hardcoded to 0 and Materials Spend was set to ALL costs. So
-   the summary was wrong as well, not only the two empty tabs.
+    export default forEachTenant('wip-sync', handler)
 
 
-WHAT IT DOES NOW
-----------------
-It reads the SAME RECORD Project Financials displays and formats it. It does not
-recompute AFA, margin, WIP, costs or invoiced.
+EACH ITERATION IS ISOLATED
+--------------------------
+One customer's expired Xero token must not stop the job for everyone else. Every
+iteration is caught on its own, recorded, and the loop continues. Demonstrated:
 
-That is deliberate. A second implementation of a rule is how this project has
-produced nearly every wrong number it has ever had - the same rule written twice
-and left to diverge. The report cannot disagree with the screen, because it is
-reading what the screen read.
+    tenant rock    ok
+    tenant wilson  FAILED - Xero token expired
+    tenant testco  ok
+    tenants: 3   succeeded: 2   failed: 1
 
-That record also carries the cost and invoice LINES, so Expenses and Income come
-from the same single read. NO XERO CALL AT ALL, which makes it faster and
-removes the token refresh that used to be the first thing able to fail.
+The response returns 200 even with failures inside, deliberately. The JOB ran.
+Returning 500 because one customer out of forty failed would make Vercel report
+the whole cron as broken and hide the thirty-nine that worked.
 
-Also changed:
-  - Variations use the STORED variation number where there is one, not the row
-    position. Numbering by position is how a V03 quietly becomes a V02.
-  - Variations read through projectVariations(), the single rule for which of
-    the two possible variation records wins.
-  - Dates written as "30 Nov 2026", not 30/11/2026. Unambiguous in any market,
-    which matters for the same reason the cash flow dates did.
-  - Expenses and Income sorted oldest first.
-  - Income splits Total, Paid and Due.
-  - If the data has not been built, it returns a clear message instead of an
-    empty workbook.
+
+THE RESPONSE PROBLEM, and why it was the risky part
+---------------------------------------------------
+Every cron handler calls res.json() itself. In a loop that would try to send the
+response once per customer, and every call after the first throws "headers
+already sent" - which would break all 21 crons at once.
+
+So each iteration gets a CAPTURING response that records what the handler tried
+to send, and one combined response goes out at the end.
+
+Tested against the three response shapes that actually occur in these files:
+  res.json({...})                       captured, ok
+  res.status(401).json({ error: ... })  captured, recorded as a failure with the
+                                        handler's own message
+  a thrown exception                    caught, recorded, loop continues
+
+
+HEARTBEATS - the one part that is LIVE TODAY
+--------------------------------------------
+Every run now records cron:last:<name> in the database: when it started, how
+long it took, whether it worked, and the error if not. This happens in the
+single-tenant path too, so it starts recording immediately rather than when
+multi-tenancy lands.
+
+Nothing reads these yet. The monitoring page you asked about comes later. But a
+job that has never recorded anything is the only way to spot one that has
+silently stopped, and the recording has to start before it can be useful.
+
+You can read one by hand now if you want to confirm it is working - the value is
+at key cron:last:hs-expiry-email and similar.
+
+Writing a heartbeat can never fail the job it is watching - that write is caught
+and discarded on error.
+
+
+ONE FILE NOT TOUCHED
+--------------------
+pages/api/cron/deliveries-notify.js has NO default export at all - it only
+exports runDeliveriesNotify, which hs-expiry-email imports and calls. It is a
+module that happens to live in the cron folder rather than a route. Left alone.
+Its work still runs, inside hs-expiry-email, and therefore gets the per-customer
+loop through that.
 
 
 CHECKS I RAN
 ------------
-Not just a compile. I installed ExcelJS, ran the handler body against a
-realistic project record, wrote a real .xlsx and READ IT BACK:
+- esbuild compile on lib/forEachTenant.js and all 22 cron files: 0 failures
+- four structural checks on all 21: imports forEachTenant, handler is a plain
+  function, exactly one default export, and that export registers the file's own
+  name. 0 failures.
+- verified the 21 registered names match the 21 filenames
+- REVERSED the edit on all 21 and compared to how each stood before: 21 clean,
+  0 unexplained
+- ran the loop with the three real response shapes and with a mixed batch where
+  one customer throws, confirming the others still complete
 
-  Variations  V01 and V02 listed, "Total instructed" = 2300, correctly
-              excluding the non-instructed V02 worth 7400
-  Expenses    3 lines, sorted oldest first, TOTAL 5379.75 = 357 + 4210.50
-              + 812.25
-  Income      2 invoices, TOTAL 152711 / Paid 92711 / Due 60000 - and 152711
-              equals grossInvoiced on the record, so the tab and the summary
-              agree by construction
-  Summary     all 21 figures present, money cells carrying the currency format,
-              percentages as percentages, dates as "30 Nov 2026"
 
-Also: esbuild 0 errors, no non-ASCII characters, and no remaining reference to
-lib/xero anywhere except the comment explaining what was removed.
+A LIMIT WORTH KNOWING NOW
+-------------------------
+This loop is sequential. A cron taking 30 seconds for one customer takes 30
+times N for N customers, against a Vercel function timeout. It is fine for one
+customer and fine for a handful. Somewhere around twenty to thirty it stops
+fitting, and the crons will need to fan out - one invocation per customer,
+queued, rather than one invocation doing everyone.
+
+Not a problem to solve today. But it is a real ceiling and it arrives before a
+hundred customers do, so it should not come as a surprise later.
 
 
 WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-1. Open a project with costs and invoices on it. Download the report.
-2. Expenses tab - lines present, total matches Total Costs on the Summary tab.
-3. Income tab - invoices present, total matches Gross Invoiced on the Summary.
-4. Summary tab - AFA, Gross Invoiced, Margin and WIP MUST MATCH what Project
-   Financials shows for that project on screen. That is the whole point of the
-   rewrite, so if any of them differ, tell me which.
-5. Try a project with no costs yet - you should get "No cost lines recorded
-   against this project" rather than a blank tab.
+1. Nothing should look different in the app. The crons are the only files
+   changed and none of them draw anything on screen.
+2. Tomorrow morning, confirm the overnight jobs still did their work: the
+   H&S expiry email, the deliveries notification, the Monday forms digest if it
+   is a Monday, and the CRM email sync stamp on the CRM page.
+3. If you want to prove the heartbeat is recording, the easiest is to wait for
+   hs-expiry-email at 08:00 and then check the CRM or H&S pages behaved as
+   normal - the heartbeat itself has no screen yet.
 
-
-NOTE
-----
-The report reads the dashboard snapshot, which is rebuilt when Project
-Financials is opened and cached for a few hours. So a download taken right after
-a sync may lag the sync until Project Financials is opened once. That is the
-same data the page itself shows, which is the point - but worth knowing so it is
-not mistaken for a fault.
+Remember deep-sync, wip-sync and pipedrive-sync still have no schedule in
+vercel.json, so they will not run. That is unchanged by this package and still
+parked by agreement.

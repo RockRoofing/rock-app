@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { getTokens, saveTokens } from '../../../lib/db'
 import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchProfitAndLoss, fetchAccountCodeMap } from '../../../lib/xero'
@@ -219,7 +220,7 @@ function mergeWindow(existing, incoming, fromDateStr, keyFn) {
   return { merged: [...old, ...recent, ...trulyNew], added: trulyNew.length }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
   const redis = await getClient()
 
@@ -388,3 +389,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default forEachTenant('deep-sync', handler)

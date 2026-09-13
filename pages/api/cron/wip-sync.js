@@ -1,9 +1,10 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { getTokens, saveTokens, getAllProjectSettings, getEffectiveValuationDate, getWipEndDate } from '../../../lib/db'
 import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchBillsByCategory, fetchLabourJournalsByCategory, getInvoicesByCategory } from '../../../lib/xero'
 
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
 
   const redis = await getClient()
@@ -194,3 +195,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default forEachTenant('wip-sync', handler)

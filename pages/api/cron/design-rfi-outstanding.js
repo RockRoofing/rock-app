@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, set } from '../../../lib/db'
 import { allRfiProjectNos, rfiKey, projectRecipients, projectDisplayName, ukDate, outstandingDigestHtml, sendMail } from '../../../lib/designRfiNotify'
 import { getPortalUsers } from '../../../lib/db'
@@ -8,7 +9,7 @@ const LAST_KEY = 'design:rfis-outstanding-last'  // { date, workingDayCount }
 // Runs daily but only ACTS every 3 WORKING days (weekends don't count). For each project
 // with UNRESOLVED RFIs, emails everyone with access a table of the outstanding items.
 // Projects with none are skipped.
-export default async function handler(req, res) {
+async function handler(req, res) {
   const today = ukDate()
   const force = req.query.force === '1'
 
@@ -53,3 +54,5 @@ export default async function handler(req, res) {
   }
   return res.json({ ok: true, today, projectsEmailed, emailsSent })
 }
+
+export default forEachTenant('design-rfi-outstanding', handler)

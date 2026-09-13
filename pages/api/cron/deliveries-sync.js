@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, set, getTokens, saveTokens } from '../../../lib/db'
 import { refreshXeroToken, fetchPurchaseOrders } from '../../../lib/xero'
 
@@ -9,7 +10,7 @@ async function saveDeliveries(v) { await set('ops:deliveries', v) }
 async function getSeenIds() { return (await get('ops:deliveries:seenPoIds')) || [] }
 async function setSeenIds(ids) { await set('ops:deliveries:seenPoIds', ids) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     let tokens = await getTokens()
     if (!tokens) return res.status(200).json({ ok: false, reason: 'not connected' })
@@ -58,3 +59,5 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: String(e) })
   }
 }
+
+export default forEachTenant('deliveries-sync', handler)

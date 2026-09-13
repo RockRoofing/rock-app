@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { get, getTeamMembers, getOpsProjects, getSubmissionIndex } from '../../../lib/db'
 import { loadPreStarts, isPreStartDone } from '../../../lib/preStartDone'
 
@@ -199,7 +200,7 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
   return { ok: true, sent: sent.length, skipped, cms: Object.keys(cmTasks).length, supervisors: Object.keys(supTasks).length }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const force = req.query.force === '1'
     if (!force && new Date().getDay() !== 1) return res.status(200).json({ ok: true, skipped: 'not Monday' })
@@ -210,3 +211,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('forms-weekly-notify', handler)

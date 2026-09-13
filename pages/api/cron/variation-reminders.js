@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { getAllProjectSettings, saveProject, getProject, get } from '../../../lib/db'
 import { isInstructed } from '../../../lib/applications'
 import { createInstructToken, addWorkingDays, projectLabel } from '../../../lib/variationInstruct'
@@ -14,7 +15,7 @@ import { buildVariationPDF } from '../../../lib/variationPdf'
 // people to filter it.
 //
 // ?dry=1 reports what it would send without sending. ?force=1 ignores the wait.
-export default async function handler(req, res) {
+async function handler(req, res) {
   const dry = req.query.dry === '1'
   const force = req.query.force === '1'
 
@@ -121,3 +122,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: e?.message || 'failed', ...out })
   }
 }
+
+export default forEachTenant('variation-reminders', handler)

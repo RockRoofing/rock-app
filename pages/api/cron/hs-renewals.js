@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { runOperativeRenewalReminders, maybeSendRenewalSummary } from '../../../lib/hsRenewalNotify'
 
 // CSCS / Working at Height renewal notifications.
@@ -11,7 +12,7 @@ import { runOperativeRenewalReminders, maybeSendRenewalSummary } from '../../../
 // ?force=1  runs both now, ignoring every gate (testing)
 // ?dryRun=1 reports what the weekly list WOULD do without sending
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const force = req.query.force === '1'
     const dryRun = req.query.dryRun === '1'
@@ -39,3 +40,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('hs-renewals', handler)

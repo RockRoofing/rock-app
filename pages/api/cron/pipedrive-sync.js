@@ -1,7 +1,8 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { saveCachedDeals, saveLastSync, saveFieldMap, getCachedDeals } from '../../../lib/db'
 import { fetchAllDeals, discoverFieldMap } from '../../../lib/pipedrive'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
 
   const isVercelCron = req.headers['x-vercel-cron'] === '1'
@@ -38,3 +39,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default forEachTenant('pipedrive-sync', handler)

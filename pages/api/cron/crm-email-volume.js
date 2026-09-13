@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { refreshEmailVolume } from '../../../lib/crmEmailVolume'
 
 // Recounts outbound external email per mailbox per month.
@@ -11,7 +12,7 @@ import { refreshEmailVolume } from '../../../lib/crmEmailVolume'
 //                the scan part-way, and the months it never reached would look empty.
 export const config = { maxDuration: 300 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     // Capped at 60 rather than 24. Two years was an arbitrary ceiling and it silently
     // clipped a longer request - asking for 37 months quietly gave you 24, which is the
@@ -26,3 +27,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('crm-email-volume', handler)

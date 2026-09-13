@@ -1,9 +1,10 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { maybeSendScheduledReport } from '../../../lib/outstandingInvoicesReport'
 
 // Runs HOURLY. Sends the Outstanding Invoices weekly report only when the
 // configured day-of-week + hour (managed in the app) match the current UK time,
 // and it hasn't already been sent today. ?force=1 sends immediately (testing).
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const force = req.query.force === '1'
     const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
@@ -15,3 +16,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: e.message })
   }
 }
+
+export default forEachTenant('weekly-report', handler)

@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { sendDailyActivityEmails, sendNoActivityEmail } from '../../../lib/crmDailyActivityEmail'
 import { STAGE_LABELS } from '../../../lib/crmFieldSchema'
 
@@ -15,7 +16,7 @@ const SEND_HOUR = 7;
 // ?force=1   send now, whatever the time (testing)
 // ?dryRun=1  report who WOULD get one, and how many activities each, without sending
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const force = req.query.force === '1'
     const dryRun = req.query.dryRun === '1'
@@ -44,3 +45,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('crm-daily-activities', handler)

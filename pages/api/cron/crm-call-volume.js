@@ -1,3 +1,4 @@
+import forEachTenant from '../../../lib/forEachTenant'
 import { refreshCallVolume, fetchRawSample, fetchUnreturnedSample } from '../../../lib/crm8x8'
 
 // Outbound call volume from 8x8 Work, per person per month.
@@ -10,7 +11,7 @@ import { refreshCallVolume, fetchRawSample, fetchUnreturnedSample } from '../../
 //   ?max=50000    cap records scanned
 export const config = { maxDuration: 300 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.query.sample === '1') return res.status(200).json(await fetchRawSample())
     if (req.query.unreturned === '1') return res.status(200).json(await fetchUnreturnedSample())
@@ -22,3 +23,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default forEachTenant('crm-call-volume', handler)
