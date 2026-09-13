@@ -1,131 +1,88 @@
-pkg862 - Per-customer email settings, batch 1. STILL DORMANT.
-=============================================================
+pkg863 - Correction to pkg862. Deploy both together.
+====================================================
 
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
-Every email still comes from exactly the address it does today.
+ONE FILE.  lib/tenantSettings.js  - REPLACES the copy in pkg862.
 
-
-NEW FILE TO CREATE BY HAND IN GITHUB
-------------------------------------
-  lib/tenantSettings.js     <-- DOES NOT EXIST YET
-
-Then replace 8 files (list below).
+If you have NOT yet deployed pkg862: use this file instead of the one in that
+package, and deploy everything at once.
+If you HAVE deployed pkg862: deploy this on top, as soon as convenient.
 
 
-A CHANGE OF RECOMMENDATION FIRST
---------------------------------
-I previously listed RECORD STAMPING as a step - every record carrying whose it
-is, and a check refusing one whose stamp does not match.
+WHAT I GOT WRONG
+----------------
+I shortened the sender fallback chains while consolidating them. The originals
+differ from file to file, and I flattened them into one shape:
 
-I no longer think it is worth building. Its job was to catch a leak that got
-past everything else, and between separate databases, the identity self-check,
-the scoped caches and tenant-bound sessions, the cases it would catch are
-already covered. It would touch every write path in the app and need a migration
-of existing data, to sit behind four other defences. Dropping it unless you
-want it.
+  original 'notify'      NOTIFY || FORMS || resend.dev
+  pkg862                 NOTIFY || NOTIFY || resend.dev        FORMS lost
 
+  original 'commercial'  COMMERCIAL || ACCOUNTS || FORMS || resend.dev
+  pkg862                 COMMERCIAL || NOTIFY || resend.dev    ACCOUNTS, FORMS lost
 
-WHAT THIS PACKAGE FIXES
------------------------
-Thirteen environment variables decided who an email came from, what it replied
-to, and what address the links inside it pointed at. An environment variable has
-ONE value for the whole deployment, so every customer would have sent mail as
-Rock Roofing with links into Rock's portal.
+So with NOTIFY_FROM_EMAIL unset in Vercel and FORMS_FROM_EMAIL set, a variation
+email would have started arriving from onboarding@resend.dev instead of your
+real address:
 
-Worse than embarrassing. A variation instruction or RAMS approval link is a
-token in a URL. Send another company's customer a link on Rock's domain and the
-token resolves against Rock's tenant.
+  correct        : Rock Roofing <notifications@rockroofing.co.uk>
+  pkg862         : Rock Roofing <onboarding@resend.dev>     <- the fault
+  as shipped now : Rock Roofing <notifications@rockroofing.co.uk>
 
-There are 60 of these fallbacks across 42 files. This is the first 8 - the ones
-that actually send to customers and subcontractors.
+Delivered, read, wrong sender, nothing on any screen to say so. Whether it
+actually bit depends on which of those variables are set in your Vercel project,
+which I cannot see.
+
+Found because you asked whether the variation test was really necessary. It was.
 
 
-THE RULE
---------
-When a customer IS in scope, their own setting is used. If they have not got
-one, it THROWS.
+THE LESSON, written into the file
+---------------------------------
+Consolidating a rule is only safe if the consolidated version is the SAME rule.
+Four near-identical chains are not one chain. The comment in the file now says
+so, and lists which files each chain came from, so the next person to tidy them
+can see why they are not tidy.
 
-It does NOT fall back to Rock's value. That is the opposite of how the code read
-before, where a missing setting quietly became notifications@rockroofing.co.uk.
-
-A failed notification is a support call. A notification sent from the wrong
-company is a breach, and nobody finds out from a log.
-
-When no customer is in scope - every request today - it reads the environment
-variable exactly as before. Proven:
-
-  single tenant today
-    from : Rock Roofing <onboarding@resend.dev>          unchanged
-    link : https://app.rockroofing.co.uk                 unchanged
-
-  Rock, resolved
-    from : Rock Roofing <notifications@constructionliberation.com>
-    link : https://app.rockroofing.co.uk
-
-  Wilson, resolved
-    from : Wilson Construction <notifications@constructionliberation.com>
-    link : https://wilson.constructionliberation.com
-    -> reads as Wilson to the subcontractor, links to Wilson's portal
-
-  a customer set up incompletely
-    THROWS: Customer "broken" has no senderName configured. Refusing to fall
-    back to another customer's value.
+This is the project's dominant fault class arriving from the other direction:
+usually it is one rule written twice and left to diverge. Here it was four
+rules merged into one that matched none of them.
 
 
-ON SENDING DOMAINS - the decision this encodes
-----------------------------------------------
-One verified sending domain, with a per-customer sender NAME and the customer's
-own address as reply-to. To the subcontractor it reads as their client's email;
-hitting reply writes to them, not to you.
+THE FIX
+-------
+Each chain now mirrors its original exactly, env var for env var and default for
+default, with the source file named against each:
 
-The alternative - a subdomain per customer - means a DNS and verification job
-each time, which is the thing you decided to avoid, and spreads sending
-reputation across many new domains. Spam filters trust one domain with a long
-clean history far more than fifty new ones.
-
-
-FILES (9)
----------
-lib/tenantSettings.js                NEW
-lib/outstandingInvoicesReport.js     weekly overdue report sender
-pages/api/variation-send.js          variation emails to customers
-pages/api/application-send.js        applications to customers
-pages/api/pre-start-send.js          pre-start emails
-pages/api/pre-start-notify-send.js   pre-start notifications
-pages/api/wip-lock.js                WIP complete notification
-pages/api/report-problem.js          problem reports to you
-pages/api/ops-users.js               operative invitations + Site App link
+  notify      NOTIFY_FROM_EMAIL, FORMS_FROM_EMAIL
+              (variation-send.js, wip-lock.js)
+  forms       FORMS_FROM_EMAIL
+              (pre-start-send.js, outstandingInvoicesReport.js)
+  accounts    ACCOUNTS_FROM_EMAIL
+              (chase-email-send.js)
+  commercial  COMMERCIAL_FROM_EMAIL, ACCOUNTS_FROM_EMAIL, FORMS_FROM_EMAIL
+              (application-send.js)
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 9: 0 errors
-- ran the resolver across four scenarios, output above, including the
-  single-tenant path to confirm today is unchanged
-- each replacement asserted on an exact unique string and written only if it
-  matched once. The expressions differ between files - some try three env vars,
-  some two - so each was handled explicitly rather than by a blanket regex. A
-  blanket regex over 42 files is how one wrong sender ends up somewhere quietly.
+Not a spot check. I ran the original expressions and the new ones against ALL 16
+combinations of those four environment variables being set or unset, for all
+four sender kinds:
+
+  combinations checked: 64   mismatches: 0
+
+So whatever your Vercel project actually has set, the sender is now identical to
+what it was before pkg862.
+
+esbuild compile: 0 errors.
 
 
 WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-The only risk here is an email going out from the wrong address or not at all.
+Now the variation test does mean something, so it is worth doing once.
 
-1. Send a variation to yourself. Check it arrives and the FROM address is
-   exactly what it was before.
-2. Send an application to yourself. Same check - that one uses the commercial
-   sender, which is a different address.
-3. Press Report a Problem. Confirm it reaches you.
-4. Lock a WIP month, if convenient, and confirm the notification arrives.
-5. Pre-start email to yourself if you can raise one.
+1. Send a variation to yourself. Check the FROM address is your real address and
+   NOT onboarding@resend.dev.
+2. Send an application to yourself. Different sender - check that one too.
+3. Report a Problem - confirm it reaches you.
 
-If any email fails to send, tell me which - that would mean I have mapped one of
-them to the wrong sender kind.
-
-
-STILL TO DO
------------
-34 more fallback sites across the remaining files. Next package or two. Nothing
-in those reaches a customer directly - they are internal notifications, document
-headers and logo URLs - which is why these eight went first.
+If any of those shows onboarding@resend.dev, tell me, because it would mean none
+of the relevant variables are set in Vercel and that is worth knowing separately.
