@@ -1,125 +1,124 @@
-pkg858 - Crons run once per customer. STILL DORMANT.
-====================================================
+pkg859 - The four module-scope caches. STILL DORMANT.
+=====================================================
 
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING,
-except that crons now record a heartbeat. See below - that part is live today.
+WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
 
 NEW FILE TO CREATE BY HAND IN GITHUB
 ------------------------------------
-  lib/forEachTenant.js      <-- DOES NOT EXIST YET
+  lib/scopedCache.js        <-- DOES NOT EXIST YET
 
-Then replace the 21 files in pages/api/cron/.
-
-
-WHY CRONS CANNOT USE withTenant
--------------------------------
-withTenant works out the customer from the web address the request came to. A
-cron has no meaningful address - Vercel calls it on the deployment URL. Wrapping
-one would bind it to whichever host it was called on, which in practice means
-every cron runs as the first customer forever and never runs for anyone else.
-Silently. The sync would stop for everybody except one company and nothing would
-say so.
-
-So a cron loops instead:
-
-    export default forEachTenant('wip-sync', handler)
+Then replace:
+  lib/db.js
+  lib/msGraph.js
+  lib/crm8x8.js
+  lib/pipedrive.js
 
 
-EACH ITERATION IS ISOLATED
---------------------------
-One customer's expired Xero token must not stop the job for everyone else. Every
-iteration is caught on its own, recorded, and the loop continues. Demonstrated:
+WHAT THIS FIXES, AND WHY NO WRAPPER COULD
+-----------------------------------------
+A serverless function stays warm and serves many requests. Anything cached at
+module scope therefore outlives the request that put it there. withTenant scopes
+the REQUEST; these four live outside it entirely, so nothing in pkg854-858
+touched them.
 
-    tenant rock    ok
-    tenant wilson  FAILED - Xero token expired
-    tenant testco  ok
-    tenants: 3   succeeded: 2   failed: 1
+  lib/msGraph.js    let cachedToken = null    Microsoft Graph access token
+  lib/crm8x8.js     let cachedToken = null    8x8 access token
+  lib/pipedrive.js  let _pipelineId = null    Pipedrive pipeline id
+  lib/db.js         let store = {}            in-memory data fallback
 
-The response returns 200 even with failures inside, deliberately. The JOB ran.
-Returning 500 because one customer out of forty failed would make Vercel report
-the whole cron as broken and hide the thirty-nine that worked.
+Once each customer has their own Microsoft app, one company's Graph token cached
+at module scope gets handed to the next request that arrives - and used to read
+another company's mailboxes. Nothing errors. It simply works, on the wrong data.
 
+Demonstrated, running the old and new code side by side:
 
-THE RESPONSE PROBLEM, and why it was the risky part
----------------------------------------------------
-Every cron handler calls res.json() itself. In a loop that would try to send the
-response once per customer, and every call after the first throws "headers
-already sent" - which would break all 21 crons at once.
+  OLD, a single module variable
+    rock caches its token
+    wilson reads the cached token -> ROCK-TOKEN          LEAKED
 
-So each iteration gets a CAPTURING response that records what the handler tried
-to send, and one combined response goes out at the end.
+  NEW, scoped cache
+    rock caches its token
+    wilson reads the cached token -> nothing             ok
+    rock still has its own        -> ROCK-TOKEN          ok
+    slots held: 2
 
-Tested against the three response shapes that actually occur in these files:
-  res.json({...})                       captured, ok
-  res.status(401).json({ error: ... })  captured, recorded as a failure with the
-                                        handler's own message
-  a thrown exception                    caught, recorded, loop continues
+  data store
+    rock writes project:J244
+    wilson reads project:J244     -> nothing             ok
 
-
-HEARTBEATS - the one part that is LIVE TODAY
---------------------------------------------
-Every run now records cron:last:<name> in the database: when it started, how
-long it took, whether it worked, and the error if not. This happens in the
-single-tenant path too, so it starts recording immediately rather than when
-multi-tenancy lands.
-
-Nothing reads these yet. The monitoring page you asked about comes later. But a
-job that has never recorded anything is the only way to spot one that has
-silently stopped, and the recording has to start before it can be useful.
-
-You can read one by hand now if you want to confirm it is working - the value is
-at key cron:last:hs-expiry-email and similar.
-
-Writing a heartbeat can never fail the job it is watching - that write is caught
-and discarded on error.
+  single tenant, as the app runs today
+    no tenant in scope, reads back -> SINGLE             ok
+    store works with no tenant                           ok
 
 
-ONE FILE NOT TOUCHED
---------------------
-pages/api/cron/deliveries-notify.js has NO default export at all - it only
-exports runDeliveriesNotify, which hs-expiry-email imports and calls. It is a
-module that happens to live in the cron folder rather than a route. Left alone.
-Its work still runs, inside hs-expiry-email, and therefore gets the per-customer
-loop through that.
+THE FIX
+-------
+lib/scopedCache.js provides a cache keyed by whichever customer is in scope.
+Same code, one slot each.
+
+Built once rather than written into four files, because the same rule written
+four times and left to diverge is the fault class that has produced nearly every
+wrong number on this project.
+
+While single-tenant, no customer is in scope and everything uses one slot called
+'single'. Behaviour today is exactly what it was.
+
+
+WHAT THIS DOES NOT FIX - important
+----------------------------------
+The CREDENTIALS are still global. MS_CLIENT_SECRET, the 8x8 username and
+password, and the rest come from environment variables - one set for the whole
+deployment.
+
+Keying the cache stops one customer being handed another's cached token. It does
+NOT give each customer their own credentials. That is the separate job of moving
+13 environment variables into per-customer settings, and it has to be done
+before a second customer connects Microsoft, 8x8 or Resend. Listed here so it is
+not mistaken for finished.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on lib/forEachTenant.js and all 22 cron files: 0 failures
-- four structural checks on all 21: imports forEachTenant, handler is a plain
-  function, exactly one default export, and that export registers the file's own
-  name. 0 failures.
-- verified the 21 registered names match the 21 filenames
-- REVERSED the edit on all 21 and compared to how each stood before: 21 clean,
-  0 unexplained
-- ran the loop with the three real response shapes and with a mixed batch where
-  one customer throws, confirming the others still complete
+- esbuild compile on all 5 files: 0 errors
+- confirmed no reference to cachedToken or _pipelineId survives anywhere
+- confirmed no bare 'store' identifier survives in lib/db.js: 20 uses of
+  store[...] and 7 of Object.keys(store) all converted
+- ran the old and new behaviour side by side, output above, including the
+  single-tenant path to confirm today is unchanged
 
 
-A LIMIT WORTH KNOWING NOW
--------------------------
-This loop is sequential. A cron taking 30 seconds for one customer takes 30
-times N for N customers, against a Vercel function timeout. It is fine for one
-customer and fine for a handful. Somewhere around twenty to thirty it stops
-fitting, and the crons will need to fan out - one invocation per customer,
-queued, rather than one invocation doing everyone.
-
-Not a problem to solve today. But it is a real ceiling and it arrives before a
-hundred customers do, so it should not come as a surprise later.
-
-
-WHAT TO CHECK AFTER DEPLOYING
+WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Nothing should look different in the app. The crons are the only files
-   changed and none of them draw anything on screen.
-2. Tomorrow morning, confirm the overnight jobs still did their work: the
-   H&S expiry email, the deliveries notification, the Monday forms digest if it
-   is a Monday, and the CRM email sync stamp on the CRM page.
-3. If you want to prove the heartbeat is recording, the easiest is to wait for
-   hs-expiry-email at 08:00 and then check the CRM or H&S pages behaved as
-   normal - the heartbeat itself has no screen yet.
+These four files sit behind several things, so a short spread:
 
-Remember deep-sync, wip-sync and pipedrive-sync still have no schedule in
-vercel.json, so they will not run. That is unchanged by this package and still
-parked by agreement.
+1. CRM - the page loads and deals show. (pipedrive.js is imported by the CRM
+   path even though Pipedrive is import-only now.)
+2. CRM email volume for Edita, if it is showing. (msGraph.js)
+3. Any page at all - lib/db.js is behind everything, so if the portal loads,
+   the store change is fine.
+4. Bookkeeping, Project Financials, Retention - a quick look that the numbers
+   are unchanged.
+
+The db.js change only affects the path taken when there are NO Redis
+credentials, which never happens in production. It is the principle that
+mattered, not the exposure.
+
+
+NEXT - and this one needs you
+-----------------------------
+Create the control database and register Rock. About ten minutes:
+
+  1. Create a new Upstash Redis database, same region as Rock's existing one.
+     Call it something like "constructionliberation-control".
+  2. Add two environment variables in Vercel:
+        CONTROL_REDIS_URL     the new database's REST URL
+        CONTROL_REDIS_TOKEN   its REST token
+     DO NOT REDEPLOY YET. Adding them switches tenant resolution ON, and Rock is
+     not registered, so every request would 404 until step 3 is done.
+  3. Tell me when the database exists and I will send the exact calls to stamp
+     Rock's identity and register it - in the right order, identity first, so
+     nothing is ever pointed at a database that cannot prove who it is.
+
+If you would rather not do the Upstash step yet, say so - there is other work I
+can do first.
