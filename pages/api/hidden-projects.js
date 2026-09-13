@@ -3,8 +3,9 @@
 // single KV key so every user sees the same set — any logged-in user can edit it.
 // Default is VISIBLE: a project only disappears if its id is in this list.
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+export default withTenant(async function handler(req, res) {
   try {
     const redis = await getClient()
     const KEY = 'config:hidden-projects'
@@ -26,4 +27,4 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ error: e.message })
   }
-}
+})

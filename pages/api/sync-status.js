@@ -2,8 +2,9 @@
 // and Commercial pages can show a "last synced" stamp. Read-only, no auth-sensitive
 // data (just ISO timestamps).
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+export default withTenant(async function handler(req, res) {
   try {
     const redis = await getClient()
     const [invoices, wages, bills, benchmark] = await Promise.all([
@@ -16,4 +17,4 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
-}
+})

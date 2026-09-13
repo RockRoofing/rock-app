@@ -1,4 +1,5 @@
 import { getStaff, saveStaff, getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 async function clearCache() {
   try {
@@ -7,7 +8,7 @@ async function clearCache() {
   } catch {}
 }
 
-export default async function handler(req, res) {
+export default withTenant(async function handler(req, res) {
   if (req.method === 'GET') {
     const staff = await getStaff()
     return res.json(staff)
@@ -24,4 +25,4 @@ export default async function handler(req, res) {
   }
 
   res.status(405).end()
-}
+})
