@@ -1,65 +1,139 @@
-pkg860 - Separate the switch from the credentials
-=================================================
+pkg861 - Authentication becomes tenant-scoped. STILL DORMANT.
+=============================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
+Nobody is signed out. TENANCY_ENABLED is not set, so no check runs yet.
 
-DEPLOY THIS BEFORE CREATING THE UPSTASH DATABASE.
+READ THE FIRST SECTION. This is the most serious thing found so far.
 
 
 NEW FILES TO CREATE BY HAND
 ---------------------------
-None. All four already exist.
+None. All six already exist.
 
   lib/tenants.js
+  lib/portalAuth.js
   lib/withTenant.js
-  lib/forEachTenant.js
-  pages/api/admin/tenant-setup.js
+  lib/variationInstruct.js
+  lib/inquery.js
+  pages/api/portal-auth.js
 
 
-WHY
----
-As pkg854 stood, adding CONTROL_REDIS_URL and CONTROL_REDIS_TOKEN would switch
-tenant resolution ON at the next deploy. But Rock would not be registered yet -
-it cannot be, because registering it requires the app to be able to reach the
-control database, which requires those variables to be live.
+THE HOLE
+--------
+The session cookie carried NO CUSTOMER and was signed with one global secret:
 
-So there was a window where every request 404s until the registration call
-lands. A live outage for no reason, and worse, it forces the registration to be
-done in a hurry.
+    { id, email, role, name, exp }
 
-Now there are two separate things:
+So once TENANCY_ENABLED is on:
 
-  CONTROL_REDIS_URL / CONTROL_REDIS_TOKEN
-      the control database CREDENTIALS. Setting these lets the registry be read
-      and written. Changes NOTHING about how requests are served.
+  1. sign in at app.rockroofing.co.uk, get a cookie
+  2. send that same cookie to wilson.constructionliberation.com
+  3. the signature verifies - same secret
+  4. requireRole reads role: 'admin' - passes
+  5. getClient() resolves Wilson from the host and opens WILSON'S database
+  6. Wilson's financials render, to an authenticated Rock session
 
-  TENANCY_ENABLED=1
-      the SWITCH. Only with this set does withTenant start resolving customers
-      and refusing unknown addresses.
+No forgery. No stolen password. Changing the hostname is the entire attack.
 
-So you can set the credentials, register Rock, VERIFY it resolves correctly, and
-only then throw the switch. No window, and nothing turns on until you have seen
-it working.
+And every guardrail built so far behaves CORRECTLY throughout - the tenant
+resolved right, the self-check passed, the database was the correct one. Data
+access was tenant-scoped. AUTHENTICATION never was. Closing this was the gap
+between "the walls are up" and "the front door is locked".
 
-/api/admin/tenant-setup now reports both, so you can see exactly which state you
-are in.
+Demonstrated, old code and new side by side:
+
+  OLD  Rock cookie at wilson's address
+       verified as james@rockroofing.co.uk role=admin        BYPASS
+
+  NEW  Rock cookie at rock's address                         allowed   ok
+       Rock cookie at wilson's address                       rejected  ok
+       Rock cookie at the platform address                   rejected  ok
+       platform cookie at rock's address                     rejected  ok
+       session issued before this existed, tenancy on        rejected  ok
+       single tenant today, no customer resolved             allowed   ok
+
+
+THE FIX
+-------
+The session payload gains `t`, the customer it was issued for. withTenant checks
+it against the customer resolved from the address, in ONE place covering all 169
+wrapped routes.
+
+Only enforced where a session is actually present, so the login page and the
+signed public links are unaffected.
+
+Middleware is NOT the place for this - it runs at the edge and cannot reach the
+registry to learn which customer a hostname belongs to. It keeps doing what it
+does: signature and expiry only.
+
+
+THE PLATFORM ADDRESS - your point about your own admin domain
+-------------------------------------------------------------
+Built in now rather than retrofitted, because it changes the session format and
+doing it later would mean a second forced sign-out.
+
+  PLATFORM_HOSTS        comma-separated. Your own administration address, e.g.
+                        admin.constructionliberation.com. Unset today, so
+                        nothing changes.
+
+That address belongs to no customer, so it must not 404 on resolution - and a
+session issued there carries the reserved id '~platform', so it cannot be used
+against any customer's site, and no customer's session can be used against it.
+Both directions proven above.
+
+The platform ADMIN PAGES do not exist yet. This is the door and the lock; the
+room comes later.
+
+
+THE TWO SIGNED PUBLIC LINKS
+---------------------------
+Variation instruction and In Query review had the same flaw for the same reason:
+one signing secret across every customer, so a link issued by one verified on
+another's site and then looked its project id up in the wrong database.
+
+Both now carry the customer and check it.
+
+RAMS approval links were ALREADY SAFE and are untouched - those tokens are
+stored in the database rather than signed, so a lookup goes through getClient()
+and simply cannot find another customer's token.
+
+
+TWO CONSEQUENCES FOR THE DAY YOU SWITCH TENANCY ON
+--------------------------------------------------
+1. EVERYONE SIGNS IN AGAIN, ONCE. Existing cookies carry no customer and are
+   rejected rather than assumed to be Rock. Assuming would leave the bypass open
+   for the seven days it takes them to expire. Pick a quiet moment and warn the
+   team.
+
+2. VARIATION INSTRUCTION LINKS ALREADY SENT STOP WORKING. They are 120-day
+   links, so some will be live. A customer clicking one gets an invalid-link
+   page. Resending the variation issues a fresh one. In Query review links are
+   60-day and the same applies.
+
+Neither happens today. Both happen the moment TENANCY_ENABLED=1 lands.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 4: 0 errors
-- confirmed tenant-setup still gates on registryConfigured (the credentials),
-  not on the switch - it has to work before tenancy is enabled, or you cannot
-  register the first customer
-- confirmed withTenant and forEachTenant both gate on tenancyEnabled
+- esbuild compile on all 11 affected files: 0 errors
+- ran the old and new token logic side by side, six scenarios, output above
+- confirmed all four createSessionToken call sites in portal-auth.js are
+  stamped. My first script matched on whole lines and missed two because of
+  indentation - it asserted and wrote nothing rather than half-applying. Redone
+  by balancing the call's parentheses instead, which cannot miss on whitespace.
+- confirmed middleware still imports nothing from portalAuth, so the edge
+  runtime is unaffected
+- 28 routes call verifySessionToken directly without a customer. That is correct:
+  they are all inside routes wrapped by withTenant, which does the tenant check
+  once, centrally, before the handler runs.
 
 
-AFTER DEPLOYING
----------------
-Visit /api/admin/tenant-setup as admin. You should see:
-
-  controlDatabaseConfigured: false
-  tenancyEnabled: false
-  identityOfCurrentDatabase: null
-
-Both false is correct. Then follow the Upstash steps.
+WHAT TO CLICK AFTER DEPLOYING
+-----------------------------
+1. Sign out and sign back in. Confirm it works and you stay signed in.
+2. Someone else signs in normally - no one should be signed out by this.
+3. Send a variation with an instruction link to yourself and click it. It should
+   still work.
+4. The Site App on your phone - still signed in.
+5. Password reset for a test user, if convenient.

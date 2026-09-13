@@ -1,6 +1,7 @@
 import { getPortalUsers, savePortalUsers } from '../../lib/db'
 import { getExternalUsers, saveExternalUsers, findExternalByEmail, verifyExternalPassword, stripExternal } from '../../lib/designUsers'
 import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE, createResetToken, verifyResetToken } from '../../lib/portalAuth'
+import { currentTenantId } from '../../lib/tenantContext'
 import { ROLES, normRole } from '../../lib/roles'
 import withTenant from '../../lib/withTenant'
 
@@ -166,14 +167,14 @@ async function handler(req, res) {
       const users = await getPortalUsers()
       const user = users.find(u => u.email === email && u.active !== false)
       if (user && verifyPassword(body.password, user.passwordHash)) {
-        const token = createSessionToken(user)
+        const token = createSessionToken(user, currentTenantId())
         setSessionCookie(res, token)
         return res.json({ ok: true, user: strip(user), mustResetPassword: !!user.mustResetPassword })
       }
       // Not an internal user - try external customer/design-team users.
       const ext = await findExternalByEmail(email)
       if (ext && verifyExternalPassword(ext, body.password)) {
-        const token = createSessionToken({ id: ext.id, email: ext.email, role: 'external', name: ext.name })
+        const token = createSessionToken({ id: ext.id, email: ext.email, role: 'external', name: ext.name }, currentTenantId())
         setSessionCookie(res, token)
         return res.json({ ok: true, user: stripExternal(ext), mustResetPassword: !!ext.mustResetPassword })
       }
@@ -247,7 +248,7 @@ async function handler(req, res) {
         ext[i].passwordHash = hashPassword(body.password)
         ext[i].mustResetPassword = false
         await saveExternalUsers(ext)
-        setSessionCookie(res, createSessionToken({ id: ext[i].id, email: ext[i].email, role: 'external', name: ext[i].name }))
+        setSessionCookie(res, createSessionToken({ id: ext[i].id, email: ext[i].email, role: 'external', name: ext[i].name }, currentTenantId()))
         return res.json({ ok: true })
       }
       const users = await getPortalUsers()
@@ -257,7 +258,7 @@ async function handler(req, res) {
       users[idx].mustResetPassword = false
       await savePortalUsers(users)
       // Refresh own session if changing own password
-      if (targetId === me.id) setSessionCookie(res, createSessionToken(users[idx]))
+      if (targetId === me.id) setSessionCookie(res, createSessionToken(users[idx], currentTenantId()))
       return res.json({ ok: true })
     }
 
