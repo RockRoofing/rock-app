@@ -1,92 +1,108 @@
-pkg856 - Wrap the subfolder API routes. STILL DORMANT.
-======================================================
+pkg857 - Project report download: rewritten
+===========================================
 
-WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
+ONE FILE.  pages/api/project/[id]/report.js
 
-Still switched off - CONTROL_REDIS_URL is not set in Vercel, so every wrapper
-calls its handler straight through.
+Folder uses literal square brackets. No new files to create by hand.
 
-
-REQUIRES pkg854 (lib/withTenant.js) AND pkg855.
-
-
-NEW FILES TO CREATE BY HAND
----------------------------
-None. All 17 already exist.
-
-Folder names use literal square brackets: pages/api/project/[id]/
+THIS ONE DOES CHANGE WHAT YOU SEE. The report currently downloads with two
+empty tabs and some wrong summary figures. It will now be populated and correct.
 
 
-FILES (17)
-----------
-pages/api/admin/variations-instructed-audit.js
-pages/api/project/[id].js
-pages/api/project/[id]/comment.js
-pages/api/project/[id]/cost-comments.js
-pages/api/project/[id]/report.js
-pages/api/project/[id]/settings.js
-pages/api/project/[id]/wip-adjustments.js
-pages/api/project/[id]/wip-margin.js
-pages/api/value-changes/index.js
-pages/api/xero/backfill-costs.js
-pages/api/xero/backfill-labour.js
-pages/api/xero/callback.js
-pages/api/xero/debug-projects.js
-pages/api/xero/setup.js
-pages/api/xero/status.js
-pages/api/xero/sync.js
-pages/api/xero/test.js
-
-Same three-line change as pkg855. Nothing inside any handler moved.
+IT WAS NOT THE DEPLOY
+---------------------
+Checked first. The only change pkg856 made to this file was the withTenant
+wrapper, and that wrapper is dormant. This has been broken for a long time -
+almost certainly since the app moved off Xero Projects, which is why you have
+never had a reason to use it.
 
 
-STILL NOT WRAPPED, on purpose
------------------------------
-pages/api/health-check.js       a liveness probe must answer even when tenant
-                                resolution is broken
-pages/api/admin/tenant-setup.js must work before a customer exists in the
-                                registry, or you cannot stamp Rock's identity
-pages/api/cron/*  (22 files)    a cron has no meaningful web address. Wrapping
-                                them would bind every one to whichever host
-                                Vercel called it on. They get a loop over
-                                customers instead - pkg857.
+FOUR FAULTS, COMPOUNDING
+------------------------
+1. It imported getProjectExpenses and getProjectInvoices from lib/xero.js.
+   NEITHER IS EXPORTED FROM THERE. Only getXeroProjects is. Both calls threw on
+   the first line.
 
-After this, every API route in the application is accounted for: 169 wrapped,
-22 crons pending their own treatment, 2 deliberately exempt.
+2. Both sat inside `try { } catch (e) {}` with an EMPTY catch. So the throw was
+   swallowed, costs and invoices stayed as empty arrays, the sheets were built
+   with headers and a zero total, and the file downloaded looking completely
+   normal. A silent catch turned a broken import into a plausible report. This
+   is the same failure shape as everything else that has gone wrong on this
+   project: no error, no alarm, just a wrong answer that looks right.
+
+3. It read the Xero PROJECTS api (/projects.xro/1.0/projects). Rock has never
+   used Xero Projects - the app works from TRACKING CATEGORIES, via
+   getProjectsFromCategories, in 18 other files. So the project lookup returned
+   nothing, jobNo came out as an empty string, and even a working invoice
+   lookup would have been searching for a blank job number.
+   report.js was the LAST FILE IN THE CODEBASE still on that path.
+
+4. Labour Spend was hardcoded to 0 and Materials Spend was set to ALL costs. So
+   the summary was wrong as well, not only the two empty tabs.
 
 
-ONE THING TO NOTE ABOUT xero/callback.js
-----------------------------------------
-That is where Xero sends the user back after authorising. Wrapped, it resolves
-the customer from the address it was called on, which is right - a customer
-connecting their own Xero must land on their own subdomain. Worth remembering
-when the first outside customer connects Xero: the redirect URI registered with
-Xero has to match the address they came from, not Rock's. That is configuration,
-not code, but it will bite if nobody is expecting it.
+WHAT IT DOES NOW
+----------------
+It reads the SAME RECORD Project Financials displays and formats it. It does not
+recompute AFA, margin, WIP, costs or invoiced.
+
+That is deliberate. A second implementation of a rule is how this project has
+produced nearly every wrong number it has ever had - the same rule written twice
+and left to diverge. The report cannot disagree with the screen, because it is
+reading what the screen read.
+
+That record also carries the cost and invoice LINES, so Expenses and Income come
+from the same single read. NO XERO CALL AT ALL, which makes it faster and
+removes the token refresh that used to be the first thing able to fail.
+
+Also changed:
+  - Variations use the STORED variation number where there is one, not the row
+    position. Numbering by position is how a V03 quietly becomes a V02.
+  - Variations read through projectVariations(), the single rule for which of
+    the two possible variation records wins.
+  - Dates written as "30 Nov 2026", not 30/11/2026. Unambiguous in any market,
+    which matters for the same reason the cash flow dates did.
+  - Expenses and Income sorted oldest first.
+  - Income splits Total, Paid and Due.
+  - If the data has not been built, it returns a clear message instead of an
+    empty workbook.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 18 subfolder routes: 0 failures
-- four structural checks on all 17: correct import depth for the folder level,
-  handler is a plain function, exactly one default export, that export is the
-  wrapped one. 0 failures.
-- import depth verified per folder: 11 files at three levels up, 6 files at four
-  levels up (the ones inside project/[id]/). A wrong depth compiles here and
-  fails at build, so it was checked explicitly rather than assumed.
-- reversed the wrapper on all 17 and compared with how each stood beforehand.
-  9 reverse exactly to the original file, 8 to the version pkg843-852 produced,
-  0 unexplained.
+Not just a compile. I installed ExcelJS, ran the handler body against a
+realistic project record, wrote a real .xlsx and READ IT BACK:
+
+  Variations  V01 and V02 listed, "Total instructed" = 2300, correctly
+              excluding the non-instructed V02 worth 7400
+  Expenses    3 lines, sorted oldest first, TOTAL 5379.75 = 357 + 4210.50
+              + 812.25
+  Income      2 invoices, TOTAL 152711 / Paid 92711 / Due 60000 - and 152711
+              equals grossInvoiced on the record, so the tab and the summary
+              agree by construction
+  Summary     all 21 figures present, money cells carrying the currency format,
+              percentages as percentages, dates as "30 Nov 2026"
+
+Also: esbuild 0 errors, no non-ASCII characters, and no remaining reference to
+lib/xero anywhere except the comment explaining what was removed.
 
 
-WHAT TO CLICK AFTER DEPLOYING
+WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-1. Open a project from Project Financials - costs, invoiced, AFA.
-2. On that project: add a comment, change a setting, add and delete a WIP
-   adjustment. Those are four separate routes in this package.
-3. Download a project report.
-4. Admin > Xero - the connection status still shows as connected.
-5. CRM - a value change still records.
+1. Open a project with costs and invoices on it. Download the report.
+2. Expenses tab - lines present, total matches Total Costs on the Summary tab.
+3. Income tab - invoices present, total matches Gross Invoiced on the Summary.
+4. Summary tab - AFA, Gross Invoiced, Margin and WIP MUST MATCH what Project
+   Financials shows for that project on screen. That is the whole point of the
+   rewrite, so if any of them differ, tell me which.
+5. Try a project with no costs yet - you should get "No cost lines recorded
+   against this project" rather than a blank tab.
 
-Do NOT press Backfill Costs or Backfill Labour. They are in the package but do
-not need running.
+
+NOTE
+----
+The report reads the dashboard snapshot, which is rebuilt when Project
+Financials is opened and cached for a few hours. So a download taken right after
+a sync may lag the sync until Project Financials is opened once. That is the
+same data the page itself shows, which is the point - but worth knowing so it is
+not mistaken for a fault.
