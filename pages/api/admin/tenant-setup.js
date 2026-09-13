@@ -1,6 +1,6 @@
 import { requireRole } from '../../../lib/portalAuth'
 import { getClient } from '../../../lib/db'
-import { saveTenant, tenantForHost, allTenants, registryConfigured } from '../../../lib/tenants'
+import { saveTenant, tenantForHost, allTenants, registryConfigured, tenancyEnabled } from '../../../lib/tenants'
 
 // TENANT SETUP - admin only, and deliberately manual for now.
 //
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     }
     return res.json({
       controlDatabaseConfigured: registryConfigured(),
+      tenancyEnabled: tenancyEnabled(),
       identityOfCurrentDatabase: identity,
       registeredTenants: registered,
       resolvedForThisHost: registryConfigured()

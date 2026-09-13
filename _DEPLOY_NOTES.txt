@@ -1,124 +1,65 @@
-pkg859 - The four module-scope caches. STILL DORMANT.
-=====================================================
+pkg860 - Separate the switch from the credentials
+=================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-
-NEW FILE TO CREATE BY HAND IN GITHUB
-------------------------------------
-  lib/scopedCache.js        <-- DOES NOT EXIST YET
-
-Then replace:
-  lib/db.js
-  lib/msGraph.js
-  lib/crm8x8.js
-  lib/pipedrive.js
+DEPLOY THIS BEFORE CREATING THE UPSTASH DATABASE.
 
 
-WHAT THIS FIXES, AND WHY NO WRAPPER COULD
------------------------------------------
-A serverless function stays warm and serves many requests. Anything cached at
-module scope therefore outlives the request that put it there. withTenant scopes
-the REQUEST; these four live outside it entirely, so nothing in pkg854-858
-touched them.
+NEW FILES TO CREATE BY HAND
+---------------------------
+None. All four already exist.
 
-  lib/msGraph.js    let cachedToken = null    Microsoft Graph access token
-  lib/crm8x8.js     let cachedToken = null    8x8 access token
-  lib/pipedrive.js  let _pipelineId = null    Pipedrive pipeline id
-  lib/db.js         let store = {}            in-memory data fallback
-
-Once each customer has their own Microsoft app, one company's Graph token cached
-at module scope gets handed to the next request that arrives - and used to read
-another company's mailboxes. Nothing errors. It simply works, on the wrong data.
-
-Demonstrated, running the old and new code side by side:
-
-  OLD, a single module variable
-    rock caches its token
-    wilson reads the cached token -> ROCK-TOKEN          LEAKED
-
-  NEW, scoped cache
-    rock caches its token
-    wilson reads the cached token -> nothing             ok
-    rock still has its own        -> ROCK-TOKEN          ok
-    slots held: 2
-
-  data store
-    rock writes project:J244
-    wilson reads project:J244     -> nothing             ok
-
-  single tenant, as the app runs today
-    no tenant in scope, reads back -> SINGLE             ok
-    store works with no tenant                           ok
+  lib/tenants.js
+  lib/withTenant.js
+  lib/forEachTenant.js
+  pages/api/admin/tenant-setup.js
 
 
-THE FIX
--------
-lib/scopedCache.js provides a cache keyed by whichever customer is in scope.
-Same code, one slot each.
+WHY
+---
+As pkg854 stood, adding CONTROL_REDIS_URL and CONTROL_REDIS_TOKEN would switch
+tenant resolution ON at the next deploy. But Rock would not be registered yet -
+it cannot be, because registering it requires the app to be able to reach the
+control database, which requires those variables to be live.
 
-Built once rather than written into four files, because the same rule written
-four times and left to diverge is the fault class that has produced nearly every
-wrong number on this project.
+So there was a window where every request 404s until the registration call
+lands. A live outage for no reason, and worse, it forces the registration to be
+done in a hurry.
 
-While single-tenant, no customer is in scope and everything uses one slot called
-'single'. Behaviour today is exactly what it was.
+Now there are two separate things:
 
+  CONTROL_REDIS_URL / CONTROL_REDIS_TOKEN
+      the control database CREDENTIALS. Setting these lets the registry be read
+      and written. Changes NOTHING about how requests are served.
 
-WHAT THIS DOES NOT FIX - important
-----------------------------------
-The CREDENTIALS are still global. MS_CLIENT_SECRET, the 8x8 username and
-password, and the rest come from environment variables - one set for the whole
-deployment.
+  TENANCY_ENABLED=1
+      the SWITCH. Only with this set does withTenant start resolving customers
+      and refusing unknown addresses.
 
-Keying the cache stops one customer being handed another's cached token. It does
-NOT give each customer their own credentials. That is the separate job of moving
-13 environment variables into per-customer settings, and it has to be done
-before a second customer connects Microsoft, 8x8 or Resend. Listed here so it is
-not mistaken for finished.
+So you can set the credentials, register Rock, VERIFY it resolves correctly, and
+only then throw the switch. No window, and nothing turns on until you have seen
+it working.
+
+/api/admin/tenant-setup now reports both, so you can see exactly which state you
+are in.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 5 files: 0 errors
-- confirmed no reference to cachedToken or _pipelineId survives anywhere
-- confirmed no bare 'store' identifier survives in lib/db.js: 20 uses of
-  store[...] and 7 of Object.keys(store) all converted
-- ran the old and new behaviour side by side, output above, including the
-  single-tenant path to confirm today is unchanged
+- esbuild compile on all 4: 0 errors
+- confirmed tenant-setup still gates on registryConfigured (the credentials),
+  not on the switch - it has to work before tenancy is enabled, or you cannot
+  register the first customer
+- confirmed withTenant and forEachTenant both gate on tenancyEnabled
 
 
-WHAT TO CLICK AFTER DEPLOYING
------------------------------
-These four files sit behind several things, so a short spread:
+AFTER DEPLOYING
+---------------
+Visit /api/admin/tenant-setup as admin. You should see:
 
-1. CRM - the page loads and deals show. (pipedrive.js is imported by the CRM
-   path even though Pipedrive is import-only now.)
-2. CRM email volume for Edita, if it is showing. (msGraph.js)
-3. Any page at all - lib/db.js is behind everything, so if the portal loads,
-   the store change is fine.
-4. Bookkeeping, Project Financials, Retention - a quick look that the numbers
-   are unchanged.
+  controlDatabaseConfigured: false
+  tenancyEnabled: false
+  identityOfCurrentDatabase: null
 
-The db.js change only affects the path taken when there are NO Redis
-credentials, which never happens in production. It is the principle that
-mattered, not the exposure.
-
-
-NEXT - and this one needs you
------------------------------
-Create the control database and register Rock. About ten minutes:
-
-  1. Create a new Upstash Redis database, same region as Rock's existing one.
-     Call it something like "constructionliberation-control".
-  2. Add two environment variables in Vercel:
-        CONTROL_REDIS_URL     the new database's REST URL
-        CONTROL_REDIS_TOKEN   its REST token
-     DO NOT REDEPLOY YET. Adding them switches tenant resolution ON, and Rock is
-     not registered, so every request would 404 until step 3 is done.
-  3. Tell me when the database exists and I will send the exact calls to stamp
-     Rock's identity and register it - in the right order, identity first, so
-     nothing is ever pointed at a database that cannot prove who it is.
-
-If you would rather not do the Upstash step yet, say so - there is other work I
-can do first.
+Both false is correct. Then follow the Upstash steps.
