@@ -1,94 +1,79 @@
-pkg865 - The delete refusal, and a diagnostic for the missing application
-=========================================================================
+pkg866 - Name the project records. READ ONLY.
+=============================================
 
-TWO FILES. One fix, one read-only diagnostic. Neither changes any figure.
-
-
-NEW FILE TO CREATE BY HAND IN GITHUB
-------------------------------------
-  pages/api/admin/project-key-audit.js     <-- DOES NOT EXIST YET
-
-Then replace:
-  pages/variations.js
+ONE FILE. Replaces pages/api/admin/project-key-audit.js from pkg865.
+Writes nothing. Changes no figure.
 
 
-1. WHY THE VARIATION WOULD NOT DELETE - not a fault
----------------------------------------------------
-pages/api/project/[id]/settings.js refuses to remove a variation the customer
-has already instructed:
+WHAT THE FIRST AUDIT RULED OUT
+------------------------------
+All 36 project records are keyed by tracking option id. None by job number.
+No duplicates. So the duplicate-key theory - which was my first hypothesis and
+the one the handover flagged - is wrong for this fault. Worth knowing anyway:
+that open item is now closed. The data is clean.
 
-    Refused: V02 has been instructed and cannot be removed.
-
-You instructed V02 when you tested the instruct link. The guard is correct - the
-customer authorised that scope at that value, so it cannot be quietly deleted.
-
-THE ACTUAL FAULT IS THAT YOU COULD NOT SEE IT. deleteVariation never checked
-whether the save succeeded, so the 409 and its message went into console.error
-and the row just sat there. The guard was working; only the reporting was
-missing.
-
-Now it shows the server's own message. The instructed toggle a few lines above
-threw its reply away for the same reason and hits the same guard, so that is
-fixed too.
-
-If you genuinely need that test variation gone, tell me - it needs un-instructing
-first, and I would rather do that deliberately than loosen the guard.
+I also checked whether xeroId and trackingOptionId could differ, which would
+make the page ask for a key the record is not under. They cannot:
+dashboard.js line 791-792 sets both from the same value.
 
 
-2. THE APPLICATION THAT SHOWS IN THE TABLE BUT NOT IN THE PROJECT
------------------------------------------------------------------
-That symptom is diagnostic in itself. The two views read differently:
+WHAT THE FIRST AUDIT COULD NOT TELL YOU
+---------------------------------------
+It listed 36 uuids and no names, because a project settings record stores
+neither a job number nor a name. So when one record stood out, there was no way
+to say which project it was.
 
-    getAllProjectSettings()   scans EVERY project:* key and returns each record
-                              under whatever key it is stored at. The summary
-                              table therefore finds everything.
+The one that stands out:
 
-    getProject(id)            reads ONE exact key. The per-project view finds
-                              only the record stored under the id the page asked
-                              for.
+    project:a24993b7-ca62-4789-bee2-eb6705c7134b
+    applications 1   sent 0   variations 0   contractValue null   FIELDS 4
 
-So a project whose settings exist under BOTH its Xero tracking option id AND its
-job number will show its applications in the summary and hide them when you open
-the project. Nothing errors. The application is not lost - it is under the other
-key.
+Every other record has between 13 and 36 fields. Four means the record was
+created from nothing - saveProject writing to a key that held no settings.
 
-This is the duplicate-record fault that has caused at least four separate
-problems on this project and has been sitting on the open-items list since the
-handover as "a script listing every project holding settings under BOTH keys -
-worth enumerating once".
 
-This is that script:
+WHAT THIS VERSION ADDS
+----------------------
+It reads the dashboard snapshot purely to label each record with its job number
+and name, and to answer the question that actually matters:
 
-    /api/admin/project-key-audit
+    orphan: true   this key is NOT a live Xero tracking option
 
-READ ONLY. It writes nothing. It lists every project record, pairs them up by
-the job number each one claims, and reports any job number holding more than one
-record - with what each side holds, so you can see which record a page is
-actually reading.
+An orphan record cannot be selected anywhere in the portal, because every
+project picker is built from the live list. But anything that scans every
+project:* key still counts it - and the applications summary does exactly that.
 
-Add ?full=1 to see every record rather than only the duplicated ones.
+That is precisely the shape of what you described: it shows in the table, and
+the project cannot be found.
 
-RUN IT AND SEND ME THE OUTPUT. I am not going to guess at the fix. Whether the
-right answer is to merge the pair, point the page at the other key, or stop the
-duplicate being created in the first place depends on how many there are and
-which side holds what - and that is a decision about your data, not a tidy-up.
+New fields in the response:
 
-Do not change anything based on it yet.
+    liveProjectsInSnapshot                  how many the portal can actually see
+    orphanRecords                           how many records are not among them
+    orphansHoldingApplicationsOrVariations  the ones that matter - unreachable
+                                            records still holding work
+    liveJobNo / liveName / liveStatus       on every record, so the full list is
+                                            readable
+    orphan                                  on every record
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on both files: 0 errors
-- the import-graph check from pkg864: clean, 185 client entry points, nothing
-  reaching a server-only module
-- the audit endpoint uses only redis.keys and redis.get - no writes anywhere in
-  the file
+- esbuild compile: 0 errors
+- still read only: the file contains redis.keys and redis.get and no writes
+- the dashboard read is wrapped so a missing snapshot degrades to unlabelled
+  output rather than failing
 
 
-WHAT TO DO AFTER DEPLOYING
---------------------------
-1. Visit /api/admin/project-key-audit while signed in as admin. Send me what it
-   returns. If it is long, jobNumbersWithMoreThanOneRecord and the first few
-   entries of duplicated are enough to start.
-2. Try deleting that test variation again. You should now get a message
-   explaining the refusal instead of nothing happening.
+WHAT TO DO
+----------
+Visit /api/admin/project-key-audit again - the short form is enough this time.
+
+Send me orphanRecords and orphansHoldingApplicationsOrVariations.
+
+If a24993b7 comes back as an orphan, that is the answer and I will know what to
+fix. If it comes back with a job number and a name, then the record is reachable
+and the fault is in how the page loads it, which is a different chase - and
+knowing WHICH project it is will let me follow it properly.
+
+Still do not change anything.

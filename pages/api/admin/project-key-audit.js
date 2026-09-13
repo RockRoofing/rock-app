@@ -35,6 +35,28 @@ async function handler(req, res) {
   if (!requireRole(req, res, ['admin', 'management'])) return
   const redis = await getClient()
 
+  // NAME THE RECORDS.
+  //
+  // A project settings record stores no job number and no name, so the first
+  // version of this listed 36 uuids and told you nothing about which project
+  // each one was. The dashboard snapshot holds the mapping from tracking option
+  // id to job number, so it is read here purely to label them.
+  //
+  // It also answers the more useful question: is this key still a LIVE Xero
+  // tracking option at all? A settings record whose key is not in the live list
+  // cannot be selected anywhere in the portal - the project picker is built from
+  // the live list - while still being counted by anything that scans every
+  // project:* key. That is exactly the shape of "it shows in the table but I
+  // cannot open it".
+  let live = new Map()
+  try {
+    const snap = await redis.get('dashboard:cache')
+    const rows = Array.isArray(snap) ? snap : (snap && Array.isArray(snap.projects) ? snap.projects : [])
+    for (const r of rows) {
+      if (r && r.xeroId) live.set(String(r.xeroId), { jobNo: r.jobNo || '', name: r.name || '', status: r.status || '', inXero: r.inXero !== false })
+    }
+  } catch {}
+
   const keys = await redis.keys('project:*')
   const records = []
   for (const k of keys) {
@@ -42,10 +64,18 @@ async function handler(req, res) {
     let v = null
     try { v = await redis.get(k) } catch {}
     if (!v || typeof v !== 'object') { records.push({ key: k, id, unreadable: true }); continue }
+    const l = live.get(String(id)) || null
     records.push({
       key: k,
       id,
       keyLooksLike: JOBNO.test(id) ? 'job number' : 'tracking option id',
+      // From the dashboard snapshot, not from the record.
+      liveJobNo: l ? l.jobNo : '',
+      liveName: l ? l.name : '',
+      liveStatus: l ? l.status : '',
+      // TRUE means nothing in the portal can select this project, because every
+      // picker is built from the live list.
+      orphan: !l,
       // The job number the record CLAIMS, which is how the two halves of a pair
       // are matched. A record keyed by tracking id usually still carries it.
       jobNo: v.jobNo || v.projectNo || (JOBNO.test(id) ? id.toUpperCase() : ''),
@@ -95,8 +125,17 @@ async function handler(req, res) {
     })
   }
 
+  // The ones that cannot be opened, holding something worth opening.
+  const orphansWithContent = records.filter(r => r.orphan && ((r.applications || 0) > 0 || (r.variations || 0) > 0))
+
   const out = {
     totalProjectRecords: records.length,
+    liveProjectsInSnapshot: live.size,
+    orphanRecords: records.filter(r => r.orphan).length,
+    orphansHoldingApplicationsOrVariations: orphansWithContent.map(r => ({
+      key: r.key, applications: r.applications, applicationsSent: r.applicationsSent,
+      variations: r.variations, fields: r.fields, contractValue: r.contractValue,
+    })),
     jobNumbersWithMoreThanOneRecord: duplicated.length,
     duplicated: duplicated.sort((a, b) => a.jobNo.localeCompare(b.jobNo)),
     note: 'Read only. Nothing has been changed. A record is not lost - it is under the other key.',
