@@ -1,3 +1,4 @@
+import { fromEmail, replyTo } from '../../lib/tenantSettings'
 import { getPreStart, savePreStart, getOpsProject, getTemplate } from '../../lib/db'
 import { buildPreStartPDF } from '../../lib/preStartPdf'
 import withTenant from '../../lib/withTenant'
@@ -28,8 +29,8 @@ async function handler(req, res) {
 
     const RESEND_KEY = process.env.RESEND_API_KEY
     if (!RESEND_KEY) return res.status(500).json({ error: 'Email not configured (RESEND_API_KEY missing)' })
-    const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
-    const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+    const FROM = fromEmail('forms')
+    const REPLY_TO = replyTo()
 
     const sentAt = Date.now()
     const origin = `https://${req.headers.host}`

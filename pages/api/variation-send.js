@@ -1,3 +1,4 @@
+import { fromEmail } from '../../lib/tenantSettings'
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
 import { buildVariationPDF } from '../../lib/variationPdf'
@@ -80,7 +81,7 @@ async function handler(req, res) {
   // unset.
   //
   // Replies still go to the person who raised it, which is unchanged.
-  const FROM = process.env.NOTIFY_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  const FROM = fromEmail('notify')
 
   try {
     const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })

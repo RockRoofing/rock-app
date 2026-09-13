@@ -1,3 +1,4 @@
+import { fromEmail } from '../../lib/tenantSettings'
 import { requireRole } from '../../lib/portalAuth'
 import { getPortalUsers, getClient } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
@@ -39,7 +40,7 @@ async function handler(req, res) {
       .filter(u => u.email && canAccessArea(u.role, 'bookkeeping'))
       .map(u => u.email)
     if (to.length && process.env.RESEND_API_KEY) {
-      const FROM = process.env.NOTIFY_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+      const FROM = fromEmail('notify')
       const label = new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
       const money = '£' + (Number(totalWip) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       await fetch('https://api.resend.com/emails', {

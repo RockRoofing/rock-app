@@ -1,3 +1,4 @@
+import { fromEmail } from '../../lib/tenantSettings'
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get, saveProject, getClient } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
@@ -56,7 +57,7 @@ async function handler(req, res) {
     // same as the one the QS has on file.
     const fname = `${describeApplication(app, { prevReleases: prev || null }).titleShort} ${app.seq || ''} - ${(jobNo || name || 'application')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
 
-    const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
+    const FROM = fromEmail('commercial')
     const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.5">${esc(text).replace(/\n/g, '<br>')}</div>`
 

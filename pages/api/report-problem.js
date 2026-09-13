@@ -1,3 +1,4 @@
+import { alertEmail, replyTo } from '../../lib/tenantSettings'
 import { get, set } from '../../lib/db'
 import withTenant from '../../lib/withTenant'
 
@@ -67,7 +68,7 @@ async function handler(req, res) {
     const RESEND_KEY = process.env.RESEND_API_KEY
     if (RESEND_KEY) {
       const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
-      const TO = process.env.ALERT_EMAIL || process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+      const TO = alertEmail()
       const html = `
         <div style="font-family:system-ui,Arial,sans-serif;max-width:560px">
           <h2 style="color:#1a1a19;margin:0 0 4px">App Improvement suggested</h2>
@@ -115,7 +116,7 @@ async function notifyReporterResolved(report, req) {
   const RESEND_KEY = process.env.RESEND_API_KEY
   if (!RESEND_KEY || !report.userEmail) return false
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
-  const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+  const REPLY_TO = replyTo()
   const commentsBlock = report.comments && report.comments.trim()
     ? `<p style="margin:14px 0 4px;color:#888;font-size:13px">Notes from the team:</p>
        <div style="background:#faf9f7;border:1px solid #eee;border-radius:10px;padding:12px 14px;font-size:14px;color:#1a1a19">${esc(report.comments).replace(/\n/g, '<br>')}</div>`

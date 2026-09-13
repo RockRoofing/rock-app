@@ -1,139 +1,131 @@
-pkg861 - Authentication becomes tenant-scoped. STILL DORMANT.
+pkg862 - Per-customer email settings, batch 1. STILL DORMANT.
 =============================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
-Nobody is signed out. TENANCY_ENABLED is not set, so no check runs yet.
-
-READ THE FIRST SECTION. This is the most serious thing found so far.
+Every email still comes from exactly the address it does today.
 
 
-NEW FILES TO CREATE BY HAND
----------------------------
-None. All six already exist.
+NEW FILE TO CREATE BY HAND IN GITHUB
+------------------------------------
+  lib/tenantSettings.js     <-- DOES NOT EXIST YET
 
-  lib/tenants.js
-  lib/portalAuth.js
-  lib/withTenant.js
-  lib/variationInstruct.js
-  lib/inquery.js
-  pages/api/portal-auth.js
+Then replace 8 files (list below).
 
 
-THE HOLE
+A CHANGE OF RECOMMENDATION FIRST
+--------------------------------
+I previously listed RECORD STAMPING as a step - every record carrying whose it
+is, and a check refusing one whose stamp does not match.
+
+I no longer think it is worth building. Its job was to catch a leak that got
+past everything else, and between separate databases, the identity self-check,
+the scoped caches and tenant-bound sessions, the cases it would catch are
+already covered. It would touch every write path in the app and need a migration
+of existing data, to sit behind four other defences. Dropping it unless you
+want it.
+
+
+WHAT THIS PACKAGE FIXES
+-----------------------
+Thirteen environment variables decided who an email came from, what it replied
+to, and what address the links inside it pointed at. An environment variable has
+ONE value for the whole deployment, so every customer would have sent mail as
+Rock Roofing with links into Rock's portal.
+
+Worse than embarrassing. A variation instruction or RAMS approval link is a
+token in a URL. Send another company's customer a link on Rock's domain and the
+token resolves against Rock's tenant.
+
+There are 60 of these fallbacks across 42 files. This is the first 8 - the ones
+that actually send to customers and subcontractors.
+
+
+THE RULE
 --------
-The session cookie carried NO CUSTOMER and was signed with one global secret:
+When a customer IS in scope, their own setting is used. If they have not got
+one, it THROWS.
 
-    { id, email, role, name, exp }
+It does NOT fall back to Rock's value. That is the opposite of how the code read
+before, where a missing setting quietly became notifications@rockroofing.co.uk.
 
-So once TENANCY_ENABLED is on:
+A failed notification is a support call. A notification sent from the wrong
+company is a breach, and nobody finds out from a log.
 
-  1. sign in at app.rockroofing.co.uk, get a cookie
-  2. send that same cookie to wilson.constructionliberation.com
-  3. the signature verifies - same secret
-  4. requireRole reads role: 'admin' - passes
-  5. getClient() resolves Wilson from the host and opens WILSON'S database
-  6. Wilson's financials render, to an authenticated Rock session
+When no customer is in scope - every request today - it reads the environment
+variable exactly as before. Proven:
 
-No forgery. No stolen password. Changing the hostname is the entire attack.
+  single tenant today
+    from : Rock Roofing <onboarding@resend.dev>          unchanged
+    link : https://app.rockroofing.co.uk                 unchanged
 
-And every guardrail built so far behaves CORRECTLY throughout - the tenant
-resolved right, the self-check passed, the database was the correct one. Data
-access was tenant-scoped. AUTHENTICATION never was. Closing this was the gap
-between "the walls are up" and "the front door is locked".
+  Rock, resolved
+    from : Rock Roofing <notifications@constructionliberation.com>
+    link : https://app.rockroofing.co.uk
 
-Demonstrated, old code and new side by side:
+  Wilson, resolved
+    from : Wilson Construction <notifications@constructionliberation.com>
+    link : https://wilson.constructionliberation.com
+    -> reads as Wilson to the subcontractor, links to Wilson's portal
 
-  OLD  Rock cookie at wilson's address
-       verified as james@rockroofing.co.uk role=admin        BYPASS
-
-  NEW  Rock cookie at rock's address                         allowed   ok
-       Rock cookie at wilson's address                       rejected  ok
-       Rock cookie at the platform address                   rejected  ok
-       platform cookie at rock's address                     rejected  ok
-       session issued before this existed, tenancy on        rejected  ok
-       single tenant today, no customer resolved             allowed   ok
+  a customer set up incompletely
+    THROWS: Customer "broken" has no senderName configured. Refusing to fall
+    back to another customer's value.
 
 
-THE FIX
--------
-The session payload gains `t`, the customer it was issued for. withTenant checks
-it against the customer resolved from the address, in ONE place covering all 169
-wrapped routes.
+ON SENDING DOMAINS - the decision this encodes
+----------------------------------------------
+One verified sending domain, with a per-customer sender NAME and the customer's
+own address as reply-to. To the subcontractor it reads as their client's email;
+hitting reply writes to them, not to you.
 
-Only enforced where a session is actually present, so the login page and the
-signed public links are unaffected.
-
-Middleware is NOT the place for this - it runs at the edge and cannot reach the
-registry to learn which customer a hostname belongs to. It keeps doing what it
-does: signature and expiry only.
+The alternative - a subdomain per customer - means a DNS and verification job
+each time, which is the thing you decided to avoid, and spreads sending
+reputation across many new domains. Spam filters trust one domain with a long
+clean history far more than fifty new ones.
 
 
-THE PLATFORM ADDRESS - your point about your own admin domain
--------------------------------------------------------------
-Built in now rather than retrofitted, because it changes the session format and
-doing it later would mean a second forced sign-out.
-
-  PLATFORM_HOSTS        comma-separated. Your own administration address, e.g.
-                        admin.constructionliberation.com. Unset today, so
-                        nothing changes.
-
-That address belongs to no customer, so it must not 404 on resolution - and a
-session issued there carries the reserved id '~platform', so it cannot be used
-against any customer's site, and no customer's session can be used against it.
-Both directions proven above.
-
-The platform ADMIN PAGES do not exist yet. This is the door and the lock; the
-room comes later.
-
-
-THE TWO SIGNED PUBLIC LINKS
----------------------------
-Variation instruction and In Query review had the same flaw for the same reason:
-one signing secret across every customer, so a link issued by one verified on
-another's site and then looked its project id up in the wrong database.
-
-Both now carry the customer and check it.
-
-RAMS approval links were ALREADY SAFE and are untouched - those tokens are
-stored in the database rather than signed, so a lookup goes through getClient()
-and simply cannot find another customer's token.
-
-
-TWO CONSEQUENCES FOR THE DAY YOU SWITCH TENANCY ON
---------------------------------------------------
-1. EVERYONE SIGNS IN AGAIN, ONCE. Existing cookies carry no customer and are
-   rejected rather than assumed to be Rock. Assuming would leave the bypass open
-   for the seven days it takes them to expire. Pick a quiet moment and warn the
-   team.
-
-2. VARIATION INSTRUCTION LINKS ALREADY SENT STOP WORKING. They are 120-day
-   links, so some will be live. A customer clicking one gets an invalid-link
-   page. Resending the variation issues a fresh one. In Query review links are
-   60-day and the same applies.
-
-Neither happens today. Both happen the moment TENANCY_ENABLED=1 lands.
+FILES (9)
+---------
+lib/tenantSettings.js                NEW
+lib/outstandingInvoicesReport.js     weekly overdue report sender
+pages/api/variation-send.js          variation emails to customers
+pages/api/application-send.js        applications to customers
+pages/api/pre-start-send.js          pre-start emails
+pages/api/pre-start-notify-send.js   pre-start notifications
+pages/api/wip-lock.js                WIP complete notification
+pages/api/report-problem.js          problem reports to you
+pages/api/ops-users.js               operative invitations + Site App link
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 11 affected files: 0 errors
-- ran the old and new token logic side by side, six scenarios, output above
-- confirmed all four createSessionToken call sites in portal-auth.js are
-  stamped. My first script matched on whole lines and missed two because of
-  indentation - it asserted and wrote nothing rather than half-applying. Redone
-  by balancing the call's parentheses instead, which cannot miss on whitespace.
-- confirmed middleware still imports nothing from portalAuth, so the edge
-  runtime is unaffected
-- 28 routes call verifySessionToken directly without a customer. That is correct:
-  they are all inside routes wrapped by withTenant, which does the tenant check
-  once, centrally, before the handler runs.
+- esbuild compile on all 9: 0 errors
+- ran the resolver across four scenarios, output above, including the
+  single-tenant path to confirm today is unchanged
+- each replacement asserted on an exact unique string and written only if it
+  matched once. The expressions differ between files - some try three env vars,
+  some two - so each was handled explicitly rather than by a blanket regex. A
+  blanket regex over 42 files is how one wrong sender ends up somewhere quietly.
 
 
-WHAT TO CLICK AFTER DEPLOYING
+WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-1. Sign out and sign back in. Confirm it works and you stay signed in.
-2. Someone else signs in normally - no one should be signed out by this.
-3. Send a variation with an instruction link to yourself and click it. It should
-   still work.
-4. The Site App on your phone - still signed in.
-5. Password reset for a test user, if convenient.
+The only risk here is an email going out from the wrong address or not at all.
+
+1. Send a variation to yourself. Check it arrives and the FROM address is
+   exactly what it was before.
+2. Send an application to yourself. Same check - that one uses the commercial
+   sender, which is a different address.
+3. Press Report a Problem. Confirm it reaches you.
+4. Lock a WIP month, if convenient, and confirm the notification arrives.
+5. Pre-start email to yourself if you can raise one.
+
+If any email fails to send, tell me which - that would mean I have mapped one of
+them to the wrong sender kind.
+
+
+STILL TO DO
+-----------
+34 more fallback sites across the remaining files. Next package or two. Nothing
+in those reaches a customer directly - they are internal notifications, document
+headers and logo URLs - which is why these eight went first.

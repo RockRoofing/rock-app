@@ -1,3 +1,4 @@
+import { replyTo, siteAppUrl } from '../../lib/tenantSettings'
 import { requireRole } from '../../lib/portalAuth'
 import { getOpsUsers, saveOpsUsers, getOpsProjects } from '../../lib/db'
 import withTenant from '../../lib/withTenant'
@@ -14,7 +15,7 @@ import withTenant from '../../lib/withTenant'
 // POST   { action:'reset-pin', id }             -> admin resets to a new temp PIN, emails it
 // DELETE { id }                                 -> remove
 
-const FORMS_URL = 'https://siteapp.rockroofing.co.uk'
+const FORMS_URL = siteAppUrl()
 const MAX_ATTEMPTS = 5           // failed logins before lockout
 const LOCKOUT_MINUTES = 15
 const LOCKOUT_MS = LOCKOUT_MINUTES * 60 * 1000
@@ -40,7 +41,7 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
   // Replies to invite emails land in this real inbox (from-address is a
   // send-only subdomain). Override with FORMS_REPLY_TO if it ever changes.
-  const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+  const REPLY_TO = replyTo()
   if (!RESEND_KEY) return { sent: false, error: 'Email not configured' }
   const subject = isReset ? 'Your new Rock Roofing Site App PIN' : 'Welcome to the Rock Roofing Site App'
   const html = `
