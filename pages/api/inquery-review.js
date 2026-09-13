@@ -1,3 +1,4 @@
+import { currentTenantId } from '../../lib/tenantContext'
 import { get, set } from '../../lib/db'
 import { INQUERY_KEY, verifyReviewToken } from '../../lib/inquery'
 import withTenant from '../../lib/withTenant'
@@ -16,7 +17,7 @@ import withTenant from '../../lib/withTenant'
 //   POST { token, key, status?, comment? }      -> update one invoice
 async function handler(req, res) {
   const token = String(req.query.token || req.body?.token || '')
-  const t = verifyReviewToken(token)
+  const t = verifyReviewToken(token, currentTenantId())
   if (!t) return res.status(401).json({ error: 'That link is not valid, or it has expired. Ask for a new one.' })
 
   let state = {}

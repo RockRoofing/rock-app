@@ -1,3 +1,4 @@
+import { currentTenantId } from '../../lib/tenantContext'
 import { fromEmail } from '../../lib/tenantSettings'
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
@@ -105,7 +106,7 @@ async function handler(req, res) {
     //
     // Everyone else gets the variation and is told who has been asked to instruct it.
     const htmlFor = (addr, canInstruct) => {
-      const link = canInstruct ? `${origin}/instruct/${createInstructToken({ projectId, varNumber, email: addr })}` : ''
+      const link = canInstruct ? `${origin}/instruct/${createInstructToken({ projectId, varNumber, email: addr, tenantId: currentTenantId() })}` : ''
       // The one line that has to be noticed gets bolded in the HTML. Matched on its own
       // text so it stays bold even if the rest of the message is edited before sending.
       const NOTICE = 'We are unable to proceed without your instruction via the below instruct button.'

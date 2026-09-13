@@ -1,3 +1,4 @@
+import { currentTenantId } from '../../lib/tenantContext'
 import { get, set, getPortalUsers } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
 import { INQUERY_KEY, createReviewToken } from '../../lib/inquery'
@@ -127,7 +128,7 @@ async function handler(req, res) {
     const results = []
 
     for (const person of byPerson.values()) {
-      const token = createReviewToken({ email: person.email })
+      const token = createReviewToken({ email: person.email, tenantId: currentTenantId() })
       const link = `${baseUrl}/inquery-review?token=${encodeURIComponent(token)}`
       const total = person.rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
       const rowsHtml = person.rows.map(r => `<tr>

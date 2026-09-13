@@ -1,3 +1,4 @@
+import { currentTenantId } from '../../../lib/tenantContext'
 import forEachTenant from '../../../lib/forEachTenant'
 import { getAllProjectSettings, saveProject, getProject, get } from '../../../lib/db'
 import { isInstructed } from '../../../lib/applications'
@@ -64,7 +65,7 @@ async function handler(req, res) {
           const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
           for (const addr of b.sentTo) {
-            const link = `${origin}/instruct/${createInstructToken({ projectId, varNumber: v.varNumber, email: addr })}`
+            const link = `${origin}/instruct/${createInstructToken({ projectId, varNumber: v.varNumber, email: addr, tenantId: currentTenantId() })}`
             const text = `Hi,\n\n`
               + `Following up on variation ${v.varNumber} for ${label}, sent on ${new Date(b.firstSentAt).toLocaleDateString('en-GB')}.\n\n`
               + `We have not yet received your instruction. The variation is attached again for convenience.\n\n`

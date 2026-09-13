@@ -1,88 +1,109 @@
-pkg863 - Correction to pkg862. Deploy both together.
-====================================================
+pkg864 - BUILD FIX. Deploy this next.
+=====================================
 
-ONE FILE.  lib/tenantSettings.js  - REPLACES the copy in pkg862.
+pkg861, 862 and 863 all failed to build. pkg860 was the last good one. The code
+from 861-863 IS on main - only the build failed - so deploying this makes all
+four go live together.
 
-If you have NOT yet deployed pkg862: use this file instead of the one in that
-package, and deploy everything at once.
-If you HAVE deployed pkg862: deploy this on top, as soon as convenient.
-
-
-WHAT I GOT WRONG
-----------------
-I shortened the sender fallback chains while consolidating them. The originals
-differ from file to file, and I flattened them into one shape:
-
-  original 'notify'      NOTIFY || FORMS || resend.dev
-  pkg862                 NOTIFY || NOTIFY || resend.dev        FORMS lost
-
-  original 'commercial'  COMMERCIAL || ACCOUNTS || FORMS || resend.dev
-  pkg862                 COMMERCIAL || NOTIFY || resend.dev    ACCOUNTS, FORMS lost
-
-So with NOTIFY_FROM_EMAIL unset in Vercel and FORMS_FROM_EMAIL set, a variation
-email would have started arriving from onboarding@resend.dev instead of your
-real address:
-
-  correct        : Rock Roofing <notifications@rockroofing.co.uk>
-  pkg862         : Rock Roofing <onboarding@resend.dev>     <- the fault
-  as shipped now : Rock Roofing <notifications@rockroofing.co.uk>
-
-Delivered, read, wrong sender, nothing on any screen to say so. Whether it
-actually bit depends on which of those variables are set in your Vercel project,
-which I cannot see.
-
-Found because you asked whether the variation test was really necessary. It was.
+Nothing is live from 861, 862 or 863 right now. The app is running pkg860.
 
 
-THE LESSON, written into the file
----------------------------------
-Consolidating a rule is only safe if the consolidated version is the SAME rule.
-Four near-identical chains are not one chain. The comment in the file now says
-so, and lists which files each chain came from, so the next person to tidy them
-can see why they are not tidy.
+NEW FILES TO CREATE BY HAND
+---------------------------
+None. All 7 already exist.
 
-This is the project's dominant fault class arriving from the other direction:
-usually it is one rule written twice and left to diverge. Here it was four
-rules merged into one that matched none of them.
+
+WHAT I BROKE
+------------
+pkg861 added this to lib/variationInstruct.js and lib/inquery.js:
+
+    import { currentTenantId } from './tenantContext'
+
+tenantContext.js imports async_hooks, which is a Node module with no browser
+equivalent.
+
+lib/variationInstruct.js is imported by TEN client-side files - wip.js,
+variations.js, applications.js, contracted-rates.js, VariationBuilder.js,
+ProjectDatesModal.js and others - for projectVariations() and projectLabel().
+lib/inquery.js is imported by components/InQueryTable.js.
+
+So async_hooks was dragged into the browser bundle, webpack could not resolve
+it, and every build from that commit onwards failed.
+
+
+WHY MY CHECKS MISSED IT
+-----------------------
+esbuild compiles each file ON ITS OWN. It never walks the import graph, so it
+cannot see that a server-only module is reachable from a page. Every one of the
+files I changed compiled cleanly in isolation, which is exactly what I reported,
+and the report was true and useless.
+
+This is a class of fault my checks had no coverage for at all.
 
 
 THE FIX
 -------
-Each chain now mirrors its original exactly, env var for env var and default for
-default, with the source file named against each:
+The tenant is now PASSED IN to the four token functions rather than read from
+request-scoped storage inside them. Only server-side callers know the tenant, so
+only they pass it:
 
-  notify      NOTIFY_FROM_EMAIL, FORMS_FROM_EMAIL
-              (variation-send.js, wip-lock.js)
-  forms       FORMS_FROM_EMAIL
-              (pre-start-send.js, outstandingInvoicesReport.js)
-  accounts    ACCOUNTS_FROM_EMAIL
-              (chase-email-send.js)
-  commercial  COMMERCIAL_FROM_EMAIL, ACCOUNTS_FROM_EMAIL, FORMS_FROM_EMAIL
-              (application-send.js)
+  createInstructToken({ ..., tenantId })     verifyInstructToken(token, tenantId)
+  createReviewToken({ ..., tenantId })       verifyReviewToken(token, tenantId)
+
+Five callers updated: variation-send.js, cron/variation-reminders.js,
+variation-instruct.js, bookkeeping-inquery.js, inquery-review.js. All server
+side, all already wrapped, so currentTenantId() is available in each.
+
+The behaviour is identical to what pkg861 intended. Only where the tenant is
+read from has changed.
+
+Both library files now carry a comment saying why the import is not there, so
+the next person to "tidy it up" does not put it back.
 
 
-CHECKS I RAN
-------------
-Not a spot check. I ran the original expressions and the new ones against ALL 16
-combinations of those four environment variables being set or unset, for all
-four sender kinds:
+THE NEW CHECK
+-------------
+I have added an import-graph walk to my own checks: start at every client-side
+entry point - 185 pages and components - follow every relative import, and flag
+any that reaches a server-only module.
 
-  combinations checked: 64   mismatches: 0
+  before the fix:  lib/tenantContext.js imports async_hooks,
+                   reached from 10 client files
+  after the fix:   CLEAN
 
-So whatever your Vercel project actually has set, the sender is now identical to
-what it was before pkg862.
+I verified it by putting the bad import back temporarily and confirming it fires,
+then removing it again. A check nobody has seen fail is not a check.
 
-esbuild compile: 0 errors.
+One deliberate omission: 'crypto' is not on the server-only list, even though
+variationInstruct.js imports it from client-reachable code. Deployment 860 built
+cleanly with that in place, so Next resolves it for the browser. Listing it would
+produce a permanent false positive, and a check people learn to ignore is worse
+than no check at all.
+
+
+FILES (7)
+---------
+lib/variationInstruct.js
+lib/inquery.js
+pages/api/variation-send.js
+pages/api/variation-instruct.js
+pages/api/bookkeeping-inquery.js
+pages/api/inquery-review.js
+pages/api/cron/variation-reminders.js
 
 
 WHAT TO CHECK AFTER DEPLOYING
 -----------------------------
-Now the variation test does mean something, so it is worth doing once.
+First: THAT IT BUILDS. Watch the deployment go green before anything else.
 
-1. Send a variation to yourself. Check the FROM address is your real address and
-   NOT onboarding@resend.dev.
-2. Send an application to yourself. Different sender - check that one too.
-3. Report a Problem - confirm it reaches you.
+Then, because this releases 861, 862 and 863 all at once:
 
-If any of those shows onboarding@resend.dev, tell me, because it would mean none
-of the relevant variables are set in Vercel and that is worth knowing separately.
+1. Sign out and back in. (861 - session format)
+2. Send a variation to yourself, click the instruction link. (861 token format,
+   862 sender, 864 the fix itself - this one check covers all three)
+3. Check the FROM address is your real address, NOT onboarding@resend.dev. (863)
+4. Send an application to yourself - different sender. (862/863)
+5. Open Variations, WIP, Applications and Contracted Rates. Those are four of
+   the ten pages that import the file I broke, so they are the ones that would
+   fail to render if anything is still wrong.
+6. Report a Problem - confirm it reaches you. (862)

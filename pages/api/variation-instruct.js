@@ -1,3 +1,4 @@
+import { currentTenantId } from '../../lib/tenantContext'
 import { getProject, saveProject, get, getClient } from '../../lib/db'
 import { isInstructed } from '../../lib/applications'
 import { projectLabel } from '../../lib/variationInstruct'
@@ -17,7 +18,7 @@ import withTenant from '../../lib/withTenant'
 //   GET  ?token=..&pdf=1      -> the variation document
 //   POST { token, name }      -> record the instruction
 async function load(token) {
-  const t = verifyInstructToken(token)
+  const t = verifyInstructToken(token, currentTenantId())
   if (!t) return { error: 'This link is not valid or has expired.' }
   const project = (await getProject(t.projectId)) || {}
   const vars = Array.isArray(project.variations) ? project.variations : []
