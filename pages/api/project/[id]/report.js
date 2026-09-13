@@ -1,9 +1,10 @@
+import withTenant from '../../../../lib/withTenant'
 import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../../lib/db'
 import { isInstructed } from '../../../../lib/applications'
 import { refreshXeroToken, getXeroProjects, getProjectExpenses, getProjectInvoices } from '../../../../lib/xero'
 import ExcelJS from 'exceljs'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { id } = req.query
 
@@ -196,3 +197,5 @@ function extractJobNo(name) {
   const match = name.match(/^(J\d+|RR\d+)/i)
   return match ? match[1].toUpperCase() : name.split(/[-–\s]/)[0]
 }
+
+export default withTenant(handler)

@@ -1,6 +1,7 @@
+import withTenant from '../../../../lib/withTenant'
 import { getClient } from '../../../../lib/db'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query
   const redis = await getClient()
 
@@ -67,3 +68,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

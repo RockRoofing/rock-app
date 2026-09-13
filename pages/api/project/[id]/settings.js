@@ -1,3 +1,4 @@
+import withTenant from '../../../../lib/withTenant'
 import { saveProject, getProject, getClient } from '../../../../lib/db'
 import { isInstructed } from '../../../../lib/applications'
 
@@ -8,7 +9,7 @@ async function clearCache() {
   } catch {}
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { id } = req.query
   // Merge with existing settings so a partial update (e.g. just wipMarginOverride
@@ -107,3 +108,5 @@ export default async function handler(req, res) {
   await clearCache()
   res.json({ ok: true })
 }
+
+export default withTenant(handler)

@@ -1,5 +1,6 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens } from '../../../lib/db'
-export default async function handler(req, res) {
+async function handler(req, res) {
   const tokens = await getTokens()
   res.json({ 
     connected: !!tokens?.refresh_token,
@@ -9,3 +10,5 @@ export default async function handler(req, res) {
     scope: tokens?.scope || null
   })
 }
+
+export default withTenant(handler)

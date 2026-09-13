@@ -1,3 +1,4 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens } from '../../../lib/db'
 import { getClient } from '../../../lib/db'
 import { refreshXeroToken, extractJobNoFromDescription } from '../../../lib/xero'
@@ -30,7 +31,7 @@ const PROJECT_NAME_MAP = {
 }
 
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const redis = await getClient()
 
   try {
@@ -135,3 +136,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

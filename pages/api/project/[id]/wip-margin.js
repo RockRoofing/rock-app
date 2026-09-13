@@ -1,3 +1,4 @@
+import withTenant from '../../../../lib/withTenant'
 import { getProject, saveProject, getClient } from '../../../../lib/db'
 
 async function clearCache() {
@@ -7,7 +8,7 @@ async function clearCache() {
   } catch {}
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { id } = req.query
   const { wipMarginOverride } = req.body
@@ -16,3 +17,5 @@ export default async function handler(req, res) {
   await clearCache()
   res.json({ ok: true })
 }
+
+export default withTenant(handler)

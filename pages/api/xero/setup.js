@@ -1,6 +1,7 @@
+import withTenant from '../../../lib/withTenant'
 import { saveTokens, getTokens } from '../../../lib/db'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'POST') {
     const { access_token, refresh_token, scope } = req.body
     if (!access_token || !refresh_token) {
@@ -15,3 +16,5 @@ export default async function handler(req, res) {
     res.status(405).end()
   }
 }
+
+export default withTenant(handler)

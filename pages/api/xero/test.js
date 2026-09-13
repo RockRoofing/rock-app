@@ -1,7 +1,8 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens } from '../../../lib/db'
 import { refreshXeroToken } from '../../../lib/xero'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   let tokens = await getTokens()
   const newTokens = await refreshXeroToken(tokens.refresh_token)
   tokens = { ...tokens, ...newTokens }
@@ -28,3 +29,5 @@ export default async function handler(req, res) {
 
   res.json({ totalPaidBills90Days: total, pages: page })
 }
+
+export default withTenant(handler)

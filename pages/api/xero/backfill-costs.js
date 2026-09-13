@@ -1,3 +1,4 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens } from '../../../lib/db'
 import { getClient } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
@@ -11,7 +12,7 @@ const LABOUR_ACCOUNTS = ['321']
 const COST_OF_SALE_ACCOUNTS = ['321', '322', '310', '311', '331', '330', '329', '333', '334', '335', '336']
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     let tokens = await getTokens()
     if (!tokens) return res.status(401).json({ error: 'No tokens' })
@@ -129,3 +130,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

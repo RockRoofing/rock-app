@@ -1,6 +1,7 @@
+import withTenant from '../../../lib/withTenant'
 import { getValueChanges, saveValueChanges } from '../../../lib/db'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const changes = await getValueChanges()
     return res.status(200).json({ changes })
@@ -38,3 +39,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

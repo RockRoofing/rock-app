@@ -1,3 +1,4 @@
+import withTenant from '../../../lib/withTenant'
 import { saveProject, getClient } from '../../../lib/db'
 import { requireRole } from '../../../lib/portalAuth'
 import { isInstructed } from '../../../lib/applications'
@@ -36,7 +37,7 @@ function variationsOf(rec) {
 }
 const vkey = (v) => String((v && v.varNumber) || '').trim().toUpperCase()
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   // Admin only. It rewrites the instructed flag, which moves the anticipated final
   // account on every surface that reads it.
   const session = requireRole(req, res, ['admin'])
@@ -149,3 +150,5 @@ export default async function handler(req, res) {
     report: report.sort((a, b) => String(a.project).localeCompare(String(b.project))),
   })
 }
+
+export default withTenant(handler)

@@ -1,3 +1,4 @@
+import withTenant from '../../../../lib/withTenant'
 import { get, set } from '../../../../lib/db'
 import { requireRole } from '../../../../lib/portalAuth'
 import { getMentionableUsersForRoles, notifyMentions } from '../../../../lib/crmMentions'
@@ -40,7 +41,7 @@ async function resolveProjectLabel(id, fallback) {
   return fallback || `project ${id}`
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   // Costs are commercial. Same access as the rest of the Costs tab.
   const session = requireRole(req, res, ['post-contract', 'management', 'admin'])
   if (!session) return
@@ -135,3 +136,5 @@ export default async function handler(req, res) {
   res.setHeader('Allow', 'GET, POST, DELETE')
   return res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default withTenant(handler)

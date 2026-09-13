@@ -1,7 +1,8 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens } from '../../../lib/db'
 import { refreshXeroToken } from '../../../lib/xero'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     let tokens = await getTokens()
     if (!tokens) return res.status(401).json({ error: 'No tokens' })
@@ -41,3 +42,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

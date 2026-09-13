@@ -1,10 +1,11 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../lib/db'
 import { getClient } from '../../../lib/db'
 import { resolveGrossAfa, isInstructed } from '../../../lib/applications'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query
 
   try {
@@ -206,3 +207,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

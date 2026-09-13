@@ -1,7 +1,8 @@
+import withTenant from '../../../lib/withTenant'
 import { getTokens, saveTokens, getClient } from '../../../lib/db'
 import { refreshXeroToken, fetchAllCostBills, extractJobNoFromDescription, LABOUR_ACCOUNTS, COST_OF_SALE_ACCOUNTS } from '../../../lib/xero'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   try {
@@ -90,3 +91,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

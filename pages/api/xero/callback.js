@@ -1,6 +1,7 @@
+import withTenant from '../../../lib/withTenant'
 import { saveTokens } from '../../../lib/db'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { code } = req.query
   if (!code) return res.status(400).json({ error: 'No code provided' })
 
@@ -46,3 +47,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)
