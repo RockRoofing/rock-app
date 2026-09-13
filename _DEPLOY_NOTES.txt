@@ -1,109 +1,94 @@
-pkg864 - BUILD FIX. Deploy this next.
-=====================================
+pkg865 - The delete refusal, and a diagnostic for the missing application
+=========================================================================
 
-pkg861, 862 and 863 all failed to build. pkg860 was the last good one. The code
-from 861-863 IS on main - only the build failed - so deploying this makes all
-four go live together.
-
-Nothing is live from 861, 862 or 863 right now. The app is running pkg860.
+TWO FILES. One fix, one read-only diagnostic. Neither changes any figure.
 
 
-NEW FILES TO CREATE BY HAND
----------------------------
-None. All 7 already exist.
+NEW FILE TO CREATE BY HAND IN GITHUB
+------------------------------------
+  pages/api/admin/project-key-audit.js     <-- DOES NOT EXIST YET
+
+Then replace:
+  pages/variations.js
 
 
-WHAT I BROKE
+1. WHY THE VARIATION WOULD NOT DELETE - not a fault
+---------------------------------------------------
+pages/api/project/[id]/settings.js refuses to remove a variation the customer
+has already instructed:
+
+    Refused: V02 has been instructed and cannot be removed.
+
+You instructed V02 when you tested the instruct link. The guard is correct - the
+customer authorised that scope at that value, so it cannot be quietly deleted.
+
+THE ACTUAL FAULT IS THAT YOU COULD NOT SEE IT. deleteVariation never checked
+whether the save succeeded, so the 409 and its message went into console.error
+and the row just sat there. The guard was working; only the reporting was
+missing.
+
+Now it shows the server's own message. The instructed toggle a few lines above
+threw its reply away for the same reason and hits the same guard, so that is
+fixed too.
+
+If you genuinely need that test variation gone, tell me - it needs un-instructing
+first, and I would rather do that deliberately than loosen the guard.
+
+
+2. THE APPLICATION THAT SHOWS IN THE TABLE BUT NOT IN THE PROJECT
+-----------------------------------------------------------------
+That symptom is diagnostic in itself. The two views read differently:
+
+    getAllProjectSettings()   scans EVERY project:* key and returns each record
+                              under whatever key it is stored at. The summary
+                              table therefore finds everything.
+
+    getProject(id)            reads ONE exact key. The per-project view finds
+                              only the record stored under the id the page asked
+                              for.
+
+So a project whose settings exist under BOTH its Xero tracking option id AND its
+job number will show its applications in the summary and hide them when you open
+the project. Nothing errors. The application is not lost - it is under the other
+key.
+
+This is the duplicate-record fault that has caused at least four separate
+problems on this project and has been sitting on the open-items list since the
+handover as "a script listing every project holding settings under BOTH keys -
+worth enumerating once".
+
+This is that script:
+
+    /api/admin/project-key-audit
+
+READ ONLY. It writes nothing. It lists every project record, pairs them up by
+the job number each one claims, and reports any job number holding more than one
+record - with what each side holds, so you can see which record a page is
+actually reading.
+
+Add ?full=1 to see every record rather than only the duplicated ones.
+
+RUN IT AND SEND ME THE OUTPUT. I am not going to guess at the fix. Whether the
+right answer is to merge the pair, point the page at the other key, or stop the
+duplicate being created in the first place depends on how many there are and
+which side holds what - and that is a decision about your data, not a tidy-up.
+
+Do not change anything based on it yet.
+
+
+CHECKS I RAN
 ------------
-pkg861 added this to lib/variationInstruct.js and lib/inquery.js:
-
-    import { currentTenantId } from './tenantContext'
-
-tenantContext.js imports async_hooks, which is a Node module with no browser
-equivalent.
-
-lib/variationInstruct.js is imported by TEN client-side files - wip.js,
-variations.js, applications.js, contracted-rates.js, VariationBuilder.js,
-ProjectDatesModal.js and others - for projectVariations() and projectLabel().
-lib/inquery.js is imported by components/InQueryTable.js.
-
-So async_hooks was dragged into the browser bundle, webpack could not resolve
-it, and every build from that commit onwards failed.
+- esbuild compile on both files: 0 errors
+- the import-graph check from pkg864: clean, 185 client entry points, nothing
+  reaching a server-only module
+- the audit endpoint uses only redis.keys and redis.get - no writes anywhere in
+  the file
 
 
-WHY MY CHECKS MISSED IT
------------------------
-esbuild compiles each file ON ITS OWN. It never walks the import graph, so it
-cannot see that a server-only module is reachable from a page. Every one of the
-files I changed compiled cleanly in isolation, which is exactly what I reported,
-and the report was true and useless.
-
-This is a class of fault my checks had no coverage for at all.
-
-
-THE FIX
--------
-The tenant is now PASSED IN to the four token functions rather than read from
-request-scoped storage inside them. Only server-side callers know the tenant, so
-only they pass it:
-
-  createInstructToken({ ..., tenantId })     verifyInstructToken(token, tenantId)
-  createReviewToken({ ..., tenantId })       verifyReviewToken(token, tenantId)
-
-Five callers updated: variation-send.js, cron/variation-reminders.js,
-variation-instruct.js, bookkeeping-inquery.js, inquery-review.js. All server
-side, all already wrapped, so currentTenantId() is available in each.
-
-The behaviour is identical to what pkg861 intended. Only where the tenant is
-read from has changed.
-
-Both library files now carry a comment saying why the import is not there, so
-the next person to "tidy it up" does not put it back.
-
-
-THE NEW CHECK
--------------
-I have added an import-graph walk to my own checks: start at every client-side
-entry point - 185 pages and components - follow every relative import, and flag
-any that reaches a server-only module.
-
-  before the fix:  lib/tenantContext.js imports async_hooks,
-                   reached from 10 client files
-  after the fix:   CLEAN
-
-I verified it by putting the bad import back temporarily and confirming it fires,
-then removing it again. A check nobody has seen fail is not a check.
-
-One deliberate omission: 'crypto' is not on the server-only list, even though
-variationInstruct.js imports it from client-reachable code. Deployment 860 built
-cleanly with that in place, so Next resolves it for the browser. Listing it would
-produce a permanent false positive, and a check people learn to ignore is worse
-than no check at all.
-
-
-FILES (7)
----------
-lib/variationInstruct.js
-lib/inquery.js
-pages/api/variation-send.js
-pages/api/variation-instruct.js
-pages/api/bookkeeping-inquery.js
-pages/api/inquery-review.js
-pages/api/cron/variation-reminders.js
-
-
-WHAT TO CHECK AFTER DEPLOYING
------------------------------
-First: THAT IT BUILDS. Watch the deployment go green before anything else.
-
-Then, because this releases 861, 862 and 863 all at once:
-
-1. Sign out and back in. (861 - session format)
-2. Send a variation to yourself, click the instruction link. (861 token format,
-   862 sender, 864 the fix itself - this one check covers all three)
-3. Check the FROM address is your real address, NOT onboarding@resend.dev. (863)
-4. Send an application to yourself - different sender. (862/863)
-5. Open Variations, WIP, Applications and Contracted Rates. Those are four of
-   the ten pages that import the file I broke, so they are the ones that would
-   fail to render if anything is still wrong.
-6. Report a Problem - confirm it reaches you. (862)
+WHAT TO DO AFTER DEPLOYING
+--------------------------
+1. Visit /api/admin/project-key-audit while signed in as admin. Send me what it
+   returns. If it is long, jobNumbersWithMoreThanOneRecord and the first few
+   entries of duplicated are enough to start.
+2. Try deleting that test variation again. You should now get a message
+   explaining the refusal instead of nothing happening.

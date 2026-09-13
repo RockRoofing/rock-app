@@ -298,10 +298,16 @@ export default function VariationTracker() {
       const idx = vars.findIndex(v => (v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) && v.description === r.description)
       if (idx < 0) return
       vars[idx] = { ...vars[idx], instructed: value }
-      await fetch(`/api/project/${r.projectId}/settings`, {
+      const save = await fetch(`/api/project/${r.projectId}/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...settings, variations: vars }),
       })
+      if (!save.ok) {
+        let msg = `Could not save (${save.status}).`
+        try { const d = await save.json(); if (d && d.error) msg = d.error } catch {}
+        alert(msg)
+        loadProjects()
+      }
     } catch (e) { console.error(e); loadProjects() }
   }
 
@@ -318,13 +324,26 @@ export default function VariationTracker() {
         const matchDesc = v.description === r.description
         return !(matchNum && matchDesc)
       })
-      await fetch(`/api/project/${r.projectId}/settings`, {
+      const save = await fetch(`/api/project/${r.projectId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...settings, variations: vars }),
       })
+      // SHOW THE REFUSAL.
+      //
+      // The server refuses to remove a variation the customer has already
+      // instructed, and says exactly why. This threw the reply away, so the
+      // row simply stayed on screen with no explanation and nothing to do about
+      // it. The guard was working; only the reporting was missing.
+      if (!save.ok) {
+        let msg = `Could not delete (${save.status}).`
+        try { const d = await save.json(); if (d && d.error) msg = d.error } catch {}
+        alert(msg)
+        await loadProjects()
+        return
+      }
       await loadProjects()
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error(e); alert('Could not delete: ' + (e?.message || 'request failed')) }
   }
 
   async function loadProjects() {
