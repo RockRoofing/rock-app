@@ -105,8 +105,37 @@ async function handler(req, res) {
         if (sum && isFinite(sum.anticipatedFinalAccount)) { project.afaOverride = Number(sum.anticipatedFinalAccount); project.afaOverrideAt = Date.now(); project.afaOverrideAppSeq = apps[idx].seq || null }
       } catch {}
     }
-    project.applications = apps
-    await saveProject(projectId, project)
+    // RE-READ IMMEDIATELY BEFORE WRITING.
+    //
+    // The project was read at the top of this handler. Since then we have built
+    // a PDF and sent an email through Resend - several seconds in which anything
+    // else that saved this project would be silently rolled back by the write
+    // below, because it used to write the WHOLE record from that stale copy.
+    //
+    // variation-send.js has done it this way for a while, and says why. The same
+    // fault was never fixed here. So: re-read, apply only what this handler
+    // changed, write that.
+    const fresh = (await getProject(projectId)) || {}
+    fresh.applications = apps
+    if (project.afaOverride !== undefined) {
+      fresh.afaOverride = project.afaOverride
+      fresh.afaOverrideAt = project.afaOverrideAt
+      fresh.afaOverrideAppSeq = project.afaOverrideAppSeq
+    }
+    await saveProject(projectId, fresh)
+    // Same audit trail as applications.js, so a missing application is
+    // traceable instead of a mystery. Never allowed to fail the send.
+    try {
+      const redis = await getClient()
+      const key = `app:audit:${projectId}`
+      const log = (await redis.get(key)) || []
+      log.unshift({
+        at: new Date().toISOString(), why: 'send',
+        before: Array.isArray(project.applications) ? project.applications.length : 0,
+        after: apps.length, delta: 0,
+      })
+      await redis.set(key, log.slice(0, 50))
+    } catch {}
     // Refresh Project Financials / Retentions so the new AFA shows.
     try {
       const redis = await getClient()

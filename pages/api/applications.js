@@ -80,6 +80,44 @@ async function resolveProjectRates(projectId, project) {
   }
 }
 
+// WRITE AGAINST A RECORD RE-READ AT THE MOMENT OF WRITING.
+//
+// Every write here used to save the WHOLE project record, from a copy read
+// earlier in the request. application-send.js was worse: it read the record,
+// built a PDF, sent an email, and only then wrote the whole thing back - a
+// window of several seconds in which anything else that saved that project was
+// silently overwritten.
+//
+// variation-send.js already does it correctly, and says why:
+//
+//     Re-read immediately before writing: a variation edited in the portal while
+//     the customer had the page open would otherwise be rolled back by this save.
+//
+// The same fault, found and fixed for variations, was never applied to
+// applications. One rule fixed in one place.
+//
+// commit() re-reads immediately before writing and lets the caller apply its
+// change to THAT record, so a concurrent write can no longer be rolled back.
+// It also records what it did - see below.
+async function commit(projectId, why, apply) {
+  const fresh = (await getProject(projectId)) || {}
+  const before = Array.isArray(fresh.applications) ? fresh.applications.length : 0
+  apply(fresh)
+  const after = Array.isArray(fresh.applications) ? fresh.applications.length : 0
+  await saveProject(projectId, fresh)
+  // AN AUDIT TRAIL, because the last time an application went missing there was
+  // no way to tell what had written the record. Last 50 writes per project.
+  // Never allowed to fail the write it is recording.
+  try {
+    const redis = await getClient()
+    const key = `app:audit:${projectId}`
+    const log = (await redis.get(key)) || []
+    log.unshift({ at: new Date().toISOString(), why, before, after, delta: after - before })
+    await redis.set(key, log.slice(0, 50))
+  } catch {}
+  return fresh
+}
+
 async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
@@ -143,10 +181,15 @@ async function handler(req, res) {
 
     // One-time backfill: assign permanent appNumbers to any sent applications that
     // predate this field, so numbering is correct and persists.
-    if (Array.isArray(project.applications)) {
-      const { changed } = backfillAppNumbers(project.applications)
-      if (changed) { try { await saveProject(projectId, project) } catch {} }
-    }
+    // A GET MUST NOT WRITE.
+    //
+    // This saved the whole project record on a page load. A read that writes is
+    // a read that can roll back somebody else's save, and it happens on every
+    // refresh, so it is the write most likely to collide with a slow one.
+    //
+    // The numbers are still filled in for the response; they are persisted the
+    // next time something writes deliberately.
+    if (Array.isArray(project.applications)) backfillAppNumbers(project.applications)
 
     // Resolve this project's jobNo (from the dashboard cache) to match deliveries.
     let jobNo = ''
@@ -303,8 +346,7 @@ async function handler(req, res) {
         createdAt: Date.now(),
         createdBy: req.body.author || '',
       }
-      project.applications = [...apps, app]
-      await saveProject(projectId, project)
+      await commit(projectId, 'create', (f) => { f.applications = [...(Array.isArray(f.applications) ? f.applications : apps), app] })
       return res.json({ ok: true, application: app, applications: project.applications })
     }
 
@@ -321,8 +363,7 @@ async function handler(req, res) {
       // Editing a previously-sent application sends it back to DRAFT — it must be
       // re-sent (or marked as sent) again. Its permanent appNumber is kept.
       if (wasSent) { apps[idx].status = 'draft'; apps[idx].revertedFromSentAt = Date.now() }
-      project.applications = apps
-      await saveProject(projectId, project)
+      await commit(projectId, 'revert-to-draft', (f) => { f.applications = apps })
       return res.json({ ok: true, application: apps[idx] })
     }
 
@@ -347,9 +388,7 @@ async function handler(req, res) {
         appNumber = maxSent + 1
       }
       apps[idx] = { ...apps[idx], appNumber, variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
-      project.applications = apps
-      applyAfaOverrideFromApp(project, apps[idx])
-      await saveProject(projectId, project)
+      await commit(projectId, 'mark-sent', (f) => { f.applications = apps; applyAfaOverrideFromApp(f, apps[idx]) })
       await clearDashboardCache()
       return res.json({ ok: true, application: apps[idx] })
     }
@@ -366,8 +405,7 @@ async function handler(req, res) {
       if (matchIdx < 0 && description) matchIdx = vars.findIndex(v => norm(v.descriptionFull) === norm(description) || norm(v.description) === norm(description))
       if (matchIdx < 0) return res.status(404).json({ error: 'Variation not found in tracker.' })
       vars[matchIdx] = { ...vars[matchIdx], instructed: !!instructed }
-      project.variations = vars
-      await saveProject(projectId, project)
+      await commit(projectId, 'set-variation-instructed', (f) => { f.variations = vars })
       return res.json({ ok: true, variations: vars })
     }
 
@@ -377,15 +415,13 @@ async function handler(req, res) {
       if (target && target.status && target.status !== 'draft' && !allowSent) {
         return res.status(400).json({ error: 'Only draft applications can be deleted (pass allowSent to override).' })
       }
-      project.applications = apps.filter(a => a.id !== id)
-      await saveProject(projectId, project)
+      await commit(projectId, 'delete', (f) => { f.applications = apps.filter(a => a.id !== id) })
       return res.json({ ok: true, applications: project.applications })
     }
 
     // Persist the project's hidden-PO list (PO numbers hidden from the materials picker).
     if (action === 'set-hidden-pos') {
-      project.hiddenPOs = Array.isArray(req.body.hiddenPOs) ? req.body.hiddenPOs : []
-      await saveProject(projectId, project)
+      await commit(projectId, 'set-hidden-pos', (f) => { f.hiddenPOs = Array.isArray(req.body.hiddenPOs) ? req.body.hiddenPOs : [] })
       return res.json({ ok: true, hiddenPOs: project.hiddenPOs })
     }
 
@@ -395,8 +431,7 @@ async function handler(req, res) {
       if (!monthKey) return res.status(400).json({ error: 'monthKey required' })
       const list = Array.isArray(project.applicationDismissals) ? project.applicationDismissals : []
       if (!list.includes(monthKey)) list.push(monthKey)
-      project.applicationDismissals = list
-      await saveProject(projectId, project)
+      await commit(projectId, 'dismiss-month', (f) => { f.applicationDismissals = list })
       return res.json({ ok: true, applicationDismissals: list })
     }
 

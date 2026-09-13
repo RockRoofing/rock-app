@@ -1,79 +1,108 @@
-pkg866 - Name the project records. READ ONLY.
-=============================================
+pkg867 - The lost application. Cause found and fixed.
+=====================================================
 
-ONE FILE. Replaces pages/api/admin/project-key-audit.js from pkg865.
-Writes nothing. Changes no figure.
-
-
-WHAT THE FIRST AUDIT RULED OUT
-------------------------------
-All 36 project records are keyed by tracking option id. None by job number.
-No duplicates. So the duplicate-key theory - which was my first hypothesis and
-the one the handover flagged - is wrong for this fault. Worth knowing anyway:
-that open item is now closed. The data is clean.
-
-I also checked whether xeroId and trackingOptionId could differ, which would
-make the page ask for a key the record is not under. They cannot:
-dashboard.js line 791-792 sets both from the same value.
+TWO FILES. No new files to create.
+  pages/api/applications.js
+  pages/api/application-send.js
 
 
-WHAT THE FIRST AUDIT COULD NOT TELL YOU
----------------------------------------
-It listed 36 uuids and no names, because a project settings record stores
-neither a job number nor a name. So when one record stood out, there was no way
-to say which project it was.
+WHAT HAPPENED
+-------------
+application-send.js read the whole project record, then built a PDF, then sent
+the email through Resend, and only THEN wrote the whole record back - from the
+copy it read several seconds earlier. Anything that saved that project during
+those seconds was silently overwritten.
 
-The one that stands out:
+Reproduced, with a create landing in the middle of a send:
 
-    project:a24993b7-ca62-4789-bee2-eb6705c7134b
-    applications 1   sent 0   variations 0   contractValue null   FIELDS 4
+    OLD  applications after both writes : 0    <- LOST
+         rest of the record intact?      : true
+    NEW  applications after both writes : 1    <- kept
 
-Every other record has between 13 and 36 fields. Four means the record was
-created from nothing - saveProject writing to a key that held no settings.
+Applications gone, everything else untouched. That is exactly Gas Lane: 34
+fields, contracted rates and both variations intact, applications empty.
+
+/api/applications ALSO WROTE ON A GET. backfillAppNumbers saved the entire
+project record on a page load, so every refresh was a write competing with that
+window. A read that writes is a read that can roll back somebody else's save.
 
 
-WHAT THIS VERSION ADDS
-----------------------
-It reads the dashboard snapshot purely to label each record with its job number
-and name, and to answer the question that actually matters:
+THE PART THAT SHOULD NOT HAVE HAPPENED
+--------------------------------------
+variation-send.js has done this correctly for a long time, and says why in its
+own comment:
 
-    orphan: true   this key is NOT a live Xero tracking option
+    Re-read immediately before writing: a variation edited in the portal while
+    the customer had the page open would otherwise be rolled back by this save.
 
-An orphan record cannot be selected anywhere in the portal, because every
-project picker is built from the live list. But anything that scans every
-project:* key still counts it - and the applications summary does exactly that.
+The same fault was found, understood and fixed for variations - and never
+applied to applications. One rule fixed in one place. That is the fault class
+this project keeps producing, and this time it cost real data.
 
-That is precisely the shape of what you described: it shows in the table, and
-the project cannot be found.
 
-New fields in the response:
+THE FIX
+-------
+Every write now re-reads the record immediately before writing and applies only
+what it changed:
 
-    liveProjectsInSnapshot                  how many the portal can actually see
-    orphanRecords                           how many records are not among them
-    orphansHoldingApplicationsOrVariations  the ones that matter - unreachable
-                                            records still holding work
-    liveJobNo / liveName / liveStatus       on every record, so the full list is
-                                            readable
-    orphan                                  on every record
+  applications.js    all 7 POST writes go through a new commit() helper
+  applications.js    the GET no longer writes at all - numbers are still filled
+                     in for the response, and persisted next time something
+                     writes deliberately
+  application-send   re-reads after the PDF and the email, writes applications
+                     and the AFA override only
+
+Whole-record writes remaining in applications.js: 0.
+
+
+AN AUDIT TRAIL
+--------------
+Every write now records what it did, at app:audit:<projectId> - last 50 per
+project:
+
+    { at, why, before, after, delta }
+
+why is one of: create, send, mark-sent, revert-to-draft, delete,
+set-hidden-pos, dismiss-month, set-variation-instructed.
+
+The reason this is here: when your application went missing there was no way to
+tell what had written the record. We spent this session narrowing it down by
+elimination. Next time the answer is a single read. Neither the audit nor its
+failure can affect the write it is recording.
+
+
+ABOUT YOUR LOST APPLICATION - it is not recoverable from the system
+-------------------------------------------------------------------
+The record holds applications: []. The dashboard cache still shows derived
+figures because it was built while the application existed, but it does NOT
+store the application itself - only afaShown and afaGross. So there is nothing
+to restore from.
+
+The emailed PDF is the complete record of what it said. Recreate it from that.
+
+TWO THINGS TO CHECK ON GAS LANE AFTER RECREATING:
+  - the AFA on Project Financials. The send set afaOverride on the record, and
+    that override may still be there pointing at an application that no longer
+    exists.
+  - the retention figures, which were derived from it.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile: 0 errors
-- still read only: the file contains redis.keys and redis.get and no writes
-- the dashboard read is wrapped so a missing snapshot degrades to unlabelled
-  output rather than failing
+- esbuild compile on both files: 0 errors
+- import-graph check: clean, 185 client entry points
+- grep confirms zero whole-record writes left in applications.js
+- reproduced the loss and confirmed the fix prevents it, output above
+- each of the 7 replacements asserted on an exact unique string and wrote only
+  if it matched once
 
 
-WHAT TO DO
-----------
-Visit /api/admin/project-key-audit again - the short form is enough this time.
-
-Send me orphanRecords and orphansHoldingApplicationsOrVariations.
-
-If a24993b7 comes back as an orphan, that is the answer and I will know what to
-fix. If it comes back with a job number and a name, then the record is reachable
-and the fault is in how the page loads it, which is a different chase - and
-knowing WHICH project it is will let me follow it properly.
-
-Still do not change anything.
+WHAT TO CHECK AFTER DEPLOYING
+-----------------------------
+1. Open the Applications page for a project. It should load normally.
+2. Create a draft application, then delete it. Both write paths.
+3. Recreate the Gas Lane application from the PDF and send it. Then reload and
+   confirm it is still there - that is the actual regression test.
+4. Visit /api/applications?projectId=ada2741f-a535-4a40-875d-64da6267316e and
+   confirm the application is in the list.
+5. Check Project Financials AFA for Gas Lane against what it should be.
