@@ -1,4 +1,5 @@
 import { getOpsUsers } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Operatives roster (H&S) — NOW a READ-ONLY projection of Site App Users.
 // Adding a Site App User (Admin → Site App Users) automatically populates this
@@ -8,7 +9,7 @@ import { getOpsUsers } from '../../lib/db'
 // GET /api/operatives -> { operatives:[{ id, firstName, lastName, email, phone, company, trades[], accessLevel }] }
 // POST/DELETE are disabled — manage people under Site App Users.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const users = await getOpsUsers()
     const operatives = (users || [])
@@ -34,3 +35,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

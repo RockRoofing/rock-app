@@ -1,4 +1,5 @@
 import { put } from '@vercel/blob'
+import withTenant from '../../lib/withTenant'
 
 // Server-side upload. The browser POSTs the RAW file bytes as the request body
 // (no base64, no JSON wrapper), with the filename/type in headers. Raw bytes
@@ -15,7 +16,7 @@ function readRaw(req) {
   })
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (!token) return res.status(500).json({ error: 'File storage not configured (BLOB_READ_WRITE_TOKEN missing).' })
@@ -33,3 +34,5 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: e?.message || 'Upload failed' })
   }
 }
+
+export default withTenant(handler)

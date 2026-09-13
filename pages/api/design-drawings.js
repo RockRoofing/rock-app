@@ -4,6 +4,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { buildStampedCopy } from '../../lib/stampPdf'
+import withTenant from '../../lib/withTenant'
 
 // Drawings per project + set ('rock' | 'contract').
 // Store: design:drawings:<set>:<projectNo> = [ {drawing} ]
@@ -58,7 +59,7 @@ async function peopleFor(projectNo) {
   return out
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     const set = String(req.query.set || 'rock').trim()
@@ -148,3 +149,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

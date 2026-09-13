@@ -1,11 +1,12 @@
 import { get, getOpsProject, getPortalUsers } from '../../lib/db'
 import { buildIssuePDF } from '../../lib/issuePdf'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/issue-notify { id } -> emails the project's Contracts Manager,
 // Operations Manager and Quantity Surveyor that an issue has been raised, with
 // a link to action the "send to customer" decision (portal on desktop,
 // Site App on mobile).
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Missing id' })
 
@@ -112,3 +113,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Notify failed' })
   }
 }
+
+export default withTenant(handler)

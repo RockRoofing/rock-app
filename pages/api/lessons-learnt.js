@@ -2,6 +2,7 @@ import { get, set, getLiveTasks, saveLiveTasks, getPortalUsers } from '../../lib
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, hasRole } from '../../lib/roles'
 import { SEED_MINUTES } from '../../lib/lessonsSeed'
+import withTenant from '../../lib/withTenant'
 
 // Monthly Lessons Learnt: minutes + a manually-categorised lessons table.
 // Lessons are entered as structured rows on each meeting (item + detail + departments);
@@ -45,7 +46,7 @@ async function ensureSeed() {
 }
 
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const u = sessionUser(req)
   if (!u || !canAccessArea(u.role, 'lessons-learnt')) return res.status(403).json({ error: 'No access' })
   await ensureSeed()
@@ -240,3 +241,5 @@ function lessonNewestFirst(a, b) {
   if (am !== bm) return bm - am
   return tsFromId(b.id) - tsFromId(a.id)
 }
+
+export default withTenant(handler)

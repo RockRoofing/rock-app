@@ -3,11 +3,12 @@ import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, se
 import { buildOutstandingInvoicesPDF } from '../../lib/outstandingInvoicesPdf'
 import { getPortalUsers } from '../../lib/db'
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 
 const META_KEY = 'invoice:meta'   // { [invoiceNumber]: { expectedDate, comments:[{id,text,author,at,mentions:[]}] } }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -263,3 +264,5 @@ async function notifyMentions(userIds, invoiceNumber, comment, baseUrl) {
     } catch (e) { console.error('mention email failed:', e) }
   }
 }
+
+export default withTenant(handler)

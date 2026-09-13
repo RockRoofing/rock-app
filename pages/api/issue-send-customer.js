@@ -1,11 +1,12 @@
 import { get, set, getOpsProject } from '../../lib/db'
 import { buildIssuePDF } from '../../lib/issuePdf'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/issue-send-customer { id, emails: [] } -> emails the styled issue PDF
 // to the given customer emails and marks the issue as sent.
 export const config = { api: { bodyParser: { sizeLimit: '8mb' } } }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id, emails } = req.body || {}
   if (!id) return res.status(400).json({ error: 'Missing id' })
   if (!Array.isArray(emails) || !emails.length) return res.status(400).json({ error: 'No recipient emails' })
@@ -62,3 +63,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Send failed' })
   }
 }
+
+export default withTenant(handler)

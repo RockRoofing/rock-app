@@ -1,5 +1,6 @@
 import { get, set, getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, fetchPurchaseOrders, getProjectsFromCategories } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 // Deliveries schedule. One row per Purchase Order.
 //   - Auto: AUTHORISED POs from go-live onwards are pulled in on sync.
@@ -104,7 +105,7 @@ async function syncPOs() {
 }
 function matchProject(s) { return String(s || '').trim().replace(/^[#jJ]/, '').toLowerCase() }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     let syncInfo = null
     if (req.query.sync === 'true') syncInfo = await syncPOs()
@@ -177,3 +178,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

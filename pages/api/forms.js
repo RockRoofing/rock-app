@@ -1,11 +1,12 @@
 import { getForms, saveForms } from '../../lib/db'
 import { SEED_FORMS } from '../../lib/formDefs'
+import withTenant from '../../lib/withTenant'
 
 // GET    /api/forms            -> { forms }  (saved forms, or seed on first run)
 // GET    /api/forms?id=...     -> { form }
 // POST   /api/forms  { form }  -> upsert one form, returns { forms }
 // DELETE /api/forms  { id }    -> remove, returns { forms }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     let forms = await getForms()
     if (!forms || !forms.length) {
@@ -75,3 +76,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

@@ -2,6 +2,7 @@ import { get, set } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Document store for the Design portal's simple pages:
 //   categories: 'warranties' | 'oms' | 'calculations' | 'tech-sub' | 'leak-test-certs'
@@ -38,7 +39,7 @@ async function resolveAccess(req, projectNo) {
   return { ok: true, user: u, canUpload: true, external: false }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     const cat = String(req.query.cat || '').trim()
@@ -102,3 +103,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

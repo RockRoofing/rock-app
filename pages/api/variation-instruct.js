@@ -5,6 +5,7 @@ import { verifyInstructToken } from '../../lib/variationInstruct'
 import { buildVariationPDF } from '../../lib/variationPdf'
 import { resolveProjectPeople } from '../../lib/projectPeople'
 import { getPortalUsers } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // The customer-facing instruction endpoint.
 //
@@ -63,7 +64,7 @@ async function load(token) {
 
 const valueOf = (v) => (parseFloat(v.materials) || 0) + (parseFloat(v.labour) || 0) + (parseFloat(v.profit) || 0)
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { token, pdf } = req.query
     const { t, project, variation, error } = await load(token)
@@ -231,3 +232,5 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, instruction })
 }
+
+export default withTenant(handler)

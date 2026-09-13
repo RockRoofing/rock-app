@@ -2,6 +2,7 @@ import { getPortalUsers, savePortalUsers } from '../../lib/db'
 import { getExternalUsers, saveExternalUsers, findExternalByEmail, verifyExternalPassword, stripExternal } from '../../lib/designUsers'
 import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE, createResetToken, verifyResetToken } from '../../lib/portalAuth'
 import { ROLES, normRole } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Portal authentication + user management.
 //   POST { action:'login', email, password }      -> sets session cookie
@@ -111,7 +112,7 @@ async function ensureSeed() {
   return users
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   await ensureSeed()
 
   if (req.method === 'GET') {
@@ -320,3 +321,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

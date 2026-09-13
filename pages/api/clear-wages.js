@@ -2,12 +2,13 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getAllProjectSettings, getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
+import withTenant from '../../lib/withTenant'
 
 // One-time RESET of wages data only. Wipes the untagged wage lump sums and every
 // per-project wage source, then re-merges so project cost totals drop the wages.
 // Does NOT touch bills or invoices. Admin-only. Requires an explicit confirm flag
 // so it can't be triggered by accident.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   if (!req.body || req.body.confirm !== 'CLEAR WAGES') {
@@ -49,3 +50,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

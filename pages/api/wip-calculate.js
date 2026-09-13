@@ -1,12 +1,13 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchBillsByCategory, fetchLabourJournalsByCategory } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 export const config = {
   maxDuration: 300
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -117,3 +118,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

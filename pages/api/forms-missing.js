@@ -1,6 +1,7 @@
 import { get, getOpsProjects, getSubmissionIndex, saveSubmissionIndex, getSubmission, getForms } from '../../lib/db'
 import { loadPreStarts, isPreStartDoneBy, preStartSentAt } from '../../lib/preStartDone'
 import { formDateOf } from '../../lib/formDates'
+import withTenant from '../../lib/withTenant'
 
 // Forms "Missing" dashboard data.
 // For a given week range, works out the REQUIRED tracked forms per project/week and whether each has
@@ -20,7 +21,7 @@ function addWorkingDays(d, n) { let c = new Date(d), added = 0; while (added < n
 function cellCount(cell) { if (!cell) return 0; if (Array.isArray(cell)) return cell.length; return (cell.entries ? cell.entries.length : 0) + (cell.unnamed || 0) }
 function cellEntries(cell) { if (!cell) return []; return Array.isArray(cell) ? cell : (cell.entries || []) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const [alloc, ops, subs, roster, hsCols, hsData, waterIngress] = await Promise.all([
       get('ops:planning-allocations').then(v => v || {}),
@@ -289,3 +290,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

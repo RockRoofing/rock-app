@@ -1,6 +1,7 @@
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, saveExternalUsers, stripExternal, normProjects, hashPassword } from '../../lib/designUsers'
 import { sendCustomerWelcome } from '../../lib/designEmail'
+import withTenant from '../../lib/withTenant'
 
 // Admin management of EXTERNAL customer/design-team users.
 //   GET  ?action=list                         -> { users }
@@ -17,7 +18,7 @@ function readCookie(req, name) {
 }
 function currentUser(req) { return verifySessionToken(readCookie(req, SESSION_COOKIE)) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const me = currentUser(req)
   if (!me || (me.role !== 'admin' && me.role !== 'management')) return res.status(403).json({ error: 'Not authorised' })
 
@@ -115,3 +116,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

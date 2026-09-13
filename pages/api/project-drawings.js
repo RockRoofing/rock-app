@@ -1,4 +1,5 @@
 import { get } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Rock Drawings, read straight from the Design Portal so there is ONE source of truth.
 // Nothing is copied or synced - this reads design:rock-drawings:<projectNo> live, which
@@ -27,7 +28,7 @@ function currentRevisions(list) {
   return order.map(f => byFam[f].current || byFam[f].newest).filter(Boolean)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   const no = String(req.query.no || '').trim()
@@ -74,3 +75,5 @@ export default async function handler(req, res) {
 
   return res.json({ drawings, files: drawings, counts })
 }
+
+export default withTenant(handler)

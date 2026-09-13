@@ -1,12 +1,13 @@
 import { requireRole } from '../../lib/portalAuth'
 import { buildWipPDF } from '../../lib/wipPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/wip-pdf?month=2026-08  -> the month's WIP as a PDF
 //
 // ACCOUNTS CAN DOWNLOAD IT. They can see the WIP in Bookkeeping and the whole point of the
 // button is that they can take it away - refusing the download while showing the figures
 // on screen would be a distinction with no purpose.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin', 'accounts'])) return
   const month = String(req.query.month || '')
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month required, as YYYY-MM' })
@@ -37,3 +38,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e?.message || 'Could not build the PDF' })
   }
 }
+
+export default withTenant(handler)

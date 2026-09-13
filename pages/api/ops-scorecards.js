@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get, set, getSubmissionIndex, getSubmission, getOpsProjects, getLiveTasks } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/ops-scorecards?from=YYYY-MM-DD&to=YYYY-MM-DD
 //   Returns a MONTHLY SERIES so the UI can draw trend lines, matching the
@@ -32,7 +33,7 @@ const INCIDENCE_TITLE_RX = /(accident book|accident and incident report|accident
 const isWaterIngress = (s) => (s.formId === 'water-ingress-report') || /water ingress/i.test(s.formTitle || '')
 const isPSN = (s) => (s.formId === 'pre-start-notification') || /pre-?start notification/i.test(s.formTitle || '')
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'POST') {
@@ -180,3 +181,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed to compute scorecards' })
   }
 }
+
+export default withTenant(handler)

@@ -1,8 +1,9 @@
 import { getOpsDocs, saveOpsDocs } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // GET  /api/ops-docs           -> { docs: { company, guidance, project } }
 // POST /api/ops-docs { docs }  -> save full structure
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     return res.json({ docs: await getOpsDocs() })
   }
@@ -14,3 +15,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

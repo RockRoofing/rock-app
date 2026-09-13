@@ -1,11 +1,12 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // App Improvement tickets.
 // POST  { userName, userEmail, platform, page, description }  -> store + notify office
 // GET                                                          -> { reports } newest first
 // PATCH { id, status?, comments? }                             -> update; when status becomes
 //                                                                 'resolved', email the reporter
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const reports = (await get('ops:problem-reports')) || []
     return res.json({ reports: [...reports].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) })
@@ -137,3 +138,5 @@ async function notifyReporterResolved(report, req) {
     return r.ok
   } catch { return false }
 }
+
+export default withTenant(handler)

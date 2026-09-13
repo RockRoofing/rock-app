@@ -3,6 +3,7 @@ import { getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
+import withTenant from '../../lib/withTenant'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
@@ -73,7 +74,7 @@ async function fetchAllWageLines(at, tid, fromDate) {
   return out
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -210,3 +211,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

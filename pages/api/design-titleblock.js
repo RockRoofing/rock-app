@@ -1,5 +1,6 @@
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Best-effort extraction of drawing title-block fields from a PDF. Title blocks vary
 // wildly between architects, so this pattern-matches common labels and ALWAYS returns
@@ -47,7 +48,7 @@ async function extractText(url) {
   return pages.join('\n')
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const u = verifySessionToken(readCookie(req, SESSION_COOKIE))
   if (!u || u.role === 'external' || !canAccessArea(u.role, 'design')) return res.status(403).json({ error: 'No access' })
@@ -71,3 +72,5 @@ export default async function handler(req, res) {
     return res.json({ meta: { architect: '', reference: '', project: '', revision: '', status: '', date: '' }, ok: false, error: e?.message || 'Could not read title block' })
   }
 }
+
+export default withTenant(handler)

@@ -3,6 +3,7 @@ import { getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { invoiceLineKey, mergeDedupe } from '../../lib/costDedupe'
+import withTenant from '../../lib/withTenant'
 
 
 // RFC-4180-ish CSV line parser (handles quoted fields with commas + "" escapes).
@@ -43,7 +44,7 @@ function taxLabel(t) {
   return t || '—'
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -202,3 +203,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Import failed' })
   }
 }
+
+export default withTenant(handler)

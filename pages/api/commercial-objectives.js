@@ -1,6 +1,7 @@
 import { get, set } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Commercial team weekly & monthly objectives. A simple Yes/No grid: objective x month.
 // Store: commercial:objectives = { weekly: { "<objId>|<YYYY-MM>": {v:'yes'|'no', by, at} },
@@ -18,7 +19,7 @@ function readCookie(req, name) {
 }
 function user(req) { return verifySessionToken(readCookie(req, SESSION_COOKIE)) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const u = user(req)
   if (!u || !canAccessArea(u.role, 'commercial')) return res.status(403).json({ error: 'No access' })
 
@@ -45,3 +46,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

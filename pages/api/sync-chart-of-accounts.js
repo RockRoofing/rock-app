@@ -1,13 +1,14 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getClient } from '../../lib/db'
 import { refreshXeroToken, fetchChartOfAccounts } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/sync-chart-of-accounts
 // Pulls the full Chart of Accounts (code + name + type/class/status) from Xero and
 // stores it so the Account Categorisation list shows every account. New codes that
 // aren't yet in the categorisation config appear as "uncategorised" and are flagged
 // in the Bookkeeping app until an admin assigns them.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
   const redis = await getClient()
@@ -36,3 +37,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

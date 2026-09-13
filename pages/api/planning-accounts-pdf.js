@@ -2,6 +2,7 @@ import { buildAccountsLabourPDF } from '../../lib/weeklyLabourPdf'
 import { assembleWeek } from './planning-week'
 import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 const DAY = 86400000
 const parseISO = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
@@ -10,7 +11,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 // POST /api/planning-accounts-pdf
 // body: { monday:'YYYY-MM-DD', weeks:N, includeOpIds:[...], overnight:{ [opId]:[dateISO,...] } }
 // Returns a PDF: only the selected installers, with O/A marked where overnight applies.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin', 'accounts'])) return
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   try {
@@ -54,3 +55,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'PDF failed' })
   }
 }
+
+export default withTenant(handler)

@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 
 const monthOf = (dateStr) => (dateStr && /^\d{4}-\d{2}/.test(dateStr)) ? dateStr.slice(0, 7) : ''
@@ -21,7 +22,7 @@ function categoryOf(code, config) {
   return 'uncategorised'
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -266,3 +267,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

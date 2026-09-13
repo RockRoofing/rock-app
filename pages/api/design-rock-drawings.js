@@ -7,6 +7,7 @@ import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { rdRecordPendingComment, rdRecordPendingDoc, rdGetReadMap, rdMarkRead, rdUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 import { buildStampedCopy } from '../../lib/stampPdf'
+import withTenant from '../../lib/withTenant'
 
 // Rock Drawings for a project. Each drawing is a REVISION in a "family". Revisions are
 // lettered Rev A, B, C ...; only the newest is current, older ones are superseded (kept,
@@ -101,7 +102,7 @@ async function notifyApprover(no, doc) {
   } catch (e) { /* ignore */ }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
@@ -371,3 +372,5 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ error: 'Unknown action' })
 }
+
+export default withTenant(handler)

@@ -1,11 +1,12 @@
 import { getSubmission, getOpsProject, getForms } from '../../lib/db'
 import { SEED_FORMS } from '../../lib/formDefs'
 import { buildPsnPDF } from '../../lib/preStartNotifyPdf'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/pre-start-notify-send { submissionId, emails:[] }
 // Emails the Pre-Start Notification (a branded PDF built from the submission,
 // using the real question labels) to the given customer email addresses.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { submissionId, emails } = req.body || {}
   if (!submissionId) return res.status(400).json({ error: 'Missing submissionId' })
@@ -66,3 +67,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Send failed' })
   }
 }
+
+export default withTenant(handler)

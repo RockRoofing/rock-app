@@ -1,3 +1,4 @@
+import withTenant from '../../lib/withTenant'
 import { requireRole } from '../../lib/portalAuth'
 import { getPortalUsers } from '../../lib/db'
 import {
@@ -15,7 +16,7 @@ import {
 // POST { action: 'send-now' }  -> send the weekly list immediately
 // POST { action: 'send-operative-now' } -> send the operative reminders immediately
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
@@ -71,3 +72,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default withTenant(handler)

@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // READ-ONLY diagnostic. Reconciles a single project's cost figures across the
 // three bases so we can see WHY the Budget Tracker, EOM Report and Project page
@@ -9,7 +10,7 @@ import { get } from '../../lib/db'
 //   3) recomputed from costs:lines, up to a given ?date=YYYY-MM-DD
 //
 // Usage: /api/cost-reconcile?id=<xeroId>&date=2027-06-30
-export default async function handler(req, res) {
+async function handler(req, res) {
   const auth = await requireRole(req, res, ['post-contract', 'management', 'admin'])
   if (!auth) return
 
@@ -68,3 +69,5 @@ export default async function handler(req, res) {
     account_code_breakdown: codeBreakdown,
   })
 }
+
+export default withTenant(handler)

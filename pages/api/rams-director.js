@@ -1,5 +1,6 @@
 import { get, set, getPortalUsers } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
+import withTenant from '../../lib/withTenant'
 
 // Designated RAMS Director — chosen from Portal Users whose jobRole is 'Director'.
 // The Director approves/signs RAMS in the Site App; we match them there by email.
@@ -9,7 +10,7 @@ import { requireRole } from '../../lib/portalAuth'
 // POST { email:'' } (admin)          -> clear
 const KEY = 'ops:rams-director'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       // Lightweight: Site App just needs the designated Director's email.
@@ -48,3 +49,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

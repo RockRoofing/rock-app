@@ -1,11 +1,12 @@
 import { get, set, getOpsProjects } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
+import withTenant from '../../lib/withTenant'
 
 // TEMP DIAGNOSTIC + CLEANUP:
 //   GET  /api/planning-trace?q=J203                  -> show allocations referencing J203
 //   POST /api/planning-trace { deleteKey:'L:J203' }  -> remove that orphaned allocation key
 // Delete this file after use.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'POST') {
@@ -45,3 +46,5 @@ export default async function handler(req, res) {
     detail,
   })
 }
+
+export default withTenant(handler)

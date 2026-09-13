@@ -1,5 +1,6 @@
 import { get, set } from '../../lib/db'
 import { INQUERY_KEY, verifyReviewToken } from '../../lib/inquery'
+import withTenant from '../../lib/withTenant'
 
 // THE REVIEWER'S SIDE.
 //
@@ -13,7 +14,7 @@ import { INQUERY_KEY, verifyReviewToken } from '../../lib/inquery'
 //
 //   GET  ?token=..                              -> { me, items }
 //   POST { token, key, status?, comment? }      -> update one invoice
-export default async function handler(req, res) {
+async function handler(req, res) {
   const token = String(req.query.token || req.body?.token || '')
   const t = verifyReviewToken(token)
   if (!t) return res.status(401).json({ error: 'That link is not valid, or it has expired. Ask for a new one.' })
@@ -78,3 +79,5 @@ export default async function handler(req, res) {
   await set(INQUERY_KEY, state)
   return res.json({ ok: true, item: { key, status: state[key].status || 'query', comments: state[key].comments || [] } })
 }
+
+export default withTenant(handler)

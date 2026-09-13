@@ -1,4 +1,5 @@
 import { getManufacturerContacts, saveManufacturerContacts } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Reusable manufacturer contacts. Saved when entered on an IHM so they can be
 // searched and selected on future handovers.
@@ -6,7 +7,7 @@ import { getManufacturerContacts, saveManufacturerContacts } from '../../lib/db'
 // GET    /api/manufacturers            -> { contacts }
 // POST   /api/manufacturers { contact }-> add/update (dedupe by email or name+company)
 // DELETE /api/manufacturers { id }     -> remove
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     return res.json({ contacts: await getManufacturerContacts() })
   }
@@ -39,3 +40,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject, get, getAllProjectSettings, getOpsProjects, getPortalUsers, getClient } from '../../lib/db'
 import { resolveProjectPeople } from '../../lib/projectPeople'
 import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates, backfillAppNumbers } from '../../lib/applications'
+import withTenant from '../../lib/withTenant'
 
 // Drop the dashboard snapshot so Project Financials / Budget Tracker / Retentions
 // rebuild from fresh project data.
@@ -79,7 +80,7 @@ async function resolveProjectRates(projectId, project) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
@@ -404,3 +405,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

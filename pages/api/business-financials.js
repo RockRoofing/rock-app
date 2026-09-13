@@ -4,6 +4,7 @@ import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 import { getTokens, saveTokens, getProject } from '../../lib/db'
 import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances, fetchBalanceSheetAccounts, fetchPaidReceivables } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 // End-of-month + N days, matching paymentDate() on the project cash flow page. Used to
 // place materials on older forecasts that only stored a delivery date.
@@ -106,7 +107,7 @@ function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budg
 
 // GET  /api/business-financials            -> summary from the P&L benchmark + cached bank data
 // POST /api/business-financials { syncBank:true } -> refresh the Bank Summary (money in/out) per month
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
   const redis = await getClient()
 
@@ -1683,3 +1684,5 @@ export default async function handler(req, res) {
     bankUpdatedAt: bank.updatedAt || null,
   })
 }
+
+export default withTenant(handler)

@@ -6,6 +6,7 @@ import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
 import { fetchMessageBody } from '../../lib/msGraph'
 import { sendMentionEmails, getMentionableUsers, diagnoseMentions, sendTestMention } from '../../lib/crmMentions'
 import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
+import withTenant from '../../lib/withTenant'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
 //   GET                    -> { deals, schema }
@@ -123,7 +124,7 @@ export const config = {
   maxDuration: 60,
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const acc = requireAccess(req)
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
@@ -945,3 +946,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default withTenant(handler)

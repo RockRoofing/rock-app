@@ -2,11 +2,12 @@ import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 import { getMilestones } from '../../lib/crmMilestones'
+import withTenant from '../../lib/withTenant'
 
 // PARALLEL / COMPARISON endpoint. Same output shape as /api/deals, but sourced
 // from the CRM (crm:deals) via the adapter instead of the Pipedrive sync cache.
 // Used by the /sales-crm comparison page. The original /api/deals is untouched.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   const crmDeals = await get('crm:deals') || []
   // Received dates and project scores. Not fields on the deal - see lib/crmMilestones.
@@ -49,3 +50,5 @@ export default async function handler(req, res) {
   // Pipedrive read on this endpoint. The CRM is edited live; there is no sync to report.
   return res.status(200).json({ deals: lightweight, lastSync: null })
 }
+
+export default withTenant(handler)

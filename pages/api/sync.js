@@ -1,8 +1,9 @@
 import { requireRole } from '../../lib/portalAuth'
 import { saveCachedDeals, saveLastSync, saveFieldMap, getCachedDeals } from '../../lib/db'
 import { fetchAllDeals, discoverFieldMap } from '../../lib/pipedrive'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
   try {
@@ -35,3 +36,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default withTenant(handler)

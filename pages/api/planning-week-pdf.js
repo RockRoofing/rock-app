@@ -1,12 +1,13 @@
 import { buildWeeklyLabourPDF } from '../../lib/weeklyLabourPdf'
 import { assembleWeek } from './planning-week'
+import withTenant from '../../lib/withTenant'
 
 const DAY = 86400000
 const parseISO = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 // GET /api/planning-week-pdf?monday=YYYY-MM-DD&weeks=N -> N consecutive weeks, one page each
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const mondayStr = req.query.monday || ''
     const n = Math.min(26, Math.max(1, Number(req.query.weeks) || 1))
@@ -23,3 +24,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'PDF failed' })
   }
 }
+
+export default withTenant(handler)

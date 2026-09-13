@@ -1,12 +1,13 @@
 import { getProject } from '../../lib/db'
 import { computeRateTotals } from '../../lib/contractRatesParser'
+import withTenant from '../../lib/withTenant'
 
 // Read-only view of a project's contracted rates, for the Site App (CM view).
 // GET only, no writes. The Site App gates project access on its own side
 // (useMyProjects / canAccessProject); this endpoint never mutates anything, so
 // it is safe to expose without a portal role. All editing goes through the
 // role-guarded /api/contracted-rates endpoint.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
   const { projectId } = req.query
   if (!projectId) return res.status(400).json({ error: 'projectId required' })
@@ -41,3 +42,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

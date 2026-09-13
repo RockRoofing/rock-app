@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 import { getMilestones } from '../../lib/crmMilestones'
+import withTenant from '../../lib/withTenant'
 
 // Returns all deals currently sitting in the Negotiating stage.
 //
@@ -10,7 +11,7 @@ import { getMilestones } from '../../lib/crmMilestones'
 // Pre-Contract still tied to it.
 //
 // GET /api/negotiating -> { deals: [...], count, totalValue }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   try {
     const crmDeals = await get('crm:deals') || []
@@ -51,3 +52,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default withTenant(handler)

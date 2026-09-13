@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Risk Log. Risks are stored (not read live) so they can carry editable fields
 // including comments. Two sources:
@@ -13,7 +14,7 @@ import { get, set } from '../../lib/db'
 async function getRisks() { return (await get('ops:risks')) || [] }
 async function saveRisks(r) { await set('ops:risks', r) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const risks = await getRisks()
     return res.json({ risks })
@@ -79,3 +80,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

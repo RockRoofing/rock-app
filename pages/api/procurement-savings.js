@@ -1,4 +1,5 @@
 import { get, set, keys } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Procurement Savings — per-project schedule of tendered vs buying rates.
 //   Tendered Total = Qty x Tendered Rate
@@ -22,7 +23,7 @@ function rowIncomplete(r) {
   return tendered && !bought
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     if (req.query.summary === 'true') {
       // Scan all stored savings docs; report per-project completeness.
@@ -55,3 +56,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

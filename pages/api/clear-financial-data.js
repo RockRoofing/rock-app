@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
+import withTenant from '../../lib/withTenant'
 
 async function projectIds(redis) {
   const cached = await redis.get('projects:list').catch(() => null)
@@ -17,7 +18,7 @@ async function projectIds(redis) {
 
 // Wipe financial data by type. Admin-only, requires typed confirm "CLEAR".
 // type: 'bills' | 'wages' | 'sales' | 'overheads' | 'all'
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   const { type, confirm } = req.body || {}
@@ -88,3 +89,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-export default async function handler(req, res) {
+import withTenant from '../../lib/withTenant'
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const KEY = process.env.PIPEDRIVE_API_KEY || process.env.Pipedrive_API_Key
   const { id } = req.query
@@ -19,3 +20,5 @@ export default async function handler(req, res) {
   
   return res.status(200).json({ relevant })
 }
+
+export default withTenant(handler)

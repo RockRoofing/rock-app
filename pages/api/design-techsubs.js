@@ -7,6 +7,7 @@ import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { tsKey, tsRecordPendingComment, tsRecordPendingDoc, tsGetReadMap, tsMarkRead, tsUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 import { buildStampedCopy } from '../../lib/stampPdf'
+import withTenant from '../../lib/withTenant'
 
 // Tech Sub documents for a project. Each doc is a REVISION belonging to a "family" (one
 // tech sub). Revisions within a family are lettered REV A, REV B, ... Only the newest in a
@@ -86,7 +87,7 @@ async function notifyApprover(no, doc) {
   } catch (e) { /* ignore */ }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
@@ -280,3 +281,5 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ error: 'Unknown action' })
 }
+
+export default withTenant(handler)

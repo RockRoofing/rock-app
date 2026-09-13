@@ -1,11 +1,12 @@
 import { getProjectFiles, getRamsApprovals, getRamsSignatures, getOpsProject } from '../../lib/db'
 import { buildSignedRamsPDF } from '../../lib/signedRamsPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/rams-signed-pdf?no=<projectNo>
 //     -> { revisions: [{ fileId, name, uploadedAt, stage, signedCount }] }  (newest first)
 // GET /api/rams-signed-pdf?no=<projectNo>&fileId=<id>
 //     -> application/pdf (original RAMS + appended signature/approval record)
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
     const { no, fileId } = req.query
@@ -62,3 +63,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed to build signed RAMS' })
   }
 }
+
+export default withTenant(handler)

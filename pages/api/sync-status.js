@@ -4,7 +4,7 @@
 import { getClient } from '../../lib/db'
 import withTenant from '../../lib/withTenant'
 
-export default withTenant(async function handler(req, res) {
+async function handler(req, res) {
   try {
     const redis = await getClient()
     const [invoices, wages, bills, benchmark] = await Promise.all([
@@ -17,4 +17,6 @@ export default withTenant(async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
-})
+}
+
+export default withTenant(handler)

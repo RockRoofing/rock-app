@@ -1,10 +1,11 @@
 import { getPreStart, savePreStart } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // GET  /api/pre-start?no=J247   -> { data }
 // POST /api/pre-start { projectNo, data } -> { ok }
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = req.query.no
     if (!no) return res.status(400).json({ error: 'Missing project number' })
@@ -25,3 +26,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

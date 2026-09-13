@@ -1,8 +1,9 @@
 import { getPreStart, getOpsProject, getTemplate } from '../../lib/db'
 import { buildPreStartPDF } from '../../lib/preStartPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/pre-start-pdf?no=J247 -> downloads the branded PDF
-export default async function handler(req, res) {
+async function handler(req, res) {
   const no = req.query.no
   if (!no) return res.status(400).json({ error: 'Missing project number' })
   try {
@@ -26,3 +27,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'PDF generation failed' })
   }
 }
+
+export default withTenant(handler)

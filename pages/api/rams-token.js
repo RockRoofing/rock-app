@@ -1,9 +1,10 @@
 import { getRamsToken, getRamsApprovals, getProjectFiles, getOpsProject } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Public (no-login) lookup for the tokenised Site-Manager approval page.
 // GET /api/rams-token?token=... -> { ok, projectName, fileName, fileUrl, status, smName }
 //   status: 'ready' | 'done' | 'not-ready' | 'invalid'
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
     const { token } = req.query
@@ -35,3 +36,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

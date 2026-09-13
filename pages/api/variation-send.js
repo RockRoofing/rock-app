@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
 import { buildVariationPDF } from '../../lib/variationPdf'
 import { createInstructToken, projectLabel } from '../../lib/variationInstruct'
+import withTenant from '../../lib/withTenant'
 
 // Variation PDF and send.
 //
@@ -35,7 +36,7 @@ async function loadVariation(projectId, varNumber) {
   return { project: { ...project, jobNo, name }, variation }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
@@ -213,3 +214,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e?.message || 'Could not send' })
   }
 }
+
+export default withTenant(handler)

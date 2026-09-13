@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const xget = (url, at, tid) => fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
@@ -182,7 +183,7 @@ async function fetchInvoiceLineItems(at, tid, invoiceId) {
 
 // On-demand: refresh Sales Invoices for ALL projects over a window (default 6 mo).
 // Exact-mirror within the window (older invoices preserved).
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'post-contract', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -324,3 +325,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

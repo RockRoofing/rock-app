@@ -1,4 +1,5 @@
 import { assembleWeek } from './planning-week'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/planning-week-email
 //   { weeks:[mondayISO,...], includeOpIds:[...] }  -> emails each INCLUDED operative their allocation
@@ -12,7 +13,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 const fmtDM = (s) => parseISO(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 const dow = (s) => DOWFULL[(parseISO(s).getDay() + 6) % 7]
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const RESEND_KEY = process.env.RESEND_API_KEY
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
@@ -92,3 +93,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Email failed' })
   }
 }
+
+export default withTenant(handler)

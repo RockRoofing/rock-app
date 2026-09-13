@@ -1,4 +1,5 @@
 import { getLiveTasks, saveLiveTasks } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Live Project Tasks. Can be added manually or auto-created from an IHM.
 // IHM-created tasks carry sourceIhm = projectNo and a stable key so re-finalising
@@ -9,7 +10,7 @@ import { getLiveTasks, saveLiveTasks } from '../../lib/db'
 // POST   /api/tasks { action:'sync-ihm', projectNo, projectName, tasks:[...] }
 //        -> replace all IHM tasks for that project with the given set
 // DELETE /api/tasks { id }          -> remove
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const tasks = await getLiveTasks()
     tasks.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
@@ -75,3 +76,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

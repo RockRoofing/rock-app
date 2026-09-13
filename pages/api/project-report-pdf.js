@@ -1,8 +1,9 @@
 import { get } from '../../lib/db'
 import { buildProjectReportPDF } from '../../lib/projectReportPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/project-report-pdf?id=pr_... -> branded, date-stamped report PDF
-export default async function handler(req, res) {
+async function handler(req, res) {
   const id = req.query.id
   if (!id) return res.status(400).json({ error: 'Missing report id' })
   try {
@@ -29,3 +30,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'PDF generation failed' })
   }
 }
+
+export default withTenant(handler)

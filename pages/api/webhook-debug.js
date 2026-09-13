@@ -1,6 +1,7 @@
 import { set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   
   const body = req.body
@@ -20,3 +21,5 @@ export default async function handler(req, res) {
   await set('webhook:last_debug', JSON.stringify(debug))
   return res.status(200).json({ ok: true })
 }
+
+export default withTenant(handler)

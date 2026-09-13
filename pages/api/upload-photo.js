@@ -4,11 +4,13 @@
 // downloading. Falls back to returning the data URL inline if Blob isn't
 // configured (useful for local dev), so the UI never hard-fails.
 
+import withTenant from '../../lib/withTenant'
+
 export const config = {
   api: { bodyParser: { sizeLimit: '12mb' } },
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { filename, dataUrl } = req.body || {}
   if (!dataUrl) return res.status(400).json({ error: 'Missing image data' })
@@ -36,3 +38,5 @@ export default async function handler(req, res) {
   // Fallback: return the data URL so the flow still works without Blob.
   return res.json({ url: dataUrl, inline: true })
 }
+
+export default withTenant(handler)

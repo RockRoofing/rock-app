@@ -1,6 +1,7 @@
 import { get, getOpsProjects, getOpsUsers } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
+import withTenant from '../../lib/withTenant'
 
 // TIMESHEET CSV OUT OF THE PLANNER
 //
@@ -58,7 +59,7 @@ const cell = (v) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin', 'accounts'])) return
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'GET only' }) }
 
@@ -208,3 +209,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Export failed' })
   }
 }
+
+export default withTenant(handler)

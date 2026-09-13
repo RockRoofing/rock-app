@@ -1,5 +1,6 @@
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { _sendDesignEmail } from '../../lib/designEmail'
+import withTenant from '../../lib/withTenant'
 
 // Admin-only: send a test email and return the raw result, so we can see exactly why
 // design emails are or aren't sending. GET/POST ?to=you@example.com
@@ -9,7 +10,7 @@ function readCookie(req, name) {
   return m ? decodeURIComponent(m.split('=').slice(1).join('=')) : null
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const me = verifySessionToken(readCookie(req, SESSION_COOKIE))
   if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' })
   const to = String((req.query.to || req.body?.to || me.email || '')).trim()
@@ -31,3 +32,5 @@ export default async function handler(req, res) {
   })
   return res.json({ ...diag, ...result })
 }
+
+export default withTenant(handler)

@@ -3,7 +3,9 @@
 // (Vercel Blob URLs are a different origin and ignore the <a download> name).
 //
 // GET /api/download?url=<encoded blob url>&name=<filename>
-export default async function handler(req, res) {
+import withTenant from '../../lib/withTenant'
+
+async function handler(req, res) {
   const { url, name } = req.query
   if (!url) return res.status(400).json({ error: 'Missing url' })
   // Only allow proxying Vercel Blob URLs (safety: no arbitrary SSRF targets).
@@ -40,3 +42,5 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'Fetch failed' })
   }
 }
+
+export default withTenant(handler)

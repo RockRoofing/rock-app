@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Global supplier/contact directory, usable anywhere in the portal.
 // Contact: { id, firstName, lastName, company, phone, email }
@@ -11,7 +12,7 @@ import { get, set } from '../../lib/db'
 async function getContacts() { return (await get('contacts')) || [] }
 async function saveContacts(v) { await set('contacts', v) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     let contacts = await getContacts()
     const q = (req.query.q || '').trim().toLowerCase()
@@ -51,3 +52,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

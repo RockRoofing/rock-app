@@ -2,6 +2,7 @@ import { get, set } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Warranties for a project: a flat list of uploaded documents (no sections).
 // Store: design:warranties:<no> = { files: [ { id, name, url, contentType, size,
@@ -28,7 +29,7 @@ async function resolveAccess(req, projectNo) {
 
 const rid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
@@ -67,3 +68,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

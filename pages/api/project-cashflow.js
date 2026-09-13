@@ -3,6 +3,7 @@ import { getProject } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { buildContractWorksFromRates, computeApplicationSummary, buildAppVariations, varKey } from '../../lib/applications'
 import { projectVariations, varNumberOf } from '../../lib/variationInstruct'
+import withTenant from '../../lib/withTenant'
 
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
@@ -113,7 +114,7 @@ function variationSeed(project) {
   })).filter(v => v.value !== 0 || v.varNumber)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -417,3 +418,5 @@ export default async function handler(req, res) {
 
 // Re-export for potential server use (kept internal otherwise).
 export { computeApplicationSummary }
+
+export default withTenant(handler)

@@ -3,6 +3,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { canAccessArea } from '../../lib/roles'
 import { get } from '../../lib/db'
 import zlib from 'zlib'
+import withTenant from '../../lib/withTenant'
 
 // Streams a set of stored files (by URL) into a single ZIP. Used by Handover Docs
 // "Download all" / "Download selected". POST { projectNo, urls:[...], zipName }.
@@ -33,7 +34,7 @@ function dosDateTime(d = new Date()) {
   return { time, date }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const u = verifySessionToken(readCookie(req, SESSION_COOKIE))
   if (!u) return res.status(401).json({ error: 'Not logged in' })
@@ -152,3 +153,5 @@ export default async function handler(req, res) {
 }
 
 export const config = { api: { responseLimit: false } }
+
+export default withTenant(handler)

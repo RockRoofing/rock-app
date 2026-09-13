@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getClient } from '../../lib/db'
 import { LABOUR_ACCOUNTS, COST_OF_SALE_ACCOUNTS, extractJobNoFromDescription } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 
 function parseCSV(text) {
@@ -51,7 +52,7 @@ function parseCSVLine(line) {
   return result
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -138,3 +139,5 @@ export const config = {
     },
   },
 }
+
+export default withTenant(handler)

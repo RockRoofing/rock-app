@@ -6,6 +6,7 @@ import { canAccessArea } from '../../lib/roles'
 import { buildOMManual } from '../../lib/omsPdf'
 import { sendOmReadyNotice, sendRfiCommentNotice } from '../../lib/designEmail'
 import { projectDisplayName } from '../../lib/designRfiNotify'
+import withTenant from '../../lib/withTenant'
 
 // Build / retrieve the combined O&M Manual for a project.
 //   GET  ?no=<projectNo>            -> { manual, revisions, canEdit, available, readiness }
@@ -147,7 +148,7 @@ async function readStore(no) {
   return { current: raw.current || null, revisions: raw.revisions || [], comments: raw.comments || [], downloads: raw.downloads || {} }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
@@ -277,3 +278,5 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ error: 'Unknown action' })
 }
+
+export default withTenant(handler)

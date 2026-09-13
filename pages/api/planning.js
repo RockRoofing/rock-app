@@ -1,5 +1,6 @@
 import { get, set, getOpsProjects } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
+import withTenant from '../../lib/withTenant'
 
 // Planning — the data engine behind the Gantt.
 //
@@ -110,7 +111,7 @@ async function buildProjects() {
   return { live, negotiated, completed }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const [{ live, negotiated, completed }, allocations, meta, waterIngress, overheads, overnight] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI(), getOH(), getOA()])
@@ -423,3 +424,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

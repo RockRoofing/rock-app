@@ -1,4 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
+import withTenant from '../../lib/withTenant'
 
 // Sends a single chase email (already-rendered subject + body) via Resend.
 // FROM  = ACCOUNTS_FROM_EMAIL (e.g. "Rock Roofing Accounts <accountsreceivable@rockroofing.co.uk>")
@@ -6,7 +7,7 @@ import { requireRole } from '../../lib/portalAuth'
 // REPLY-TO = the project QS's email (passed in), so replies reach the QS.
 //
 // Body: { to:[..], cc:[..], replyTo, subject, html|text }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
 
@@ -50,3 +51,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

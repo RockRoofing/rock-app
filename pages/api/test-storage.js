@@ -1,9 +1,10 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Admin probe: reports what is actually in the CRM's stores.
 // It used to probe the Pipedrive keys as well; those are gone.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return;
 
   const describe = (v) => {
@@ -33,3 +34,5 @@ export default async function handler(req, res) {
     return res.status(200).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

@@ -1,10 +1,11 @@
 import { getPreStart, savePreStart, getOpsProject, getTemplate } from '../../lib/db'
 import { buildPreStartPDF } from '../../lib/preStartPdf'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/pre-start-send { projectNo }
 // Generates the PDF, emails it as an attachment to all attendees via Resend,
 // records send-proof, and locks the record (stage = 'sent').
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { projectNo } = req.body || {}
   if (!projectNo) return res.status(400).json({ error: 'Missing project number' })
@@ -95,3 +96,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Send failed' })
   }
 }
+
+export default withTenant(handler)

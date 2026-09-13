@@ -1,4 +1,5 @@
 import { getRamsSignatures, saveRamsSignatures } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Per-document RAMS signatures for one project.
 //
@@ -14,7 +15,7 @@ export const config = { api: { bodyParser: { sizeLimit: '2mb' } } }  // signatur
 
 const STATEMENT = 'I confirm I have read, fully understood and will work to this and any other documents relating to this method statement. If at any point I feel it is unsafe to continue I will stop works and contact my supervisor. Any amendments to this method statement must be made by the person who originally completed it. It must then be communicated to the relevant persons.'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const { no } = req.query
@@ -49,3 +50,4 @@ export default async function handler(req, res) {
   }
 }
 
+export default withTenant(handler)

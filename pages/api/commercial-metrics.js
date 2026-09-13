@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getCachedProjects } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { computeProjectWip } from '../../lib/wipCalc'
+import withTenant from '../../lib/withTenant'
 
 
 function parseXeroDate(d) {
@@ -24,7 +25,7 @@ function monthKey(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const redis = await getClient()
 
@@ -271,3 +272,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

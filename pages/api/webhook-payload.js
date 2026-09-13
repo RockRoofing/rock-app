@@ -1,6 +1,7 @@
 import { get } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const payload = await get('webhook_last_debug')
     return res.status(200).json({ debug: payload || null })
@@ -8,3 +9,5 @@ export default async function handler(req, res) {
     return res.status(200).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

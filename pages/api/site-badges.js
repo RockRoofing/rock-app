@@ -1,3 +1,4 @@
+import withTenant from '../../lib/withTenant'
 import {
   getOpsProjects, getProjectFiles, getRamsSignatures, getRamsApprovals, get,
 } from '../../lib/db'
@@ -20,7 +21,7 @@ import {
 // that file's id in ops:rams-signatures:<projectNo>. Because project-files mints
 // a new file id on every upload, a re-uploaded (new-version) RAMS is unsigned
 // again automatically.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
     const { opId } = req.query
@@ -108,3 +109,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

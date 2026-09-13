@@ -1,4 +1,5 @@
 import { getOpsProjects, saveOpsProjects } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Operations projects. Created via the Internal Handover Minutes (IHM), or added
 // manually as a temporary record for pre-existing projects. Keyed by RR Project
@@ -12,7 +13,7 @@ import { getOpsProjects, saveOpsProjects } from '../../lib/db'
 // POST   { action:'manual-add', project }  -> quick-add an old project (manual)
 // POST   { action:'set-status', projectNo, status } -> Live <-> Complete
 // DELETE { projectNo }                     -> remove
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const projects = await getOpsProjects()
     const { no } = req.query
@@ -174,3 +175,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

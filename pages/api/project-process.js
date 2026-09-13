@@ -1,6 +1,7 @@
 import { get, set, getOpsProjects, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { buildCardsForProject, buildCardsForProjectAsync, getProcessTemplate, saveProcessTemplate } from '../../lib/projectProcessTemplate'
+import withTenant from '../../lib/withTenant'
 
 // Project Process Kanban board.
 // Stores:
@@ -74,7 +75,7 @@ async function sendEmail(to, subject, html) {
   } catch (e) { return { ok: false, reason: e.message } }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const u = sessionUser(req)
   if (!u) return res.status(401).json({ error: 'Not authenticated' })
 
@@ -236,3 +237,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

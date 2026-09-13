@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Procurement Schedule. Rows can be added manually or copied once from an IHM
 // Procurement section (on Meeting Complete). Once copied, the live page is master.
@@ -11,7 +12,7 @@ import { get, set } from '../../lib/db'
 async function getItems() { return (await get('ops:procurement')) || [] }
 async function saveItems(v) { await set('ops:procurement', v) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     return res.json({ items: await getItems() })
   }
@@ -84,3 +85,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

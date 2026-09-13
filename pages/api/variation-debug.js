@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get, getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/variation-debug?projectId=...        what is stored for one project
 // GET /api/variation-debug                      a count for every project
@@ -9,7 +10,7 @@ import { getProject, get, getClient } from '../../lib/db'
 // Added because "the variations are not showing" has two completely different causes -
 // the records are gone, or they are there and something is not reading them - and those
 // need opposite responses. Guessing between them wastes a deploy either way.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   const { projectId, jobNo } = req.query
@@ -99,3 +100,5 @@ export default async function handler(req, res) {
   rows.sort((a, b) => String(a.jobNo).localeCompare(String(b.jobNo), undefined, { numeric: true }))
   return res.json({ ok: true, projectsWithVariations: rows.length, rows })
 }
+
+export default withTenant(handler)

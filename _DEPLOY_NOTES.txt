@@ -1,133 +1,113 @@
-pkg854 - Tenant registry and resolution. DORMANT.
-=================================================
+pkg855 - Wrap the top-level API routes. STILL DORMANT.
+======================================================
 
 WHAT SHOULD LOOK DIFFERENT AFTER DEPLOYING THIS:  NOTHING.
 
-Nothing to set up. No environment variables to add. No Upstash database to
-create. All of that comes later - this package puts the machinery in place and
-leaves it switched off, so it can be deployed and proven while the app is still
-single-tenant.
-
-The switch is the presence of CONTROL_REDIS_URL and CONTROL_REDIS_TOKEN in
-Vercel. While those are absent, every code path behaves exactly as it does now.
+The wrapper does nothing at all while CONTROL_REDIS_URL is absent from Vercel,
+which it still is. Every route calls its handler straight through, exactly as
+now. This is a big package by file count and a small one by behaviour.
 
 
-NEW FILES TO CREATE BY HAND IN GITHUB (4)
------------------------------------------
-  lib/tenantContext.js
-  lib/tenants.js
-  lib/withTenant.js
-  pages/api/admin/tenant-setup.js
-
-Then replace:
-  lib/db.js
-  pages/api/sync-status.js
-  pages/api/hidden-projects.js
-  pages/api/staff.js
+REQUIRES pkg854 TO BE LIVE (lib/withTenant.js).
 
 
-WHAT EACH FILE IS
------------------
-lib/tenantContext.js
-  Request-scoped storage. Answers "which customer is this request for" from
-  anywhere in the call stack, however deep, without passing anything down.
+BIGGER UPLOAD THAN USUAL
+------------------------
+150 files, all in pages/api. Drag the pages/api FOLDER from this package into
+GitHub - it replaces those 150 and leaves the cron, xero, project and admin
+subfolders untouched, because they are not in here.
 
-lib/tenants.js
-  The registry. Reads the control database, caches for 60 seconds, resolves a
-  web address to a customer. Two rules built in: a failure is never cached, and
-  a stale copy is served if the control database cannot be reached.
-
-lib/withTenant.js
-  The wrapper. One line at the top of each API route. Resolves the customer from
-  the address and runs the handler with it in scope.
-
-lib/db.js
-  getClient() now checks whether a customer is in scope. If one is, it connects
-  to THAT customer's database and runs the self-check. If none is, it behaves
-  exactly as before.
-
-pages/api/admin/tenant-setup.js
-  Admin-only, called by hand. Reports what is configured, writes the identity
-  label into a database, registers a customer in the control database. Not
-  linked from any page.
+No new files to create by hand. No lib files. Nothing to configure.
 
 
-THE SELF-CHECK, which is the part worth reading
------------------------------------------------
-The registry says "Wilson is at database X". Database X carries a record at
-tenant:identity saying it is Wilson. Before serving anything, the two have to
-agree. They disagree - it refuses, loudly.
+WHAT CHANGED IN EACH FILE - three lines, identical everywhere
+-------------------------------------------------------------
+Before:
+    export default async function handler(req, res) { ... }
 
-This does not grant access. It refuses it. It catches a wrong entry in the
-registry, which is otherwise the one completely silent failure in the whole
-design: everything works, nothing errors, and one company sees another's
-projects.
+After:
+    import withTenant from '../../lib/withTenant'
+    async function handler(req, res) { ... }
+    export default withTenant(handler)
 
-It cannot catch both sides being wrong the same way - a database cloned from
-another customer with the label edited to match. Which is why test customers
-must be created EMPTY and never cloned. That is a rule for us, not something
-the code can enforce.
+Nothing inside any handler changed. No key names, no logic, no responses.
 
-
-WHY REQUEST-SCOPED STORAGE AND NOT A VARIABLE
----------------------------------------------
-A plain module-level variable holding "the current tenant" looks identical in
-the editor and is the most dangerous way to build this. Two requests running at
-once in the same warm function would overwrite each other.
-
-Demonstrated, same machine, same moment:
-
-  With request-scoped storage
-    slow request (rock) started first   -> rock      OK
-    fast request (wilson) started after -> wilson    OK
-
-  With a module variable
-    slow request (rock) started first   -> wilson    LEAKED
-    fast request (wilson) started after -> wilson    OK
-
-The first request finished by reading the second customer's id. That is one
-company's data served under another company's session, and it is invisible in
-testing because it only happens under concurrent load.
+Done this way - handler becomes a plain function, wrapper applied at the bottom -
+rather than wrapping it in place, because 7 files have other exports AFTER the
+handler (export const config, export { computeApplicationSummary }). Wrapping in
+place needs brace matching, and brace matching in a script across 150 files is
+exactly where one goes wrong quietly.
 
 
-THREE ROUTES WRAPPED AS A PROOF
--------------------------------
-sync-status.js, hidden-projects.js and staff.js. Chosen as one read-only, one
-read-write, and one that calls a helper. Enough to prove the shape before the
-remaining ~187 go through in batches.
+TWO ROUTES DELIBERATELY NOT WRAPPED
+-----------------------------------
+health-check.js
+  A liveness probe has to answer even when tenant resolution is broken. That is
+  the entire point of one. Not in this package, left as it is.
 
-The wrapper is dormant, so these behave exactly as they did.
+admin/tenant-setup.js
+  Not in this package (it lives in a subfolder). It must work BEFORE a customer
+  exists in the registry - wrapped, it would 404 on the very request you need in
+  order to stamp Rock's identity. Chicken and egg.
+
+THE 22 CRONS ARE ALSO NOT IN HERE, and that is the important one. A cron has no
+meaningful web address - Vercel calls it on the deployment URL. Wrapping them
+would silently bind every cron to whichever host it was called on, which for you
+means every cron runs as Rock forever and never runs for anyone else. They need
+a loop over customers, not a wrapper. Own package.
+
+
+THREE FILES RE-SHIPPED FROM pkg854
+----------------------------------
+sync-status.js, hidden-projects.js and staff.js were wrapped inline in pkg854.
+Same behaviour, different shape. Normalised to match the other 147 so that a
+single grep for "export default withTenant(handler)" is a complete check of the
+whole application rather than a partial one.
 
 
 CHECKS I RAN
 ------------
-- esbuild compile on all 8 files: 0 errors
-- ran the concurrency demonstration above
-- confirmed getClient()'s existing path is untouched when no tenant is in scope
-- confirmed no new non-ASCII
+- esbuild compile on all 151 top-level routes: 0 failures.
+  It earned its keep: the first run of the script inserted the import INSIDE a
+  multi-line import statement in two files (hs-renewal-settings.js and
+  site-badges.js). esbuild caught both. Fixed by inserting above the first
+  import instead, a position that cannot be inside another statement.
+- Four structural checks on every one of the 150: imports withTenant, handler is
+  a plain function, exactly one default export, and that export is the wrapped
+  one. 0 failures.
+- REVERSED the wrapper edit in memory on all 150 and compared the result to the
+  file as it stood before this pass. 111 reverse exactly to the original; 37
+  reverse to the version pkg843-852 produced; the remaining 2 were hand-checked
+  line by line and are the wrapper edit and nothing else. So no file was touched
+  beyond the three lines above.
 
 
 WHAT TO CLICK AFTER DEPLOYING
 -----------------------------
-1. Bookkeeping - the "last synced" stamps still show. (sync-status.js)
-2. Project Financials - hide a project, reload, still hidden. Unhide it.
-   (hidden-projects.js)
-3. Admin > Staff - loads and saves. (staff.js)
-4. Visit /api/admin/tenant-setup in the browser while logged in as admin. It
-   should return controlDatabaseConfigured: false and
-   identityOfCurrentDatabase: null. That is the correct state right now.
+Every API route in the app is in this package, so the check is breadth rather
+than depth. Open one page from each area and confirm it loads with the right
+numbers:
 
-Nothing else on the baseline sheet can move.
+1. Project Financials
+2. Retention
+3. WIP
+4. 13-week cash flow
+5. Business Financials - Monthly
+6. CRM
+7. Operations
+8. The Site App on your phone
+9. Bookkeeping
+
+If a page loads at all, its routes are wrapped correctly - a broken wrapper is a
+500, not a wrong number. Wrong numbers are not a failure mode of this change,
+because nothing inside any handler moved.
 
 
-WHAT COMES NEXT, so you know the shape
---------------------------------------
-  pkg855+   wrap the remaining routes in batches, with the odd ones - the
-            token-authenticated public routes, the crons, the uploads - handled
-            separately rather than scripted
-  then      create the control database, register Rock, stamp its identity
-  then      REMOVE THE GLOBAL CREDENTIALS. The step that turns a missed route
-            from a silent leak into a broken page. Do this while there is still
-            only one customer and the only person it can inconvenience is you.
-  then      the four module-scope caches, record stamping, second tenant, and
-            the deliberate leak hunt
+WHAT COMES NEXT
+---------------
+  pkg856  the 18 routes in subfolders: xero/, project/, project/[id]/,
+          value-changes/. Small.
+  pkg857  the 22 crons, with a per-customer loop rather than a wrapper.
+  then    create the control database, register Rock, stamp its identity
+  then    REMOVE THE GLOBAL CREDENTIALS - the step that turns a missed route
+          from a silent leak into a broken page

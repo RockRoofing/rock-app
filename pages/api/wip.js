@@ -3,6 +3,7 @@ import { getAllProjectSettings, getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { computeProjectWip } from '../../lib/wipCalc'
+import withTenant from '../../lib/withTenant'
 
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -12,7 +13,7 @@ const prevMonthKey = (mk) => { const [y, m] = mk.split('-').map(Number); const d
 // Returns per-project WIP for the chosen month: post-valuation costs (day after the
 // valuation date → end of month), credit notes against the project, this month's
 // manual adjustments, and last month's adjustments (for information only).
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -147,3 +148,5 @@ export default async function handler(req, res) {
 
   return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, totalWipProfit, missingDates, lock })
 }
+
+export default withTenant(handler)

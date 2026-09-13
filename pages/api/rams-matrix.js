@@ -1,4 +1,5 @@
 import { get, set, getOpsProjects, getProjectFiles, getRamsSignatures, getRamsApprovals } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // RAMS sign-off matrix (portal). Derived from REAL data:
 //   - Current RAMS docs per project (ops:files:<no>, category 'rams')
@@ -20,7 +21,7 @@ import { get, set, getOpsProjects, getProjectFiles, getRamsSignatures, getRamsAp
 
 const KEY = 'ops:rams-matrix'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const ops = await getOpsProjects()
@@ -102,3 +103,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

@@ -2,6 +2,7 @@ import { get } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { hasRole } from '../../lib/roles'
 import { getNotifications, saveNotifications, sendNotification, TASK_SETS } from '../../lib/notifications'
+import withTenant from '../../lib/withTenant'
 
 // Admin-only management of email notifications.
 // GET                          -> { notifications, users, taskSets }
@@ -16,7 +17,7 @@ function readCookie(req, name) {
 }
 function user(req) { return verifySessionToken(readCookie(req, SESSION_COOKIE)) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const u = user(req)
   if (!u || !hasRole(u.role, ['admin'])) return res.status(403).json({ error: 'Admin only' })
 
@@ -73,3 +74,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

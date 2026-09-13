@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject } from '../../lib/db'
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '10mb' } }
@@ -57,7 +58,7 @@ function excelDateToString(val) {
   return null
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -183,3 +184,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

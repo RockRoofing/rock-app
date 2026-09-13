@@ -1,5 +1,6 @@
 import { getProject, get } from '../../lib/db'
 import { computeApplicationSummary, resolveAppDates, backfillAppNumbers } from '../../lib/applications'
+import withTenant from '../../lib/withTenant'
 
 // Read-only Applications view for the Site App (Contracts Manager area).
 // GET only, no writes. The Site App gates project access on its own side
@@ -7,7 +8,7 @@ import { computeApplicationSummary, resolveAppDates, backfillAppNumbers } from '
 //
 //   ?projectId=..                 -> { applications: [ {list rows} ] }
 //   ?projectId=..&appId=..        -> { application: { full summary + sections } }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
   const { projectId, appId } = req.query
   if (!projectId) return res.status(400).json({ error: 'projectId required' })
@@ -68,3 +69,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

@@ -1,7 +1,8 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -128,3 +129,5 @@ function parseDate(dateStr) {
   if (match) return `${match[3]}-${match[2]}-${match[1]}`
   return dateStr.slice(0, 10)
 }
+
+export default withTenant(handler)

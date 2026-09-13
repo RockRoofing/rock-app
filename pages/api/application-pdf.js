@@ -1,9 +1,10 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/application-pdf?projectId=..&appId=..  -> customer-copy Application PDF
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
   const { projectId, appId } = req.query
   if (!projectId || !appId) return res.status(400).json({ error: 'projectId and appId are required' })
@@ -51,3 +52,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'PDF generation failed' })
   }
 }
+
+export default withTenant(handler)

@@ -2,11 +2,12 @@ import { requireRole } from '../../lib/portalAuth'
 import { getProject, get, saveProject, getClient } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
 import { describeApplication, computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
+import withTenant from '../../lib/withTenant'
 
 // POST /api/application-send
 // Body: { projectId, appId, to:[..], cc:[..], replyTo, subject, text, markSent }
 // Builds the customer-copy Application PDF, attaches it, and emails via Resend.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
@@ -117,3 +118,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Send failed' })
   }
 }
+
+export default withTenant(handler)

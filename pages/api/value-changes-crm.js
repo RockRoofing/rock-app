@@ -3,6 +3,7 @@ import {
   getAllCrmValueChanges, getStoredValueChanges, saveStoredValueChanges, seedFromLegacy,
 } from '../../lib/crmValueChanges'
 import { seedMilestonesFromLegacy } from '../../lib/crmMilestones'
+import withTenant from '../../lib/withTenant'
 
 // PARALLEL endpoint. Same output shape as /api/value-changes, but derived from the CRM's
 // own deal history instead of the Pipedrive webhook. The original is untouched.
@@ -11,7 +12,7 @@ import { seedMilestonesFromLegacy } from '../../lib/crmMilestones'
 //   POST { action:'seed' }   -> copy the Pipedrive-era records into the CRM store, once
 //   POST { dealId, ... }     -> add a record by hand
 //   DELETE { id }            -> remove one (hand-made records only)
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract', 'post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
@@ -65,3 +66,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default withTenant(handler)

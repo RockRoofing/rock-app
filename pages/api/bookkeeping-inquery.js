@@ -1,6 +1,7 @@
 import { get, set, getPortalUsers } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
 import { INQUERY_KEY, createReviewToken } from '../../lib/inquery'
+import withTenant from '../../lib/withTenant'
 
 // IN QUERY - the bookkeeper's side.
 //
@@ -16,7 +17,7 @@ import { INQUERY_KEY, createReviewToken } from '../../lib/inquery'
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const money = (n) => `\u00A3${(Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const session = requireRole(req, res, ['post-contract', 'management', 'admin'])
   if (!session) return
 
@@ -182,3 +183,5 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ error: 'Unknown action' })
 }
+
+export default withTenant(handler)

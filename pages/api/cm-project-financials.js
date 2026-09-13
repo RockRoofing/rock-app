@@ -2,6 +2,7 @@ import { isInstructed } from '../../lib/applications'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { nameMatches, normJobNo } from '../../lib/cmSiteApp'
 import { getOpsProjects, getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // High-level project financials for the Contracts Manager Site App.
 //
@@ -18,7 +19,7 @@ import { getOpsProjects, getClient } from '../../lib/db'
 
 const numOr0 = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const redis = await getClient()
 
@@ -195,3 +196,5 @@ export default async function handler(req, res) {
     stale: !valStr,
   })
 }
+
+export default withTenant(handler)

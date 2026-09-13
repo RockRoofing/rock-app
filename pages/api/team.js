@@ -1,5 +1,6 @@
 import { getPortalUsers } from '../../lib/db'
 import { normRole } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Team members now come from Portal Users (the single people list).
 // This endpoint maps portal users into the legacy member shape so all existing
@@ -7,7 +8,7 @@ import { normRole } from '../../lib/roles'
 // unchanged. Management of people happens in Admin → Portal Users.
 //
 // GET /api/team -> { members: [{ id, firstName, lastName, name, email, phone, role, active }] }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const users = await getPortalUsers()
     const members = users.map(u => ({
@@ -29,3 +30,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

@@ -1,4 +1,5 @@
 import { get, set, getPortalUsers, getLiveTasks } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Sends (or updates/cancels) a calendar invite for a Project Concern meeting's
 // "next meeting". Uses a stable UID + incrementing SEQUENCE stored on the meeting
@@ -52,7 +53,7 @@ const LONDON_VTIMEZONE = [
   'END:VTIMEZONE',
 ]
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { projectNo, meetingId, method = 'REQUEST' } = req.body || {}
   if (!projectNo || !meetingId) return res.status(400).json({ error: 'projectNo and meetingId required' })
@@ -182,3 +183,5 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, sent: sentCount, method })
 }
+
+export default withTenant(handler)

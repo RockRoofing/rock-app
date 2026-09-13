@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-export default async function handler(req, res) {
+import withTenant from '../../lib/withTenant'
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return;
   const RESEND_KEY = process.env.RESEND_API_KEY
   const ALERT_EMAIL = process.env.ALERT_EMAIL
@@ -29,3 +30,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

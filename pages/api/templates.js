@@ -3,6 +3,7 @@ import { getTemplate, saveTemplate } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { PRESTART_SECTIONS } from '../../lib/preStartSchema'
 import { IHM_SECTIONS } from '../../lib/ihmSchema'
+import withTenant from '../../lib/withTenant'
 
 // Editable templates. GET returns the stored template or the code default.
 // POST (admin only) saves an edited template. Applies to NEW forms only.
@@ -42,7 +43,7 @@ function readCookie(req, name) {
 }
 function currentUser(req) { return verifySessionToken(readCookie(req, SESSION_COOKIE)) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const key = req.query.key
     if (!DEFAULTS[key]) return res.status(400).json({ error: 'Unknown template' })
@@ -64,3 +65,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

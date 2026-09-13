@@ -2,6 +2,7 @@ import { getOpsProjects, getTemplate } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
 import { IHM_SECTIONS } from '../../lib/ihmSchema'
 import { buildHandoverPDF } from '../../lib/handoverPdf'
+import withTenant from '../../lib/withTenant'
 
 // GET /api/handover-pdf?no=J228  ->  the Internal Handover Minutes as a PDF
 //
@@ -13,7 +14,7 @@ const logoFor = (req) => {
   return `${proto}://${req.headers.host}/rock-logo.jpg`
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   // Pre-contract raise the handover, post-contract and management live off it.
   const session = requireRole(req, res, ['pre-contract', 'post-contract', 'management', 'admin'])
   if (!session) return
@@ -57,3 +58,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e && e.message ? e.message : 'Could not build the PDF' })
   }
 }
+
+export default withTenant(handler)

@@ -1,6 +1,7 @@
 import { get } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Extra Commercial Scorecard metrics, computed server-side:
 //   - weeklyTaskPct / monthlyTaskPct: % of task cells marked "Yes" from the Commercial
@@ -47,7 +48,7 @@ function cellStatus(cell) {
   return cell.status || 'confirmed'
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const u = verifySessionToken(readCookie(req, SESSION_COOKIE))
   if (!u || !canAccessArea(u.role, 'commercial')) return res.status(403).json({ error: 'No access' })
 
@@ -173,3 +174,5 @@ export default async function handler(req, res) {
 
   return res.json({ weeklyTask, monthlyTask, weeklyReports, monthlyReports: monthlyReportsArr })
 }
+
+export default withTenant(handler)

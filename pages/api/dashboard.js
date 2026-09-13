@@ -5,6 +5,7 @@ import { getProjectsFromCategories } from '../../lib/xero'
 import { syncRegistry, ghostsFromRegistry } from '../../lib/projectRegistry'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 
 // Calculate valuation date for a given month key (YYYY-MM) and valuation day
@@ -14,7 +15,7 @@ function getValuationDateForMonth(monthKey, valuationDay) {
   return new Date(Date.UTC(year, month - 1, parseInt(valuationDay)))
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const redis = await getClient()
 
   // Try cache first unless sync=true. Ignore a cache built before the completeness
@@ -1063,3 +1064,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

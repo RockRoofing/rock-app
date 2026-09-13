@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 const CONFIG_KEY = 'config:account-categorisation'   // { [code]: { name, category: 'labour'|'materials'|'overheads'|'uncategorised' } }
 const SEEN_KEY = 'costs:seen-accounts'                // { [code]: name }  (populated by cost uploads)
@@ -46,7 +47,7 @@ export function defaultCategoryFor(code) {
   return 'uncategorised'   // unknown codes are flagged & excluded until assigned
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -107,3 +108,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

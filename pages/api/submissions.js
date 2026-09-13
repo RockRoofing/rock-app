@@ -4,6 +4,7 @@ import {
   getForms,
 } from '../../lib/db'
 import { formDateOf } from '../../lib/formDates'
+import withTenant from '../../lib/withTenant'
 
 // Allow larger bodies (photos are URLs, but signatures/answers can add up).
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } }
@@ -11,7 +12,7 @@ export const config = { api: { bodyParser: { sizeLimit: '4mb' } } }
 // GET    /api/submissions              -> { submissions: [index] }
 // GET    /api/submissions?id=...       -> { submission }
 // POST   /api/submissions { submission } -> save, returns { submission }
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { id } = req.query
     if (id) {
@@ -111,3 +112,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

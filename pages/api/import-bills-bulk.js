@@ -4,6 +4,7 @@ import { getClient } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
 import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
+import withTenant from '../../lib/withTenant'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
@@ -40,7 +41,7 @@ function categoryFor(code, name, config) {
   return 'uncategorised'   // unknown codes excluded & flagged until categorised
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -238,3 +239,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Import failed' })
   }
 }
+
+export default withTenant(handler)

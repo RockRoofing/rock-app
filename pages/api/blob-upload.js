@@ -1,9 +1,10 @@
 import { handleUpload } from '@vercel/blob/client'
+import withTenant from '../../lib/withTenant'
 
 // Token endpoint for direct browser -> Vercel Blob uploads. This bypasses the
 // ~4.5MB serverless request-body limit that /api/upload-file hits, so large
 // photos and documents upload fine.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (!token) return res.status(500).json({ error: 'File storage not configured (BLOB_READ_WRITE_TOKEN missing).' })
@@ -34,3 +35,5 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: e?.message || 'Upload failed' })
   }
 }
+
+export default withTenant(handler)

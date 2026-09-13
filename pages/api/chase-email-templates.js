@@ -1,12 +1,13 @@
 import { get, set } from '../../lib/db'
 import { requireRole } from '../../lib/portalAuth'
 import { defaultChaseTemplates } from '../../lib/chaseEmailTemplates'
+import withTenant from '../../lib/withTenant'
 
 const KEY = 'config:chase-email-templates'
 
 // GET  -> { templates: [...], isCustom }   merges saved edits over the defaults
 // POST { templates } -> saves (post-contract / management / admin)
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const saved = await get(KEY)
@@ -45,3 +46,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default withTenant(handler)

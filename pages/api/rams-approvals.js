@@ -5,6 +5,7 @@ import {
   getOpsProject, getProjectFiles, get,
 } from '../../lib/db'
 import crypto from 'crypto'
+import withTenant from '../../lib/withTenant'
 
 // RAMS approval chain (per RAMS document). Strict sequential order:
 //   CM (Site App) -> Director/Carl (Portal) -> Customer Site Manager (email) -> Operatives
@@ -41,7 +42,7 @@ async function autoSign(projectNo, fileId, opId, name, signatureImg) {
   await saveRamsSignatures(projectNo, sigs)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       // List all RAMS awaiting Director approval across active projects.
@@ -383,3 +384,5 @@ async function sendSiteManagerApprovedCopy({ req, projectNo, fileId }) {
     return resp.ok
   } catch (e) { console.error('sendSiteManagerApprovedCopy failed:', e); return false }
 }
+
+export default withTenant(handler)

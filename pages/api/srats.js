@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // SRATs — Situation, Roadblocks, Actions, Timeline. Stored as one list.
 // Each SRAT: { id, projectNo, projectName, situation, roadblocks, actionsText,
@@ -13,7 +14,7 @@ import { get, set } from '../../lib/db'
 async function getSrats() { return (await get('ops:srats')) || [] }
 async function saveSrats(v) { await set('ops:srats', v) }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const srats = await getSrats()
     srats.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
@@ -56,3 +57,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

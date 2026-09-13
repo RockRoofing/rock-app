@@ -1,5 +1,6 @@
 import { get, getOpsProjects, getOpsUsers } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
+import withTenant from '../../lib/withTenant'
 
 // Assembles one week's labour allocation BY OPERATIVE (the Weekly Labour Allocation view).
 //
@@ -156,7 +157,7 @@ export async function assembleWeek(mondayStr) {
     return { weekStart: iso(monday), days, rows: allRows, dailyTotals }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     const week = await assembleWeek(req.query.monday)
     return res.json(week)
@@ -165,3 +166,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

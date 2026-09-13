@@ -1,7 +1,8 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const { month } = req.query
   if (!month) return res.status(400).json({ error: 'month required' })
@@ -20,3 +21,5 @@ export default async function handler(req, res) {
 
   res.json({ month, wip: result })
 }
+
+export default withTenant(handler)

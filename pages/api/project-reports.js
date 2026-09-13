@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Project (Site) Reports — completed on desktop, listed under Project Management.
 // Each report: { id, reportId, projectNo, projectName, projectAddress, customerName,
@@ -25,7 +26,7 @@ function nextReportId(reports) {
   return `PR-${String(max + 1).padStart(4, '0')}`
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { id } = req.query
     const reports = await getReports()
@@ -96,3 +97,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

@@ -5,6 +5,7 @@ import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, sendRfiIssuedNotice, APP_URL } from '../../lib/designEmail'
 import { recordPending, getReadMap, markRfiRead, unreadFromMap, projectRecipients, projectDisplayName, outstandingDigestHtml, sendMail } from '../../lib/designRfiNotify'
+import withTenant from '../../lib/withTenant'
 
 // RFIs (Requests for Information) per project.
 // Store: design:rfis:<projectNo> = [ { rfi } ]  (newest first by number)
@@ -105,7 +106,7 @@ function mentionedIds(html, people) {
 
 const rfiLinkFor = (projectNo, rfiId) => `${APP_URL}/design/${encodeURIComponent(projectNo)}/rfis?open=${encodeURIComponent(rfiId)}`
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
@@ -305,3 +306,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

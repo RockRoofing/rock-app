@@ -1,7 +1,8 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject, getClient } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const redis = await getClient()
   const KEY = 'retention:entries'
@@ -88,3 +89,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

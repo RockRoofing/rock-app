@@ -1,4 +1,5 @@
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Project Concern Meetings, stored per project under ops:concerns:{projectNo}.
 // Each meeting keeps its own fields PLUS references (IDs) to the Live Tasks and
@@ -19,7 +20,7 @@ import { get, set } from '../../lib/db'
 
 const keyFor = (p) => `ops:concerns:${p}`
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { projectNo } = req.query
     if (!projectNo) return res.status(400).json({ error: 'projectNo required' })
@@ -55,3 +56,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

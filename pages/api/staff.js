@@ -8,7 +8,7 @@ async function clearCache() {
   } catch {}
 }
 
-export default withTenant(async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const staff = await getStaff()
     return res.json(staff)
@@ -25,4 +25,6 @@ export default withTenant(async function handler(req, res) {
   }
 
   res.status(405).end()
-})
+}
+
+export default withTenant(handler)

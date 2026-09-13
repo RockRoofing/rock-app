@@ -3,6 +3,7 @@ import { getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap } from '../../lib/xero'
 import { normCategory, defaultCategoryFor } from './account-categorisation'
+import withTenant from '../../lib/withTenant'
 
 // Live Gross Margin straight from Xero's Profit & Loss, as a TRAILING 12-MONTH
 // rolling figure (the last 12 fully completed months).
@@ -40,7 +41,7 @@ function categoryOf(code, config) {
   return normCategory(cfg.category) || defaultCategoryFor(code)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   try {
@@ -192,3 +193,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

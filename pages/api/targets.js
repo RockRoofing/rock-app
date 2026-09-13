@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 const DEFAULT_TARGETS = {
   commercial: {
@@ -50,7 +51,7 @@ const DEFAULT_TARGETS = {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   if (req.method === 'GET') {
     const stored = await get('scorecard:targets')
@@ -62,3 +63,5 @@ export default async function handler(req, res) {
   }
   res.status(405).end()
 }
+
+export default withTenant(handler)

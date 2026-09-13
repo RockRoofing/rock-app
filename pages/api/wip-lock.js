@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getPortalUsers, getClient } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
+import withTenant from '../../lib/withTenant'
 
 // Locking a month's WIP.
 //
@@ -8,7 +9,7 @@ import { canAccessArea } from '../../lib/roles'
 // work from them". It does NOT stop the commercial team editing afterwards - a genuine
 // correction found on the 3rd should not need an unlock ceremony - but unlocking is
 // explicit, so nobody can quietly change a signed-off month without it showing.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -66,3 +67,5 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, lock, notified, notifyError })
 }
+
+export default withTenant(handler)

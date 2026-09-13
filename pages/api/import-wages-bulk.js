@@ -5,6 +5,7 @@ import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
 import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
 import * as xlsx from 'xlsx'
+import withTenant from '../../lib/withTenant'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
@@ -44,7 +45,7 @@ function colIndex(headers, names) {
   return -1
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -180,3 +181,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Import failed' })
   }
 }
+
+export default withTenant(handler)

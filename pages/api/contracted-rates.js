@@ -46,6 +46,7 @@ function populateBudgetsFromCR(project) {
   project.budgetsFromCRAt = Date.now()
 }
 import { parseTakeOffRows, computeRateTotals } from '../../lib/contractRatesParser'
+import withTenant from '../../lib/withTenant'
 
 export const config = { api: { bodyParser: { sizeLimit: '6mb' } } }
 
@@ -53,7 +54,7 @@ export const config = { api: { bodyParser: { sizeLimit: '6mb' } } }
 //   { items: [...], locked: bool, uploadedAt, uploadedBy, fileName, sourceTotal }
 // so they travel with the project and are available to the Application later.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
@@ -178,3 +179,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

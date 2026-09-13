@@ -1,4 +1,5 @@
 import { getValueChanges, saveValueChanges, getCachedDeals, saveCachedDeals, set } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 const TRACKED_STAGES = ['MC Unsecured', 'MC Secured', 'Negotiating', 'Variations']
 const BASE = 'https://api.pipedrive.com/v1'
@@ -12,7 +13,7 @@ async function fetchDeal(dealId) {
   } catch { return null }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   try {
@@ -225,3 +226,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default withTenant(handler)

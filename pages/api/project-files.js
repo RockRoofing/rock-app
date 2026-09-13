@@ -1,4 +1,5 @@
 import { getProjectFiles, saveProjectFiles } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Project files — drawings, RAMS, handover docs. Keyed per project number.
 //
@@ -6,7 +7,7 @@ import { getProjectFiles, saveProjectFiles } from '../../lib/db'
 // GET    /api/project-files?no=J247&cat=drawing-> { files }        (filtered)
 // POST   { projectNo, file:{ category,name,url,contentType,size } } -> add
 // DELETE { projectNo, id }                     -> remove one
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { no, cat } = req.query
     if (!no) return res.status(400).json({ error: 'Project number required' })
@@ -51,3 +52,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

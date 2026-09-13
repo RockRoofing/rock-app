@@ -1,5 +1,6 @@
 import { get, set, getPortalUsers } from '../../lib/db'
 import { getSubmissionIndex, saveSubmissionIndex, saveSubmission } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Issues — raised from the Site App, tracked under Project Management → Issues.
 // Issues are NOT normal forms: they do not appear in the Forms list or the
@@ -35,7 +36,7 @@ function nextIssueId(issues) {
   return `ISS-${String(max + 1).padStart(4, '0')}`
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     const { id } = req.query
     const issues = await getIssues()
@@ -114,3 +115,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

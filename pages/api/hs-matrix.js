@@ -1,4 +1,5 @@
 import { get, set, getPortalUsers, getOpsUsers } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // H&S Training Matrix.
 // Store:
@@ -111,7 +112,7 @@ async function bridgedData(people) {
   return out
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       // Competency map for Planning gating: keyed by operative id (Site App user id).
@@ -252,3 +253,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message || 'Failed' })
   }
 }
+
+export default withTenant(handler)

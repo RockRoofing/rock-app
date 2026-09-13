@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getOpsUsers, saveOpsUsers, getOpsProjects } from '../../lib/db'
+import withTenant from '../../lib/withTenant'
 
 // Operative users for forms.rockroofing.co.uk.
 // Flow: admin adds a user -> system generates a unique temporary PIN and emails
@@ -97,7 +98,7 @@ function expandedAccess(prev, after, projects) {
   return now.filter(no => !beforeSet.has(String(no)) && activeNos.includes(no))
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     if (!requireRole(req, res, ['management','admin'])) return;
     const users = await getOpsUsers()
@@ -280,3 +281,5 @@ export default async function handler(req, res) {
 
   res.status(405).end()
 }
+
+export default withTenant(handler)

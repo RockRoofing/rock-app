@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getClient } from '../../lib/db'
 import { readRegistry } from '../../lib/projectRegistry'
+import withTenant from '../../lib/withTenant'
 
 // READ-ONLY AUDIT OF THE SALES INVOICE STORE.
 //
@@ -55,7 +56,7 @@ const normContact = (s) => String(s || '').trim().toLowerCase()
 // wip-sync writes invoiceId. Reading only one of them would miss half the rows.
 const rowId = (r) => String(r?.xeroInvoiceId || r?.invoiceId || '') || null
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' })
 
@@ -183,3 +184,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)

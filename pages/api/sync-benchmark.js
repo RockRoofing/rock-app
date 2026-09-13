@@ -2,13 +2,14 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
 import { getClient } from '../../lib/db'
 import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap, fetchGeneralLedgerByAccountMonth, fetchSalesLedgerFromInvoicesAndJournals } from '../../lib/xero'
+import withTenant from '../../lib/withTenant'
 
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 // Pulls ONLY the Profit & Loss benchmark (the "In Xero" figures) — cheap:
 // one API call per month, 6 months = ~6 calls. Safe to run on demand.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getClient()
 
@@ -133,3 +134,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message })
   }
 }
+
+export default withTenant(handler)
